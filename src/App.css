@@ -1,0 +1,30 @@
+body {
+    background-color: #0c1116;
+}
+
+.perspective {
+    perspective: 1000px;
+}
+
+.preserve-3d {
+    transform-style: preserve-3d;
+}
+
+.rotate-y-4 {
+    transform: rotateY(4deg);
+}
+
+.app-bg {
+    background-image: 
+        radial-gradient(circle at 50% 50%, rgba(12, 17, 22, 0.8) 0%, rgba(12, 17, 22, 1) 70%),
+        url('https://www.transparenttextures.com/patterns/dark-grass.png');
+    min-height: 100vh;
+}
+
+.range-slider::-webkit-slider-thumb {
+    background: #f59e0b;
+}
+
+.range-slider::-moz-range-thumb {
+    background: #f59e0b;
+}
