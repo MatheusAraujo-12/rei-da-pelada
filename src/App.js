@@ -184,8 +184,12 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
             console.warn("Por favor, preencha todos os campos.");
         }
     };
+<<<<<<< HEAD
 
     const handleSkillChange = (skill, value) => setSkills(prev => ({ ...prev, [skill]: Number(value) }));
+=======
+    
+>>>>>>> 86e1db19299aa327a5f72405923ad41f886590aa
     const handleAdminSkillChange = (skill, value) => setAdminSkills(prev => ({ ...prev, [skill]: Number(value) }));
     
     return (
@@ -978,7 +982,11 @@ const GroupGate = ({ user, onGroupAssociated }) => {
 };
 
 // --- modules/ratings/PostMatchScreen.js ---
+<<<<<<< HEAD
 const PostMatchScreen = ({ session, players, matches, currentUserId, groupId, onFinishRating }) => {
+=======
+const PostMatchScreen = ({ session, players, currentUserId, groupId, onFinishRating }) => {
+>>>>>>> 86e1db19299aa327a5f72405923ad41f886590aa
     const [step, setStep] = useState('rating'); // rating, mvp
     const [ratings, setRatings] = useState({}); // { playerId: score }
     const [mvp, setMvp] = useState(null);
@@ -1020,6 +1028,10 @@ const PostMatchScreen = ({ session, players, matches, currentUserId, groupId, on
             const playerRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}/players/${player.id}`);
             const newSelfOverall = { ...player.selfOverall };
 
+<<<<<<< HEAD
+=======
+            // Aplica a evolução
+>>>>>>> 86e1db19299aa327a5f72405923ad41f886590aa
             newSelfOverall.finalizacao = Math.min(99, newSelfOverall.finalizacao + (playerStats.goals * 0.5));
             newSelfOverall.passe = Math.min(99, newSelfOverall.passe + (playerStats.assists * 0.8));
             newSelfOverall.desarme = Math.min(99, newSelfOverall.desarme + (playerStats.tackles * 1));
