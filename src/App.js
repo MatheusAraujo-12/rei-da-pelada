@@ -1004,13 +1004,51 @@ const PostMatchScreen = ({ session, players, matches, currentUserId, groupId, on
 
         const batch = writeBatch(db);
 
-        const ratingRef = doc(collection(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions/${session.id}/ratings`), currentUserId);
-        batch.set(ratingRef, {
+        // Salva a avaliação
+        const sessionRatingRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions/${session.id}/ratings`, currentUserId);
+        batch.set(sessionRatingRef, {
             createdAt: new Date(),
             ratings,
             mvp,
         });
+
+        // Atualiza os atributos dos jogadores
+        for (const player of sessionPlayers) {
+            let playerStats = { goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 };
+            session.matches.forEach(matchId => {
+                const match = matches.find(m => m.id === matchId);
+                if (match && match.playerStats[player.id]) {
+                    Object.keys(playerStats).forEach(stat => {
+                        playerStats[stat] += match.playerStats[player.id][stat] || 0;
+                    });
+                }
+            });
+            
+            const playerRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}/players/${player.id}`);
+            const newSelfOverall = { ...player.selfOverall };
+
+            newSelfOverall.finalizacao = Math.min(99, newSelfOverall.finalizacao + (playerStats.goals * 0.5));
+            newSelfOverall.passe = Math.min(99, newSelfOverall.passe + (playerStats.assists * 0.8));
+            newSelfOverall.desarme = Math.min(99, newSelfOverall.desarme + (playerStats.tackles * 1));
+            
+            if(player.position === 'Goleiro') {
+                newSelfOverall.reflexo = Math.min(99, newSelfOverall.reflexo + (playerStats.saves * 1));
+            }
+
+            for (let i = 0; i < playerStats.failures * 2; i++) {
+                const skillsKeys = Object.keys(newSelfOverall);
+                const randomSkill = skillsKeys[Math.floor(Math.random() * skillsKeys.length)];
+                newSelfOverall[randomSkill] = Math.max(1, newSelfOverall[randomSkill] - 1);
+            }
+            
+            batch.update(playerRef, { selfOverall: newSelfOverall });
+        }
         
+        // Atualiza o status da sessão para 'closed'
+        const sessionDocRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions`, session.id);
+        batch.update(sessionDocRef, { status: "voting_closed" });
+
+
         await batch.commit();
         onFinishRating();
     };
