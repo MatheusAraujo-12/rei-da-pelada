@@ -184,12 +184,8 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
             console.warn("Por favor, preencha todos os campos.");
         }
     };
-<<<<<<< HEAD
-
-    const handleSkillChange = (skill, value) => setSkills(prev => ({ ...prev, [skill]: Number(value) }));
-=======
     
->>>>>>> 86e1db19299aa327a5f72405923ad41f886590aa
+    const handleSkillChange = (skill, value) => setSkills(prev => ({ ...prev, [skill]: Number(value) }));
     const handleAdminSkillChange = (skill, value) => setAdminSkills(prev => ({ ...prev, [skill]: Number(value) }));
     
     return (
@@ -982,11 +978,7 @@ const GroupGate = ({ user, onGroupAssociated }) => {
 };
 
 // --- modules/ratings/PostMatchScreen.js ---
-<<<<<<< HEAD
 const PostMatchScreen = ({ session, players, matches, currentUserId, groupId, onFinishRating }) => {
-=======
-const PostMatchScreen = ({ session, players, currentUserId, groupId, onFinishRating }) => {
->>>>>>> 86e1db19299aa327a5f72405923ad41f886590aa
     const [step, setStep] = useState('rating'); // rating, mvp
     const [ratings, setRatings] = useState({}); // { playerId: score }
     const [mvp, setMvp] = useState(null);
@@ -1028,10 +1020,6 @@ const PostMatchScreen = ({ session, players, currentUserId, groupId, onFinishRat
             const playerRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}/players/${player.id}`);
             const newSelfOverall = { ...player.selfOverall };
 
-<<<<<<< HEAD
-=======
-            // Aplica a evolução
->>>>>>> 86e1db19299aa327a5f72405923ad41f886590aa
             newSelfOverall.finalizacao = Math.min(99, newSelfOverall.finalizacao + (playerStats.goals * 0.5));
             newSelfOverall.passe = Math.min(99, newSelfOverall.passe + (playerStats.assists * 0.8));
             newSelfOverall.desarme = Math.min(99, newSelfOverall.desarme + (playerStats.tackles * 1));
@@ -1065,7 +1053,7 @@ const PostMatchScreen = ({ session, players, currentUserId, groupId, onFinishRat
                 <div className="space-y-4">
                     {sessionPlayers.map(p => (
                         <div key={p.id} className="bg-gray-800 p-4 rounded-lg flex justify-between items-center">
-                            <span className="font-semibold text-lg">{p.name}</span>
+                            <span className="font-semibold text-lg text-white">{p.name}</span>
                             <div className="flex gap-1">
                                 {[1,2,3,4,5].map(star => (
                                     <LucideStar key={star} onClick={() => handleRatingChange(p.id, star)} className={`w-8 h-8 cursor-pointer transition-colors ${ratings[p.id] >= star ? 'text-yellow-400 fill-current' : 'text-gray-600'}`}/>
@@ -1088,8 +1076,8 @@ const PostMatchScreen = ({ session, players, currentUserId, groupId, onFinishRat
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     {sessionPlayers.map(p => (
                         <button key={p.id} onClick={() => setMvp(p.id)} className={`p-4 rounded-lg text-center transition-all duration-200 ${mvp === p.id ? 'bg-yellow-500 text-black ring-2 ring-white' : 'bg-gray-800 hover:bg-gray-700'}`}>
-                            <LucideUser className="w-12 h-12 mx-auto mb-2"/>
-                            <span className="font-bold">{p.name}</span>
+                            <LucideUser className="w-12 h-12 mx-auto mb-2 text-white"/>
+                            <span className="font-bold text-white">{p.name}</span>
                         </button>
                     ))}
                 </div>
