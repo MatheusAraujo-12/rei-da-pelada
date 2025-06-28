@@ -1309,7 +1309,13 @@ export default function App() {
         if (isLoading) { return <div className="text-center p-10 text-white">Carregando...</div>; }
         if (!user) { return <AuthScreen />; }
         if (!groupId) { return <GroupGate user={user} onGroupAssociated={setGroupId} />; }
-        if (!playerProfile && !isAdmin) { return <CreatePlayerProfile user={user} onSave={handleSavePlayer} />; }
+         if (!playerProfile) { 
+        return <CreatePlayerProfile user={user} onSave={handleSavePlayer} />; 
+    }
+    
+    if (currentView === 'session_rating') {
+        return <PostMatchScreen session={sessionToVoteOn} players={players} matches={matches} currentUserId={user.uid} groupId={groupId} onFinishRating={() => { setCurrentView('players'); setSessionToVoteOn(null); }} />;
+    }
         
         if (currentView === 'session_rating') {
             return <PostMatchScreen session={sessionToVoteOn} players={players} matches={matches} currentUserId={user.uid} groupId={groupId} onFinishRating={() => { setCurrentView('players'); setSessionToVoteOn(null); }} />;
