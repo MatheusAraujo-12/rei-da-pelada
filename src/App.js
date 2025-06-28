@@ -184,7 +184,7 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
             console.warn("Por favor, preencha todos os campos.");
         }
     };
-    
+
     const handleSkillChange = (skill, value) => setSkills(prev => ({ ...prev, [skill]: Number(value) }));
     const handleAdminSkillChange = (skill, value) => setAdminSkills(prev => ({ ...prev, [skill]: Number(value) }));
     
@@ -201,6 +201,14 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
                     <div><label className="block text-sm font-medium text-gray-300 mb-1">Idade</label><input type="number" value={age} onChange={e => setAge(e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-yellow-500 focus:outline-none transition" /></div>
                     <div><label className="block text-sm font-medium text-gray-300 mb-1">Posição</label><select value={position} onChange={e => setPosition(e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-yellow-500 focus:outline-none transition"><option>Linha</option><option>Goleiro</option></select></div>
                 </div>
+                {isAdmin && (
+                    <div className="pt-4 mt-4 border-t border-gray-700">
+                        <h3 className="text-lg font-semibold text-yellow-500 mb-3">Overall Pessoal</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                           {Object.entries(skills).map(([skill, value]) => (<div key={`self-${skill}`}><label className="capitalize flex items-center text-sm font-medium text-gray-300 mb-1">{skill.replace('_', ' ')}</label><div className="flex items-center space-x-3"><input type="range" min="1" max="99" value={value} onChange={e => handleSkillChange(skill, e.target.value)} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer range-slider" /><span className="text-yellow-400 font-bold w-8 text-center">{value}</span></div></div>))}
+                        </div>
+                    </div>
+                )}
                 {isAdmin && adminSkills && (
                     <div className="pt-4 mt-4 border-t border-gray-700">
                         <h3 className="text-lg font-semibold text-cyan-400 mb-3">Overall do Administrador</h3>
@@ -516,7 +524,6 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
     const [selectedPlayerIds, setSelectedPlayerIds] = useState(new Set());
     const [teams, setTeams] = useState({ teamA: [], teamB: [], waiting: [] });
     const [currentMatchNumber, setCurrentMatchNumber] = useState(1);
-    const [duration, setDuration] = useState(10);
     const [playersPerTeam, setPlayersPerTeam] = useState(5);
     const [drawType, setDrawType] = useState('self');
     const [sessionMatches, setSessionMatches] = useState([]);
@@ -660,7 +667,7 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
         );
     };
 
-    if (step === 'in_game') return <LiveMatchTracker teams={teams} onEndMatch={handleSingleMatchEnd} durationInMinutes={duration} />;
+    if (step === 'in_game') return <LiveMatchTracker teams={teams} onEndMatch={handleSingleMatchEnd} durationInMinutes={10} />;
     
     if (step === 'pre_game' || step === 'post_game') return (
         <div className="text-center bg-gray-900/50 rounded-2xl p-4 sm:p-8">
@@ -997,51 +1004,13 @@ const PostMatchScreen = ({ session, players, matches, currentUserId, groupId, on
 
         const batch = writeBatch(db);
 
-        // Salva a avaliação
-        const sessionRatingRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions/${session.id}/ratings`, currentUserId);
-        batch.set(sessionRatingRef, {
+        const ratingRef = doc(collection(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions/${session.id}/ratings`), currentUserId);
+        batch.set(ratingRef, {
             createdAt: new Date(),
             ratings,
             mvp,
         });
-
-        // Atualiza os atributos dos jogadores
-        for (const player of sessionPlayers) {
-            let playerStats = { goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 };
-            session.matches.forEach(matchId => {
-                const match = matches.find(m => m.id === matchId);
-                if (match && match.playerStats[player.id]) {
-                    Object.keys(playerStats).forEach(stat => {
-                        playerStats[stat] += match.playerStats[player.id][stat] || 0;
-                    });
-                }
-            });
-            
-            const playerRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}/players/${player.id}`);
-            const newSelfOverall = { ...player.selfOverall };
-
-            newSelfOverall.finalizacao = Math.min(99, newSelfOverall.finalizacao + (playerStats.goals * 0.5));
-            newSelfOverall.passe = Math.min(99, newSelfOverall.passe + (playerStats.assists * 0.8));
-            newSelfOverall.desarme = Math.min(99, newSelfOverall.desarme + (playerStats.tackles * 1));
-            
-            if(player.position === 'Goleiro') {
-                newSelfOverall.reflexo = Math.min(99, newSelfOverall.reflexo + (playerStats.saves * 1));
-            }
-
-            for (let i = 0; i < playerStats.failures * 2; i++) {
-                const skillsKeys = Object.keys(newSelfOverall);
-                const randomSkill = skillsKeys[Math.floor(Math.random() * skillsKeys.length)];
-                newSelfOverall[randomSkill] = Math.max(1, newSelfOverall[randomSkill] - 1);
-            }
-            
-            batch.update(playerRef, { selfOverall: newSelfOverall });
-        }
         
-        // Atualiza o status da sessão para 'closed'
-        const sessionDocRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions`, session.id);
-        batch.update(sessionDocRef, { status: "voting_closed" });
-
-
         await batch.commit();
         onFinishRating();
     };
@@ -1053,7 +1022,7 @@ const PostMatchScreen = ({ session, players, matches, currentUserId, groupId, on
                 <div className="space-y-4">
                     {sessionPlayers.map(p => (
                         <div key={p.id} className="bg-gray-800 p-4 rounded-lg flex justify-between items-center">
-                            <span className="font-semibold text-lg text-white">{p.name}</span>
+                            <span className="font-semibold text-lg">{p.name}</span>
                             <div className="flex gap-1">
                                 {[1,2,3,4,5].map(star => (
                                     <LucideStar key={star} onClick={() => handleRatingChange(p.id, star)} className={`w-8 h-8 cursor-pointer transition-colors ${ratings[p.id] >= star ? 'text-yellow-400 fill-current' : 'text-gray-600'}`}/>
@@ -1077,7 +1046,7 @@ const PostMatchScreen = ({ session, players, matches, currentUserId, groupId, on
                     {sessionPlayers.map(p => (
                         <button key={p.id} onClick={() => setMvp(p.id)} className={`p-4 rounded-lg text-center transition-all duration-200 ${mvp === p.id ? 'bg-yellow-500 text-black ring-2 ring-white' : 'bg-gray-800 hover:bg-gray-700'}`}>
                             <LucideUser className="w-12 h-12 mx-auto mb-2 text-white"/>
-                            <span className="font-bold text-white">{p.name}</span>
+                            <span className="font-bold">{p.name}</span>
                         </button>
                     ))}
                 </div>
