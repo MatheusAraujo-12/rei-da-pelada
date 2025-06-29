@@ -665,181 +665,190 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
 
 // --- modules/matches/MatchFlow.js ---
 const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
+    // --- Estados ---
     const [step, setStep] = useState('config');
     const [selectedPlayerIds, setSelectedPlayerIds] = useState(new Set());
-    const [teams, setTeams] = useState({ teamA: [], teamB: [], waiting: [] });
-    const [currentMatchNumber, setCurrentMatchNumber] = useState(1);
+    
+    // Alterado para guardar uma lista de times
+    const [allTeams, setAllTeams] = useState([]); 
+    const [matchHistory, setMatchHistory] = useState([]); // Histórico de resultados da sessão
+    const [currentMatchIndex, setCurrentMatchIndex] = useState(0); // Para controlar qual time joga contra qual
+
+    // Novo estado para o número de times
+    const [numberOfTeams, setNumberOfTeams] = useState(3); 
+    
     const [playersPerTeam, setPlayersPerTeam] = useState(5);
     const [drawType, setDrawType] = useState('self');
     const [sessionMatches, setSessionMatches] = useState([]);
     const [startTime, setStartTime] = useState('20:00');
     const [endTime, setEndTime] = useState('22:00');
 
+    // --- Lógica de Seleção ---
     const handlePlayerToggle = (playerId) => {
         setSelectedPlayerIds(prev => {
             const newSet = new Set(prev);
-            if (newSet.has(playerId)) { newSet.delete(playerId); } else { newSet.add(playerId); }
+            if (newSet.has(playerId)) newSet.delete(playerId);
+            else newSet.add(playerId);
             return newSet;
         });
     };
 
+    // --- NOVA LÓGICA DE SORTEIO DE TIMES (handleStartSession) ---
     const handleStartSession = () => {
-        let availablePlayers = players.filter(p => selectedPlayerIds.has(p.id)).map(p => {
-            let overall;
-            if (drawType === 'admin' && p.adminOverall) {
-                overall = calculateOverall(p.adminOverall);
-            } else if (drawType === 'peer' && p.peerOverall) {
-                overall = calculateOverall(p.peerOverall.avgSkills);
-            } else {
-                overall = calculateOverall(p.selfOverall);
-            }
-            return { ...p, overall };
-        });
+        let availablePlayers = players
+            .filter(p => selectedPlayerIds.has(p.id))
+            .map(p => {
+                let overall;
+                if (drawType === 'admin' && p.adminOverall) overall = calculateOverall(p.adminOverall);
+                else if (drawType === 'peer' && p.peerOverall) overall = calculateOverall(p.peerOverall.avgSkills);
+                else overall = calculateOverall(p.selfOverall);
+                return { ...p, overall };
+            });
 
         if (availablePlayers.length < playersPerTeam * 2) {
-            alert(`São necessários pelo menos ${playersPerTeam * 2} jogadores para o formato ${playersPerTeam}x${playersPerTeam}.`);
+            alert(`São necessários pelo menos ${playersPerTeam * 2} jogadores para formar 2 times.`);
             return;
         }
-        let goalkeepers = availablePlayers.filter(p => p.position === 'Goleiro').sort((a, b) => b.overall - a.overall);
-        let fieldPlayers = availablePlayers.filter(p => p.position !== 'Goleiro').sort((a, b) => b.overall - a.overall);
-        const teamA = [];
-        const teamB = [];
-        let waiting = [];
 
-        if (goalkeepers.length >= 2) {
-            teamA.push(goalkeepers.shift());
-            teamB.push(goalkeepers.shift());
-            fieldPlayers.unshift(...goalkeepers);
-            fieldPlayers.sort((a, b) => b.overall - a.overall);
-        } else {
-            console.warn("Não há goleiros suficientes. Sorteando sem goleiros fixos.");
-            fieldPlayers.unshift(...goalkeepers);
-            fieldPlayers.sort((a, b) => b.overall - a.overall);
-        }
+        // 1. Separar jogadores por posição
+        const posOrder = { 'Goleiro': 1, 'Defensor': 2, 'Volante': 3, 'Meio-Campo': 4, 'Ponta': 5, 'Atacante': 6 };
+        availablePlayers.sort((a, b) => (posOrder[a.detailedPosition] || 99) - (posOrder[b.detailedPosition] || 99) || b.overall - a.overall);
 
-        while (teamA.length < playersPerTeam || teamB.length < playersPerTeam) {
-            if (fieldPlayers.length === 0) break;
-            const overallA = teamA.reduce((sum, p) => sum + p.overall, 0);
-            const overallB = teamB.reduce((sum, p) => sum + p.overall, 0);
-            if (teamA.length < playersPerTeam && (teamA.length <= teamB.length || overallA <= overallB)) {
-                teamA.push(fieldPlayers.shift());
-            } else if (teamB.length < playersPerTeam) {
-                teamB.push(fieldPlayers.shift());
-            } else {
-                break;
+        // 2. Inicializar os times
+        let teams = Array.from({ length: numberOfTeams }, () => ({ players: [], totalOverall: 0 }));
+        
+        // 3. Distribuir jogadores
+        availablePlayers.forEach(player => {
+            // Encontra o time com menor Overall e menor número de jogadores para adicionar o próximo
+            teams.sort((a, b) => {
+                if(a.players.length !== b.players.length) {
+                    return a.players.length - b.players.length;
+                }
+                return a.totalOverall - b.totalOverall;
+            });
+
+            const targetTeam = teams[0];
+            
+            // Adiciona o jogador se o time não estiver cheio
+            if (targetTeam.players.length < playersPerTeam) {
+                targetTeam.players.push(player);
+                targetTeam.totalOverall += player.overall;
             }
+            // Se você quiser lidar com jogadores que sobram, a lógica entraria aqui
+        });
+
+        // Filtra times que não foram preenchidos completamente
+        const finalTeams = teams.filter(t => t.players.length === playersPerTeam);
+
+        if (finalTeams.length < 2) {
+            alert("Não foi possível formar pelo menos 2 times completos com os jogadores selecionados.");
+            return;
         }
-        waiting = fieldPlayers;
-        setTeams({ teamA, teamB, waiting });
-        setCurrentMatchNumber(1);
+
+        setAllTeams(finalTeams.map(t => t.players)); // Guarda apenas a lista de jogadores de cada time
+        setCurrentMatchIndex(0);
+        setMatchHistory([]);
         setStep('pre_game');
     };
-
+    
+    // --- Lógica de Fim de Partida e Rotação ---
     const handleSingleMatchEnd = async (matchResult) => {
         const savedMatch = await onMatchEnd(matchResult);
         if (savedMatch) {
             setSessionMatches(prev => [...prev, savedMatch]);
+            setMatchHistory(prev => [...prev, matchResult]);
         }
         
-        const now = new Date();
-        const endHour = parseInt(endTime.split(':')[0], 10);
-        const endMinute = parseInt(endTime.split(':')[1], 10);
-        if (now.getHours() > endHour || (now.getHours() === endHour && now.getMinutes() >= endMinute)) {
-            handleForceEndSession();
-            return;
-        }
-
-        const winnerKey = matchResult.score.teamA >= matchResult.score.teamB ? 'teamA' : 'teamB';
-        const loserKey = winnerKey === 'teamA' ? 'teamB' : 'teamA';
-        const winnerTeam = matchResult.teams[winnerKey];
-        const loserTeam = matchResult.teams[loserKey];
-        const newWaitingList = [...teams.waiting, ...loserTeam];
-        const nextTeam = newWaitingList.splice(0, playersPerTeam);
-        setTeams({ teamA: winnerTeam, teamB: nextTeam, waiting: newWaitingList });
-        setCurrentMatchNumber(prev => prev + 1);
+        // Simplesmente avança o índice para o próximo confronto
+        setCurrentMatchIndex(prev => prev + 1);
         setStep('post_game');
     };
     
     const handleForceEndSession = () => {
-         const playedIds = new Set(teams.teamA.map(p => p.id).concat(teams.teamB.map(p => p.id), teams.waiting.map(p => p.id)));
-         const finalPlayers = players.filter(p => playedIds.has(p.id));
-         onSessionEnd(finalPlayers, sessionMatches);
-    };
-    
-    const handleSkipTeam = () => {
-        if (teams.waiting.length === 0) {
-            alert("Não há times na espera para fazer a troca.");
-            return;
-        }
-        const newWaitingList = [...teams.waiting];
-        const skippedTeam = teams.teamB;
-        const nextChallenger = newWaitingList.splice(0, playersPerTeam);
-        if (skippedTeam.length > 0) { newWaitingList.push(...skippedTeam); }
-        setTeams({ ...teams, teamB: nextChallenger, waiting: newWaitingList });
+        const playedPlayers = allTeams.flat();
+        onSessionEnd(playedPlayers, sessionMatches);
     };
 
-    const handleMovePlayer = (player, fromTeamKey, toTeamKey) => {
-        setTeams(prev => {
-            const fromTeam = [...prev[fromTeamKey]];
-            const toTeam = [...prev[toTeamKey]];
-            const playerIndex = fromTeam.findIndex(p => p.id === player.id);
-            if (playerIndex === -1) return prev;
-            const [movedPlayer] = fromTeam.splice(playerIndex, 1);
-            toTeam.push(movedPlayer);
-            return { ...prev, [fromTeamKey]: fromTeam, [toTeamKey]: toTeam };
-        });
-    };
-
-    const renderTeamCard = (team, name, extraClasses = "", isEditable = false) => {
-        return (
-            <div className={`bg-gray-800 p-4 rounded-lg w-full ${extraClasses}`}>
-                <h3 className="text-yellow-400 font-bold text-xl mb-2">{name}</h3>
-                <ul className="space-y-2">
-                    {team.map(p => (
-                        <li key={p.id} className="bg-gray-900 p-2 rounded flex justify-between items-center text-white">
-                            <span>{p.name} <span className="text-xs text-gray-400">OVR {p.overall}</span></span>
-                            {isEditable && (
-                                <div className="flex gap-1">
-                                    {name !== 'Time A' && <button onClick={() => handleMovePlayer(p, name.includes('B') ? 'teamB' : 'waiting', 'teamA')} title="Mover para Time A" className="p-1 bg-blue-600 rounded text-xs">A</button>}
-                                    {name !== 'Time B' && <button onClick={() => handleMovePlayer(p, name.includes('A') ? 'teamA' : 'waiting', 'teamB')} title="Mover para Time B" className="p-1 bg-green-600 rounded text-xs">B</button>}
-                                    {name !== 'Na Fila' && <button onClick={() => handleMovePlayer(p, name.includes('A') ? 'teamA' : 'teamB', 'waiting')} title="Mover para Fila" className="p-1 bg-gray-600 rounded text-xs">F</button>}
-                                </div>
-                            )}
-                        </li>
-                    ))}
-                </ul>
-            </div>
-        );
-    };
-
-    if (step === 'in_game') return <LiveMatchTracker teams={teams} onEndMatch={handleSingleMatchEnd} durationInMinutes={10} />;
-    
-    if (step === 'pre_game' || step === 'post_game') return (
-        <div className="text-center bg-gray-900/50 rounded-2xl p-4 sm:p-8">
-            <h2 className="text-2xl sm:text-3xl font-bold text-yellow-400 mb-2">{step === 'pre_game' ? `Prontos para a Partida ${currentMatchNumber}?` : `Fim da Partida ${currentMatchNumber - 1}`}</h2>
-            <p className="text-gray-400 mb-6">{step === 'post_game' && "Time vencedor continua em quadra."}</p>
-            <div className="flex flex-col md:flex-row gap-4 mb-8">
-                {renderTeamCard(teams.teamA, step === 'pre_game' ? 'Time A' : 'Vencedor (Em quadra)', "", true)}
-                {teams.teamB.length > 0 ? renderTeamCard(teams.teamB, step === 'pre_game' ? 'Time B' : 'Próximo Desafiante', "", true) : <div className="bg-gray-800 p-4 rounded-lg w-full flex items-center justify-center"><h3 className="text-yellow-400 font-bold text-xl">Sem desafiantes</h3></div>}
-                {teams.waiting.length > 0 && renderTeamCard(teams.waiting, 'Na Fila', 'opacity-60', true)}
-            </div>
-            <div className="flex flex-col sm:flex-row justify-center gap-4">
-                <button onClick={handleSkipTeam} disabled={teams.waiting.length === 0 || teams.teamB.length === 0} className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-6 rounded-lg text-lg disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center gap-2 justify-center"><LucideSkipForward />Pular Próximo</button>
-                <button onClick={() => setStep('in_game')} disabled={teams.teamB.length === 0} className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-600 disabled:cursor-not-allowed">Começar Partida {currentMatchNumber}</button>
-                 <button onClick={handleForceEndSession} className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg text-lg">Encerrar Pelada</button>
-            </div>
+    // --- Renderização ---
+    const renderTeamCard = (team, name) => (
+        <div className="bg-gray-800 p-4 rounded-lg w-full">
+            <h3 className="text-yellow-400 font-bold text-xl mb-2">{name}</h3>
+            <ul className="space-y-2">
+                {team.map(p => (
+                    <li key={p.id} className="bg-gray-900 p-2 rounded flex justify-between items-center text-white">
+                        <span>{p.name} <span className="text-xs text-gray-400">{p.detailedPosition || p.position} (OVR {p.overall})</span></span>
+                    </li>
+                ))}
+            </ul>
         </div>
     );
     
-    return (
+    // --- Telas do Fluxo ---
+    if (step === 'in_game') {
+        const teamIndexA = (currentMatchIndex * 2) % allTeams.length;
+        const teamIndexB = (currentMatchIndex * 2 + 1) % allTeams.length;
+
+        if (teamIndexA === teamIndexB) { // Acontece quando há um número ímpar de times e já demos a volta
+             handleForceEndSession();
+             return <div className="text-center p-10">Fim de todos os confrontos!</div>;
+        }
+
+        const teamA = allTeams[teamIndexA];
+        const teamB = allTeams[teamIndexB];
+        
+        return <LiveMatchTracker teams={{ teamA, teamB }} onEndMatch={handleSingleMatchEnd} durationInMinutes={10} />;
+    }
+    
+    if (step === 'pre_game' || step === 'post_game') {
+        const teamIndexA = (currentMatchIndex * 2) % allTeams.length;
+        const teamIndexB = (currentMatchIndex * 2 + 1) % allTeams.length;
+        const teamA = allTeams[teamIndexA];
+        const teamB = allTeams[teamIndexB];
+        const nextTeams = allTeams.slice(teamIndexB + 1);
+
+        return (
+            <div className="text-center bg-gray-900/50 rounded-2xl p-4 sm:p-8">
+                <h2 className="text-2xl sm:text-3xl font-bold text-yellow-400 mb-2">
+                    {step === 'pre_game' ? `Prontos para a Partida 1?` : `Fim da Partida ${currentMatchIndex}`}
+                </h2>
+                <div className="flex flex-col md:flex-row gap-4 mb-8">
+                    {teamA && renderTeamCard(teamA, `Time ${teamIndexA + 1}`)}
+                    {teamB ? renderTeamCard(teamB, `Time ${teamIndexB + 1}`) : <div className="bg-gray-800 p-4 rounded-lg w-full flex items-center justify-center"><h3 className="text-yellow-400 font-bold text-xl">Aguardando...</h3></div>}
+                </div>
+                {nextTeams.length > 0 && (
+                    <div className="mb-8">
+                        <h3 className="text-xl font-bold text-gray-400 mb-4">Times na Fila de Espera</h3>
+                        <div className="flex flex-wrap gap-4 justify-center">
+                            {nextTeams.map((team, index) => renderTeamCard(team, `Time ${teamIndexB + 2 + index}`))}
+                        </div>
+                    </div>
+                )}
+                <div className="flex flex-col sm:flex-row justify-center gap-4">
+                    <button onClick={() => setStep('in_game')} disabled={!teamB || teamIndexA === teamIndexB} className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-600">
+                        Começar Próxima Partida
+                    </button>
+                    <button onClick={handleForceEndSession} className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg text-lg">
+                        Encerrar Pelada
+                    </button>
+                </div>
+            </div>
+        );
+    }
+    
+    return ( // Tela de Configuração Inicial
         <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-6 border border-gray-700">
             <h2 className="text-2xl font-bold text-yellow-400 mb-4">Configurar Noite de Futebol</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                <div><label className="block font-semibold mb-2 text-white">Jogadores por time:</label><input type="number" min="2" value={playersPerTeam} onChange={e => setPlayersPerTeam(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white" /></div>
-                <div><label className="block font-semibold mb-2 text-white">Horário de Início:</label><input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} className="w-full bg-gray-800 p-2 rounded text-white" /></div>
-                <div><label className="block font-semibold mb-2 text-white">Horário de Fim:</label><input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className="w-full bg-gray-800 p-2 rounded text-white" /></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div>
+                    <label className="block font-semibold mb-2 text-white">Jogadores por time:</label>
+                    <input type="number" min="2" value={playersPerTeam} onChange={e => setPlayersPerTeam(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white" />
+                </div>
+                <div>
+                    <label className="block font-semibold mb-2 text-white">Nº de times a sortear:</label>
+                    <input type="number" min="2" value={numberOfTeams} onChange={e => setNumberOfTeams(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white" />
+                </div>
             </div>
-             <div className="my-6">
+            <div className="my-6">
                 <label className="block font-semibold mb-2 text-white">Sorteio baseado em:</label>
                 <div className="flex gap-4">
                     <button onClick={() => setDrawType('self')} className={`py-2 px-4 rounded-lg ${drawType === 'self' ? 'bg-yellow-500 text-black' : 'bg-gray-700 text-white'}`}>Overall Próprio</button>
