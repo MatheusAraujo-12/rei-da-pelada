@@ -12,7 +12,7 @@ import {
     LucideUser, LucideUserPlus, LucideX, LucideShield, 
     LucideGoal, LucideHand, LucideEdit, LucideTrash2, LucideUsers, 
     LucideSwords, LucideUndo, LucideTrophy, LucideAward, LucideHandshake, LucideShieldCheck, LucideFrown,
-    LucidePlay, LucidePause, LucidePlus, LucideSkipForward, LucideClipboard,
+    LucidePlay, LucidePause, LucidePlus, LucideClipboard,
     LucideLogIn, LucidePlusCircle, LucideHistory, LucideLogOut, LucideStar
 } from 'lucide-react';
 import * as Tone from 'tone';
@@ -669,19 +669,14 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
     const [step, setStep] = useState('config');
     const [selectedPlayerIds, setSelectedPlayerIds] = useState(new Set());
     
-    // Alterado para guardar uma lista de times
     const [allTeams, setAllTeams] = useState([]); 
-    const [matchHistory, setMatchHistory] = useState([]); // Histórico de resultados da sessão
-    const [currentMatchIndex, setCurrentMatchIndex] = useState(0); // Para controlar qual time joga contra qual
+    const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
 
-    // Novo estado para o número de times
     const [numberOfTeams, setNumberOfTeams] = useState(3); 
     
     const [playersPerTeam, setPlayersPerTeam] = useState(5);
     const [drawType, setDrawType] = useState('self');
     const [sessionMatches, setSessionMatches] = useState([]);
-    const [startTime, setStartTime] = useState('20:00');
-    const [endTime, setEndTime] = useState('22:00');
 
     // --- Lógica de Seleção ---
     const handlePlayerToggle = (playerId) => {
