@@ -1,29 +1,28 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { initializeApp } from 'firebase/app';
 import { 
-    getAuth, 
-    onAuthStateChanged, 
-    createUserWithEmailAndPassword,
-    signInWithEmailAndPassword,
-    signOut
+    getAuth, onAuthStateChanged, createUserWithEmailAndPassword,
+    signInWithEmailAndPassword, signOut
 } from 'firebase/auth';
 import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, getDoc, setDoc, runTransaction, where, writeBatch } from 'firebase/firestore';
 import { 
-    LucideUser, LucideUserPlus, LucideX, LucideShield, 
-    LucideGoal, LucideHand, LucideEdit, LucideTrash2, LucideUsers, 
-    LucideSwords, LucideUndo, LucideTrophy, LucideAward, LucideHandshake, LucideShieldCheck, LucideFrown,
-    LucidePlay, LucidePause, LucidePlus, LucideClipboard,
-    LucideLogIn, LucidePlusCircle, LucideHistory, LucideLogOut, LucideStar
+    LucideUser, LucideUserPlus, LucideX, LucideShield, LucideGoal, LucideHand, 
+    LucideEdit, LucideTrash2, LucideUsers, LucideSwords, LucideUndo, LucideTrophy, 
+    LucideAward, LucideHandshake, LucideShieldCheck, LucideFrown, LucidePlay, 
+    LucidePause, LucidePlus, LucideClipboard, LucideLogIn, LucidePlusCircle, 
+    LucideHistory, LucideLogOut, LucideStar, LucideArrowLeftRight
 } from 'lucide-react';
 import * as Tone from 'tone';
 
+// --- Configurações Iniciais ---
 const firebaseConfig = {
-  apiKey: "AIzaSyAoqy2Tnwmp_sfU903bvG_EcyJ9QXXu9a4",
-  authDomain: "sample-firebase-ai-app-198c0.firebaseapp.com",
-  projectId: "sample-firebase-ai-app-198c0",
-  storageBucket: "sample-firebase-ai-app-198c0.firebasestorage.app",
-  messagingSenderId: "838973313914",
-  appId: "1:838973313914:web:c4a1c229ebaefdeb023cc3"
+    apiKey: "AIzaSyAoqy2Tnwmp_sfU903bvG_EcyJ9QXXu9a4",
+    authDomain: "sample-firebase-ai-app-198c0.firebaseapp.com",
+    projectId: "sample-firebase-ai-app-198c0",
+    storageBucket: "sample-firebase-ai-app-198c0.firebasestorage.app",
+    messagingSenderId: "838973313914",
+    appId: "1:838973313914:web:c4a1c229ebaefdeb023cc3"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -31,21 +30,23 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = 'default-fut-app';
 
-// --- utils/helpers.js ---
+// --- Funções Utilitárias ---
 const calculateOverall = (skills) => {
     if (!skills) return 0;
-    const skillValues = Object.values(skills);
+    const skillValues = Object.values(skills).map(Number).filter(v => !isNaN(v));
     if (skillValues.length === 0) return 0;
     return Math.round(skillValues.reduce((acc, val) => acc + val, 0) / skillValues.length);
 };
 
-// --- components/AuthScreen.js ---
+// --- Componentes ---
+
 const AuthScreen = () => {
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [joinId, setJoinId] = useState('');
     const [error, setError] = useState('');
+    const navigate = useNavigate();
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -58,66 +59,43 @@ const AuthScreen = () => {
                 if (joinId.trim()) {
                     const groupDocRef = doc(db, `artifacts/${appId}/public/data/groups/${joinId.trim()}`);
                     const groupSnap = await getDoc(groupDocRef);
-
                     if (groupSnap.exists()) {
                         const userDocRef = doc(db, `artifacts/${appId}/users/${userCredential.user.uid}`);
                         await setDoc(userDocRef, { groupId: joinId.trim() });
                     } else {
                         setError("ID do Grupo inválido. Verifique e tente novamente.");
                         await userCredential.user.delete();
+                        return;
                     }
                 }
             }
+            navigate('/');
         } catch (err) {
-            setError(err.message.replace('Firebase: ', ''));
+            let friendlyError = err.message.replace('Firebase: ', '').replace('Error ','');
+            if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
+                friendlyError = "Email ou senha incorretos. Verifique e tente novamente.";
+            }
+            setError(friendlyError);
         }
     };
 
     return (
-        <div className="flex items-center justify-center min-h-[60vh]">
-            <div className="w-full max-w-md text-center bg-gray-900/50 rounded-2xl p-8 border border-gray-700">
+        <div className="flex items-center justify-center min-h-screen bg-gray-900">
+            <div className="w-full max-w-md text-center bg-gray-800 rounded-2xl p-8 border border-gray-700">
                 <h2 className="text-3xl font-bold text-yellow-400 mb-6">{isLogin ? 'Login' : 'Cadastre-se'}</h2>
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <input 
-                        type="email" 
-                        placeholder="Email" 
-                        value={email} 
-                        onChange={(e) => setEmail(e.target.value)} 
-                        className="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 text-white"
-                        required
-                    />
-                    <input 
-                        type="password" 
-                        placeholder="Senha" 
-                        value={password} 
-                        onChange={(e) => setPassword(e.target.value)} 
-                        className="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 text-white"
-                        required
-                    />
-                    {!isLogin && (
-                        <input 
-                            type="text" 
-                            placeholder="ID de Convite do Grupo (Opcional)" 
-                            value={joinId} 
-                            onChange={(e) => setJoinId(e.target.value)} 
-                            className="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 text-white"
-                        />
-                    )}
-                     {error && <p className="text-red-500 text-sm">{error}</p>}
-                    <button type="submit" className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3 px-6 rounded-lg">
-                        {isLogin ? 'Entrar' : 'Criar Conta'}
-                    </button>
+                    <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white" required />
+                    <input type="password" placeholder="Senha" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white" required />
+                    {!isLogin && (<input type="text" placeholder="ID de Convite do Grupo (Opcional)" value={joinId} onChange={(e) => setJoinId(e.target.value)} className="w-full bg-gray-700 border border-gray-600 rounded-lg p-3 text-white" />)}
+                    {error && <p className="text-red-500 text-sm">{error}</p>}
+                    <button type="submit" className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3 px-6 rounded-lg">{isLogin ? 'Entrar' : 'Criar Conta'}</button>
                 </form>
-                <button onClick={() => setIsLogin(!isLogin)} className="text-gray-400 mt-4 text-sm hover:text-white">
-                    {isLogin ? 'Não tem uma conta? Cadastre-se' : 'Já tem uma conta? Faça o login'}
-                </button>
+                <button onClick={() => setIsLogin(!isLogin)} className="text-gray-400 mt-4 text-sm hover:text-white">{isLogin ? 'Não tem uma conta? Cadastre-se' : 'Já tem uma conta? Faça o login'}</button>
             </div>
         </div>
     );
 };
 
-
-// --- components/ConfirmationModal.js ---
 const ConfirmationModal = ({ isOpen, title, message, onConfirm, onClose }) => {
     if (!isOpen) return null;
     return (
@@ -127,7 +105,7 @@ const ConfirmationModal = ({ isOpen, title, message, onConfirm, onClose }) => {
                 <p className="text-gray-300 mb-6">{message}</p>
                 <div className="flex justify-end gap-4">
                     <button onClick={onClose} className="py-2 px-4 rounded-lg bg-gray-600 hover:bg-gray-500 transition-colors">Cancelar</button>
-                    <button onClick={onConfirm} className="py-2 px-4 rounded-lg bg-yellow-500 hover:bg-yellow-600 text-black transition-colors">Confirmar</button>
+                    <button onClick={onConfirm} className="py-2 px-4 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors">Confirmar</button>
                 </div>
             </div>
         </div>
@@ -662,32 +640,19 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
         </>
     );
 };
-
 // --- modules/matches/MatchFlow.js ---
 const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
     // --- Estados ---
     const [step, setStep] = useState('config');
     const [selectedPlayerIds, setSelectedPlayerIds] = useState(new Set());
-    const [allTeams, setAllTeams] = useState([]);
-    
-    // ✅ 1. ESTADO RESTAURADO PARA EVITAR O ERRO 'setMatchHistory is not defined'
+    const [allTeams, setAllTeams] = useState([]); // Array com todos os times sorteados. Ex: [[...timeA], [...timeB], [...timeC]]
     const [matchHistory, setMatchHistory] = useState([]);
-    
-    const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
-    const [numberOfTeams, setNumberOfTeams] = useState(3); 
+    const [sessionMatches, setSessionMatches] = useState([]);
+    const [numberOfTeams, setNumberOfTeams] = useState(3);
     const [playersPerTeam, setPlayersPerTeam] = useState(5);
     const [drawType, setDrawType] = useState('self');
-    const [sessionMatches, setSessionMatches] = useState([]);
 
-    // ✅ 2. ADICIONADO UM CONSOLE.LOG PARA QUE 'matchHistory' SEJA CONSIDERADA "USADA"
-    useEffect(() => {
-        // Esta linha evita o erro de "variável não utilizada" no deploy.
-        // No futuro, podemos usar esta variável para exibir o histórico de partidas.
-        console.log("Histórico da sessão atual:", matchHistory);
-    }, [matchHistory]);
-
-
-    // --- Lógica de Seleção ---
+    // --- Lógica de Seleção de Jogadores ---
     const handlePlayerToggle = (playerId) => {
         setSelectedPlayerIds(prev => {
             const newSet = new Set(prev);
@@ -699,15 +664,13 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
 
     // --- Lógica de Sorteio de Times ---
     const handleStartSession = () => {
-        let availablePlayers = players
-            .filter(p => selectedPlayerIds.has(p.id))
-            .map(p => {
-                let overall;
-                if (drawType === 'admin' && p.adminOverall) overall = calculateOverall(p.adminOverall);
-                else if (drawType === 'peer' && p.peerOverall) overall = calculateOverall(p.peerOverall.avgSkills);
-                else overall = calculateOverall(p.selfOverall);
-                return { ...p, overall };
-            });
+        let availablePlayers = players.filter(p => selectedPlayerIds.has(p.id)).map(p => {
+            let overall;
+            if (drawType === 'admin' && p.adminOverall) overall = calculateOverall(p.adminOverall);
+            else if (drawType === 'peer' && p.peerOverall) overall = calculateOverall(p.peerOverall.avgSkills);
+            else overall = calculateOverall(p.selfOverall);
+            return { ...p, overall };
+        });
 
         if (availablePlayers.length < playersPerTeam * 2) {
             alert(`São necessários pelo menos ${playersPerTeam * 2} jogadores para formar 2 times.`);
@@ -720,12 +683,7 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
         let teams = Array.from({ length: numberOfTeams }, () => ({ players: [], totalOverall: 0 }));
         
         availablePlayers.forEach(player => {
-            teams.sort((a, b) => {
-                if(a.players.length !== b.players.length) {
-                    return a.players.length - b.players.length;
-                }
-                return a.totalOverall - b.totalOverall;
-            });
+            teams.sort((a, b) => a.players.length - b.players.length || a.totalOverall - b.totalOverall);
             const targetTeam = teams[0];
             if (targetTeam.players.length < playersPerTeam) {
                 targetTeam.players.push(player);
@@ -736,89 +694,135 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
         const finalTeams = teams.filter(t => t.players.length === playersPerTeam);
 
         if (finalTeams.length < 2) {
-            alert("Não foi possível formar pelo menos 2 times completos com os jogadores selecionados.");
+            alert("Não foi possível formar pelo menos 2 times completos.");
             return;
         }
 
         setAllTeams(finalTeams.map(t => t.players));
-        setCurrentMatchIndex(0);
-        setMatchHistory([]); // ✅ CHAMADA A setMatchHistory MANTIDA E FUNCIONAL
+        setMatchHistory([]);
+        setSessionMatches([]);
         setStep('pre_game');
     };
-    
-    // --- Lógica de Fim de Partida e Rotação ---
+
+    // ✅ --- (RESTAURADO) LÓGICA DE FIM DE PARTIDA E ROTAÇÃO ---
     const handleSingleMatchEnd = async (matchResult) => {
         const savedMatch = await onMatchEnd(matchResult);
-        if (savedMatch) {
-            setSessionMatches(prev => [...prev, savedMatch]);
-            setMatchHistory(prev => [...prev, matchResult]); // ✅ CHAMADA A setMatchHistory MANTIDA E FUNCIONAL
-        }
+        if (savedMatch) setSessionMatches(prev => [...prev, savedMatch]);
+        setMatchHistory(prev => [...prev, matchResult]);
+
+        const { teamA, teamB } = matchResult.teams;
+        const winnerTeam = matchResult.score.teamA >= matchResult.score.teamB ? teamA : teamB;
+        const loserTeam = winnerTeam === teamA ? teamB : teamA;
+
+        const remainingTeams = allTeams.slice(2);
+        const newQueue = [...remainingTeams, loserTeam];
         
-        setCurrentMatchIndex(prev => prev + 1);
+        const nextChallenger = newQueue.length > 0 ? newQueue.shift() : null;
+
+        setAllTeams([winnerTeam, ...(nextChallenger ? [nextChallenger] : []), ...newQueue]);
         setStep('post_game');
+    };
+
+    // ✅ --- (RESTAURADO) LÓGICA PARA MOVER JOGADORES MANUALMENTE ---
+    const handleMovePlayer = (playerToMove, fromTeamIndex, toTeamIndex) => {
+        setAllTeams(currentTeams => {
+            const newTeams = JSON.parse(JSON.stringify(currentTeams));
+            const fromTeam = newTeams[fromTeamIndex];
+            const toTeam = newTeams[toTeamIndex];
+
+            const playerIndex = fromTeam.findIndex(p => p.id === playerToMove.id);
+            if (playerIndex === -1 || toTeam.length >= playersPerTeam) {
+                // Não mover se o jogador não for encontrado ou se o time de destino estiver cheio
+                return currentTeams;
+            }
+
+            const [player] = fromTeam.splice(playerIndex, 1);
+            toTeam.push(player);
+            
+            return newTeams;
+        });
+    };
+
+    // ✅ --- (NOVO) LÓGICA PARA TROCAR O PRÓXIMO ADVERSÁRIO ---
+    const handleSwapOpponent = (teamToSwapIndex) => {
+        setAllTeams(currentTeams => {
+            const newTeams = [...currentTeams];
+            // O próximo oponente é sempre o índice 1. O time a ser trocado está na fila,
+            // então seu índice real na array `allTeams` é `teamToSwapIndex + 2`.
+            const actualIndexToSwap = teamToSwapIndex + 2;
+
+            if (actualIndexToSwap < newTeams.length) {
+                // Simplesmente troca as posições dos times na array principal
+                [newTeams[1], newTeams[actualIndexToSwap]] = [newTeams[actualIndexToSwap], newTeams[1]];
+            }
+            return newTeams;
+        });
     };
     
     const handleForceEndSession = () => {
-        const playedPlayers = allTeams.flat();
-        onSessionEnd(playedPlayers, sessionMatches);
+        onSessionEnd(allTeams.flat(), sessionMatches);
     };
 
-    // --- Renderização (sem alterações) ---
-    const renderTeamCard = (team, name) => (
-        <div className="bg-gray-800 p-4 rounded-lg w-full">
-            <h3 className="text-yellow-400 font-bold text-xl mb-2">{name}</h3>
+    // --- Renderização ---
+    const renderTeamCard = (team, name, teamIndex, isEditable = false) => (
+        <div className="bg-gray-800 p-4 rounded-lg w-full min-w-[250px]">
+            <h3 className="text-yellow-400 font-bold text-xl mb-3">{name}</h3>
             <ul className="space-y-2">
                 {team.map(p => (
                     <li key={p.id} className="bg-gray-900 p-2 rounded flex justify-between items-center text-white">
-                        <span>{p.name} <span className="text-xs text-gray-400">{p.detailedPosition || p.position} (OVR {p.overall})</span></span>
+                        <span>{p.name} <span className="text-xs text-gray-400">OVR {p.overall}</span></span>
+                        {isEditable && (
+                            <div className="flex gap-1">
+                                {teamIndex !== 0 && <button onClick={() => handleMovePlayer(p, teamIndex, 0)} title="Mover para Time 1" className="p-1 bg-blue-600 rounded text-xs leading-none">T1</button>}
+                                {teamIndex !== 1 && <button onClick={() => handleMovePlayer(p, teamIndex, 1)} title="Mover para Time 2" className="p-1 bg-green-600 rounded text-xs leading-none">T2</button>}
+                            </div>
+                        )}
                     </li>
                 ))}
             </ul>
         </div>
     );
-    
+
     if (step === 'in_game') {
-        const teamIndexA = (currentMatchIndex * 2) % allTeams.length;
-        const teamIndexB = (currentMatchIndex * 2 + 1) % allTeams.length;
-
-        if (teamIndexA === teamIndexB || !allTeams[teamIndexB]) {
-             handleForceEndSession();
-             return <div className="text-center p-10">Fim de todos os confrontos!</div>;
-        }
-
-        const teamA = allTeams[teamIndexA];
-        const teamB = allTeams[teamIndexB];
-        
-        return <LiveMatchTracker teams={{ teamA, teamB }} onEndMatch={handleSingleMatchEnd} durationInMinutes={10} />;
+        return <LiveMatchTracker teams={{ teamA: allTeams[0], teamB: allTeams[1] }} onEndMatch={handleSingleMatchEnd} durationInMinutes={10} />;
     }
-    
+
     if (step === 'pre_game' || step === 'post_game') {
-        const teamIndexA = (currentMatchIndex * 2) % allTeams.length;
-        const teamIndexB = (currentMatchIndex * 2 + 1) % allTeams.length;
-        const teamA = allTeams[teamIndexA];
-        const teamB = allTeams[teamIndexB];
-        const nextTeams = allTeams.slice(teamIndexB + 1);
+        const teamA = allTeams[0];
+        const teamB = allTeams[1];
+        const waitingTeams = allTeams.slice(2);
 
         return (
             <div className="text-center bg-gray-900/50 rounded-2xl p-4 sm:p-8">
-                <h2 className="text-2xl sm:text-3xl font-bold text-yellow-400 mb-2">
-                    {step === 'pre_game' ? `Prontos para a Partida 1?` : `Fim da Partida ${currentMatchIndex}`}
+                <h2 className="text-2xl sm:text-3xl font-bold text-yellow-400 mb-6">
+                    {step === 'post_game' ? `Fim da Partida ${matchHistory.length}` : `Prontos para Começar!`}
                 </h2>
-                <div className="flex flex-col md:flex-row gap-4 mb-8">
-                    {teamA && renderTeamCard(teamA, `Time ${teamIndexA + 1}`)}
-                    {teamB ? renderTeamCard(teamB, `Time ${teamIndexB + 1}`) : <div className="bg-gray-800 p-4 rounded-lg w-full flex items-center justify-center"><h3 className="text-yellow-400 font-bold text-xl">Aguardando...</h3></div>}
+
+                <div className="flex flex-col md:flex-row gap-4 mb-6 justify-center">
+                    {teamA && renderTeamCard(teamA, step === 'post_game' ? "Vencedor (em quadra)" : "Time 1", 0, true)}
+                    {teamB ? renderTeamCard(teamB, step === 'post_game' ? "Próximo Desafiante" : "Time 2", 1, true) : <div className="bg-gray-800 p-4 rounded-lg w-full flex items-center justify-center"><h3 className="text-yellow-400 font-bold text-xl">Sem desafiantes</h3></div>}
                 </div>
-                {nextTeams.length > 0 && (
-                    <div className="mb-8">
-                        <h3 className="text-xl font-bold text-gray-400 mb-4">Times na Fila de Espera</h3>
+                
+                {waitingTeams.length > 0 && (
+                    <div className="mb-6">
+                        <h3 className="text-xl font-bold text-gray-400 mb-4">Fila de Espera</h3>
                         <div className="flex flex-wrap gap-4 justify-center">
-                            {nextTeams.map((team, index) => renderTeamCard(team, `Time ${teamIndexB + 2 + index}`))}
+                            {waitingTeams.map((team, index) => (
+                                <div key={index} className="flex flex-col gap-2 items-center">
+                                    {renderTeamCard(team, `Fila ${index + 1}`, index + 2, true)}
+                                    {/* ✅ (NOVO) BOTÃO PARA TROCAR ADVERSÁRIO */}
+                                    <button onClick={() => handleSwapOpponent(index)} className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-1 px-3 text-sm rounded-lg">
+                                        Jogar Agora
+                                    </button>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 )}
-                <div className="flex flex-col sm:flex-row justify-center gap-4">
-                    <button onClick={() => setStep('in_game')} disabled={!teamB || teamIndexA === teamIndexB} className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-600">
-                        Começar Próxima Partida
+
+                <div className="flex flex-col sm:flex-row justify-center gap-4 mt-8">
+                    <button onClick={() => setStep('in_game')} disabled={!teamB} className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-600 disabled:cursor-not-allowed">
+                        Começar Partida
                     </button>
                     <button onClick={handleForceEndSession} className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg text-lg">
                         Encerrar Pelada
@@ -828,9 +832,11 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
         );
     }
     
+    // Tela de Configuração Inicial (sem mudanças)
     return (
         <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-6 border border-gray-700">
-            <h2 className="text-2xl font-bold text-yellow-400 mb-4">Configurar Noite de Futebol</h2>
+            {/* ...código da tela de configuração não foi alterado... */}
+             <h2 className="text-2xl font-bold text-yellow-400 mb-4">Configurar Noite de Futebol</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 <div>
                     <label className="block font-semibold mb-2 text-white">Jogadores por time:</label>
@@ -843,7 +849,7 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
             </div>
             <div className="my-6">
                 <label className="block font-semibold mb-2 text-white">Sorteio baseado em:</label>
-                <div className="flex gap-4">
+                <div className="flex gap-4 flex-wrap">
                     <button onClick={() => setDrawType('self')} className={`py-2 px-4 rounded-lg ${drawType === 'self' ? 'bg-yellow-500 text-black' : 'bg-gray-700 text-white'}`}>Overall Próprio</button>
                     <button onClick={() => setDrawType('peer')} className={`py-2 px-4 rounded-lg ${drawType === 'peer' ? 'bg-cyan-500 text-black' : 'bg-gray-700 text-white'}`}>Overall da Galera</button>
                     <button onClick={() => setDrawType('admin')} className={`py-2 px-4 rounded-lg ${drawType === 'admin' ? 'bg-green-500 text-black' : 'bg-gray-700 text-white'}`}>Overall do Admin</button>
@@ -860,6 +866,7 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
         </div>
     );
 };
+
 // --- modules/history/MatchHistory.js ---
 const MatchHistory = ({ matches, players, onEditMatch, onDeleteMatch }) => {
     if (matches.length === 0) {
@@ -1246,72 +1253,81 @@ const PostMatchScreen = ({ session, players, matches, currentUserId, groupId, on
 
 
 // --- App.js ---
-export default function App() {
+// ✅ COMPONENTE PRINCIPAL QUE INICIA TUDO
+export default function AppWrapper() {
+    return (
+        <div className="app-bg min-h-screen">
+             <style>{`body { background-color: #0c1116; color: white; } .app-bg { background-image: radial-gradient(circle at 50% 50%, rgba(12, 17, 22, 0.8) 0%, rgba(12, 17, 22, 1) 70%), url('https://www.transparenttextures.com/patterns/dark-grass.png'); min-height: 100vh; } .range-slider::-webkit-slider-thumb { background: #f59e0b; } .range-slider::-moz-range-thumb { background: #f59e0b; }`}</style>
+            <BrowserRouter>
+                <App />
+            </BrowserRouter>
+        </div>
+    );
+}
+
+// ✅ COMPONENTE APP INTERNO (GERENCIA ESTADO E ROTAS)
+function App() {
     const [user, setUser] = useState(null);
-    const [groupId, setGroupId] = useState(null);
-    const [isAdmin, setIsAdmin] = useState(false);
-    const [playerProfile, setPlayerProfile] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
+    const [userData, setUserData] = useState({ groupId: null, isAdmin: false });
     const [players, setPlayers] = useState([]);
     const [matches, setMatches] = useState([]);
+    const [playerProfile, setPlayerProfile] = useState(null);
+    const [isLoading, setIsLoading] = useState(true);
+    
+    // Estados para os modais
     const [isPlayerModalOpen, setIsPlayerModalOpen] = useState(false);
     const [editingPlayer, setEditingPlayer] = useState(null);
-    const [editingMatch, setEditingMatch] = useState(null);
     const [playerToDelete, setPlayerToDelete] = useState(null);
-    const [matchToDelete, setMatchToDelete] = useState(null);
     const [peerReviewPlayer, setPeerReviewPlayer] = useState(null);
-    const [currentView, setCurrentView] = useState('players');
+    const [editingMatch, setEditingMatch] = useState(null);
+    const [matchToDelete, setMatchToDelete] = useState(null);
     const [sessionsToVote, setSessionsToVote] = useState([]);
     const [sessionToVoteOn, setSessionToVoteOn] = useState(null);
 
+    
+    const navigate = useNavigate();
+    const location = useLocation();
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (u) => {
-            setIsLoading(true);
             if (u) {
                 setUser(u);
                 const userDocRef = doc(db, `artifacts/${appId}/users/${u.uid}`);
                 const userDocSnap = await getDoc(userDocRef);
                 if (userDocSnap.exists() && userDocSnap.data().groupId) {
-                    const currentGroupId = userDocSnap.data().groupId;
-                    setGroupId(currentGroupId);
+                    setUserData(prev => ({ ...prev, groupId: userDocSnap.data().groupId }));
                 } else {
-                    setGroupId(null);
+                    setUserData({ groupId: null, isAdmin: false });
                     setIsLoading(false);
                 }
             } else {
-                setUser(null);
-                setGroupId(null);
-                setIsAdmin(false);
-                setIsLoading(false);
+                setUser(null); setUserData({ groupId: null, isAdmin: false }); setIsLoading(false);
+                navigate('/login');
             }
         });
         return () => unsubscribe();
-    }, []);
+    }, [navigate]);
 
     useEffect(() => {
-        if (!user || !groupId) {
-            setPlayers([]);
-            setMatches([]);
+        if (!user || !userData.groupId) {
+            setPlayers([]); setMatches([]); setPlayerProfile(null);
+            if (user) setIsLoading(false);
             return;
         }
-        
-        const playersColRef = collection(db, `artifacts/${appId}/public/data/groups/${groupId}/players`);
-        const pSub = onSnapshot(query(playersColRef), async (s) => {
-            const allPlayers = s.docs.map(d => ({ id: d.id, ...d.data() }));
-            setPlayers(allPlayers);
-            const userProfile = allPlayers.find(p => p.createdBy === user.uid);
-            setPlayerProfile(userProfile || null);
-            
-            const groupDocRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}`);
-            const groupDocSnap = await getDoc(groupDocRef);
-            if (groupDocSnap.exists() && groupDocSnap.data().createdBy === user.uid) {
-                setIsAdmin(true);
-            } else {
-                setIsAdmin(false);
-            }
-             setIsLoading(false);
+
+        setIsLoading(true);
+        const groupDocRef = doc(db, `artifacts/${appId}/public/data/groups/${userData.groupId}`);
+        const unsubGroup = onSnapshot(groupDocRef, (docSnap) => {
+            setUserData(prev => ({ ...prev, isAdmin: docSnap.exists() && docSnap.data().createdBy === user.uid }));
         });
 
+        const playersColRef = collection(db, `artifacts/${appId}/public/data/groups/${userData.groupId}/players`);
+        const unsubPlayers = onSnapshot(query(playersColRef), (snapshot) => {
+            const allPlayers = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+            setPlayers(allPlayers);
+            setPlayerProfile(allPlayers.find(p => p.createdBy === user.uid) || null);
+            setIsLoading(false);
+        });
+        
         const matchesColRef = collection(db, `artifacts/${appId}/public/data/groups/${groupId}/matches`);
         const mSub = onSnapshot(query(matchesColRef), (s) => setMatches(s.docs.map(d => ({ id: d.id, ...d.data() }))));
         
