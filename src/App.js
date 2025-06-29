@@ -216,9 +216,7 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
         }
     };
 
-    const handleSkillChange = (skill, value) => setSkills(prev => ({ ...prev, [skill]: Number(value) }));
     const handleAdminSkillChange = (skill, value) => setAdminSkills(prev => ({ ...prev, [skill]: Number(value) }));
-    
     return (
         <div className="fixed inset-0 bg-black bg-opacity-80 flex justify-center items-center z-50 p-4">
             <div className="bg-gradient-to-br from-gray-900 to-black rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-full overflow-y-auto text-white border border-yellow-400/30">
@@ -286,8 +284,6 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
 // --- modules/players/PlayerCard.js ---
 const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => {
     const selfOverall = calculateOverall(player.selfOverall);
-    const peerOverall = player.peerOverall ? calculateOverall(player.peerOverall.avgSkills) : 0;
-    const adminOverall = player.adminOverall ? calculateOverall(player.adminOverall) : 0;
     
     const skillAcronyms = {
         finalizacao: "FIN", drible: "DRI", velocidade: "VEL", folego: "FOL", passe: "PAS", desarme: "DES",
