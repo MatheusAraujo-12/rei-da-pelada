@@ -609,6 +609,7 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
         </>
     );
 };
+
 const HallOfFame = ({ players, matches }) => {
     const [filter, setFilter] = useState('all');
 
@@ -951,7 +952,7 @@ const PostMatchScreen = ({ session, players, matches, currentUserId, groupId, on
 };
 
 const SessionReportDetail = ({ session, onBack }) => {
-    if (!session || !session.date) {
+    if (!session || !session.date || !session.finalStats) {
         return (
             <div className="text-center text-gray-400 p-8">
                 Nenhuma sessão selecionada ou dados inválidos.
@@ -1024,9 +1025,9 @@ const SessionHistoryList = ({ sessions, onSelectSession }) => {
                     className="w-full text-left bg-gray-800 p-4 rounded-lg border border-gray-700 hover:border-yellow-500 transition-all"
                 >
                     <p className="font-bold text-xl text-white">
-                        Pelada de {new Date(session.date.seconds * 1000).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                        Pelada de {session.date ? new Date(session.date.seconds * 1000).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }) : 'Data indefinida'}
                     </p>
-                    <p className="text-sm text-gray-400">{Object.keys(session.players).length} participantes</p>
+                    <p className="text-sm text-gray-400">{session.players ? Object.keys(session.players).length : 0} participantes</p>
                 </button>
             ))}
         </div>
@@ -1547,11 +1548,26 @@ function App() {
         });
         
         const matchesColRef = collection(db, `artifacts/${appId}/public/data/groups/${groupId}/matches`);
-        mSub = onSnapshot(query(matchesColRef), (s) => setMatches(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+        mSub = onSnapshot(query(matchesColRef, orderBy('date', 'desc')), (s) => setMatches(s.docs.map(d => ({ id: d.id, ...d.data() }))));
         
         const votingSessionsRef = collection(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions`);
         const q = query(votingSessionsRef, where("status", "==", "voting_open"));
-        sSub = onSnapshot(q, async (snapshot) => { /* ... (código de votação) ... */ });
+        sSub = onSnapshot(q, async (snapshot) => {
+             const now = new Date();
+             const openSessions = snapshot.docs
+                 .map(d => ({id: d.id, ...d.data()}))
+                 .filter(session => session.votingDeadline.toDate() > now);
+
+             const userVotedSessions = [];
+             for (const session of openSessions) {
+                 const ratingDocRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions/${session.id}/ratings/${user.uid}`);
+                 const ratingDocSnap = await getDoc(ratingDocRef);
+                 if (!ratingDocSnap.exists()) {
+                     userVotedSessions.push(session);
+                 }
+             }
+             setSessionsToVote(userVotedSessions);
+        });
 
         const sessionsColRef = collection(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions`);
         const qSessions = query(sessionsColRef, orderBy('date', 'desc'));
@@ -1568,7 +1584,6 @@ function App() {
         };
     }, [user, groupId]);
     
-
     const handleSavePlayer = async (playerData) => {
         if (!groupId || !user) return;
         const { id, ...data } = playerData;
@@ -1599,15 +1614,6 @@ function App() {
         } finally {
             setMatchToDelete(null);
         }
-    };
-
-    const handleMatchEnd = async (matchData) => {
-        if (!groupId) return null;
-        try {
-            const matchDocRef = await addDoc(collection(db, `artifacts/${appId}/public/data/groups/${groupId}/matches`), matchData);
-            return { id: matchDocRef.id, ...matchData };
-        } catch (e) { console.error("Erro ao salvar a partida:", e); }
-        return null;
     };
 
     const handleUpdateMatch = async (matchId, newStats) => {
@@ -1656,22 +1662,12 @@ function App() {
             alert("Falha ao salvar avaliação.");
         }
     };
-    const handleSessionEnd = async (playedPlayers, allMatches) => {
-         if (!groupId) return;
-        const now = new Date();
-        const deadline = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 horas
-        
-        await addDoc(collection(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions`), {
-            createdAt: now,
-            status: 'voting_open',
-            votingDeadline: deadline,
-            players: playedPlayers.map(p => p.id),
-            matches: allMatches.map(m => m.id),
-        });
 
-        setCurrentView('players');
-        alert("Sessão de jogos encerrada! A votação está aberta por 24 horas para todos os jogadores.");
-    };   
+    const handleSessionEnd = () => {
+        setCurrentView('sessions');
+        setViewingSession(null);
+    };
+    
     const openEditModal = (p) => { setEditingPlayer(p); setIsPlayerModalOpen(true); };
     const openAddModal = () => { setEditingPlayer(null); setIsPlayerModalOpen(true); };
     const handleLogout = () => signOut(auth);
@@ -1683,6 +1679,10 @@ function App() {
         if (!groupId) return <GroupGate user={user} onGroupAssociated={(id) => setUserData(prev => ({ ...prev, groupId: id }))} />;
         if (!playerProfile) return <CreatePlayerProfile user={user} onSave={handleSavePlayer} />;
 
+        if (currentView === 'session_rating') {
+            return <PostMatchScreen session={sessionToVoteOn} players={players} matches={matches} currentUserId={user.uid} groupId={groupId} onFinishRating={() => { setCurrentView('players'); setSessionToVoteOn(null); }} />;
+        }
+        
         if (currentView === 'sessions' && viewingSession) {
             return <SessionReportDetail session={viewingSession} onBack={() => setViewingSession(null)} />;
         }
@@ -1711,14 +1711,13 @@ function App() {
                     {currentView === 'sessions' && !viewingSession && (
                         <SessionHistoryList sessions={savedSessions} onSelectSession={setViewingSession} />
                     )}
-                    {currentView === 'history' && isAdmin && <MatchHistory matches={matches} players={players} onEditMatch={setEditingMatch} onDeleteMatch={setMatchToDelete}/>}
+                    
                     {currentView === 'hall_of_fame' && <HallOfFame players={players} matches={matches} />}
                     {currentView === 'group' && <GroupDashboard user={user} groupId={groupId} />}
 
                 </main>
 
                 <PlayerModal isOpen={isPlayerModalOpen} onClose={() => setIsPlayerModalOpen(false)} onSave={handleSavePlayer} player={editingPlayer} isAdmin={isAdmin} />
-                <EditMatchModal isOpen={!!editingMatch} match={editingMatch} players={players} onClose={() => setEditingMatch(null)} onSave={handleUpdateMatch} />
                 <ConfirmationModal isOpen={!!playerToDelete} title="Confirmar Exclusão" message={`Tem certeza que deseja apagar o jogador ${playerToDelete?.name}?`} onConfirm={confirmDeletePlayer} onClose={() => setPlayerToDelete(null)} />
                 <ConfirmationModal isOpen={!!matchToDelete} title="Confirmar Exclusão" message={`Tem certeza que deseja apagar esta partida? Esta ação não pode ser desfeita.`} onConfirm={confirmDeleteMatch} onClose={() => setMatchToDelete(null)} />
                 <PeerReviewModal isOpen={!!peerReviewPlayer} player={peerReviewPlayer} onClose={() => setPeerReviewPlayer(null)} onSave={handleSavePeerReview}/>
