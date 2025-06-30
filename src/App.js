@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { BrowserRouter, useNavigate, useLocation } from 'react-router-dom';
 import { initializeApp } from 'firebase/app';
 import { 
     getAuth, onAuthStateChanged, createUserWithEmailAndPassword,
@@ -1237,7 +1237,6 @@ function App() {
     const { groupId, isAdmin } = userData;
     
     const navigate = useNavigate();
-    const location = useLocation();
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (u) => {
