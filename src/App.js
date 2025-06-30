@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { BrowserRouter, useNavigate } from 'react-router-dom';
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-// ✅ 'where' e 'writeBatch' removidos, pois não são mais usados
 import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, getDoc, setDoc, runTransaction, serverTimestamp, orderBy } from 'firebase/firestore';
 import { 
     LucideUser, LucideUserPlus, LucideX, LucideShield, LucideGoal, LucideHand, 
@@ -10,7 +9,6 @@ import {
     LucideAward, LucideHandshake, LucideShieldCheck, LucideFrown, LucidePlay, 
     LucidePause, LucidePlus, LucideClipboard, LucideLogIn, LucidePlusCircle, 
     LucideHistory, LucideLogOut
-    // ✅ 'LucideStar' removido, pois não é mais usado
 } from 'lucide-react';
 import * as Tone from 'tone';
 
@@ -469,6 +467,61 @@ const StatButton = ({ Icon, count, onClick, colorClass, label }) => (
         </div>
     </button>
 );
+
+const EditMatchModal = ({ isOpen, match, players, onClose, onSave }) => {
+    const [editableStats, setEditableStats] = useState({});
+
+    useEffect(() => {
+        if (match) {
+            setEditableStats(JSON.parse(JSON.stringify(match.playerStats)));
+        }
+    }, [match]);
+
+    if (!isOpen || !match) return null;
+
+    const handleStatChange = (playerId, stat, delta) => {
+        setEditableStats(prev => {
+            const newPlayerStats = { ...prev[playerId] };
+            newPlayerStats[stat] = Math.max(0, (newPlayerStats[stat] || 0) + delta);
+            return { ...prev, [playerId]: newPlayerStats };
+        });
+    };
+
+    const allPlayerIdsInMatch = [...match.teams.teamA.map(p => p.id), ...match.teams.teamB.map(p => p.id)];
+    const playerDetails = allPlayerIdsInMatch.map(id => players.find(p => p.id === id)).filter(Boolean);
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-80 flex justify-center items-center z-50 p-4">
+            <div className="bg-gradient-to-br from-gray-900 to-black rounded-2xl shadow-2xl p-6 w-full max-w-2xl max-h-full overflow-y-auto text-white border border-yellow-400/30">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold text-yellow-400">Editar Partida</h2>
+                    <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-700 transition-colors"><LucideX className="w-6 h-6" /></button>
+                </div>
+                <div className="space-y-4">
+                    {playerDetails.map(player => (
+                        <div key={player.id} className="bg-gray-800 p-4 rounded-lg">
+                            <h3 className="font-bold text-lg mb-2">{player.name}</h3>
+                            <div className="flex items-center gap-4 flex-wrap">
+                                {editableStats[player.id] && Object.keys(editableStats[player.id]).map(stat => (
+                                    <div key={stat} className="flex items-center gap-2">
+                                        <span className="font-semibold capitalize text-sm">{stat}:</span>
+                                        <button onClick={() => handleStatChange(player.id, stat, -1)} className="bg-red-600 rounded-full w-6 h-6">-</button>
+                                        <span className="font-bold text-lg w-6 text-center">{editableStats[player.id][stat]}</span>
+                                        <button onClick={() => handleStatChange(player.id, stat, 1)} className="bg-green-600 rounded-full w-6 h-6">+</button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                <div className="mt-8 flex justify-end gap-4">
+                    <button onClick={onClose} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-6 rounded-lg">Cancelar</button>
+                    <button onClick={() => onSave(match.id, editableStats)} className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-2 px-6 rounded-lg">Salvar Alterações</button>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
     const [timeLeft, setTimeLeft] = useState(durationInMinutes * 60);
@@ -1309,6 +1362,7 @@ function App() {
     const [matchToDelete, setMatchToDelete] = useState(null);
     const [savedSessions, setSavedSessions] = useState([]);
     const [viewingSession, setViewingSession] = useState(null);
+    const [editingMatch, setEditingMatch] = useState(null);
     
     const navigate = useNavigate();
     const { groupId, isAdmin } = userData;
@@ -1409,6 +1463,14 @@ function App() {
             setMatchToDelete(null);
         }
     };
+
+    const handleUpdateMatch = async (matchId, newStats) => {
+        if (!groupId) return;
+        try {
+            await updateDoc(doc(db, `artifacts/${appId}/public/data/groups/${groupId}/matches`, matchId), { playerStats: newStats });
+            setEditingMatch(null);
+        } catch (e) { console.error("Erro ao atualizar a partida: ", e); }
+    };
     
     const handleSavePeerReview = async (playerToReview, newSkills) => {
         if (!groupId || !user) return;
@@ -1477,6 +1539,7 @@ function App() {
                     <button onClick={() => setCurrentView('players')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'players' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideUsers className="inline-block mr-1 sm:mr-2" /> Jogadores</button>
                     {isAdmin && <button onClick={() => setCurrentView('match')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'match' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideSwords className="inline-block mr-1 sm:mr-2" /> Partida</button>}
                     <button onClick={() => { setCurrentView('sessions'); setViewingSession(null); }} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'sessions' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideHistory className="inline-block mr-1 sm:mr-2" /> Sessões</button>
+                    {isAdmin && <button onClick={() => setCurrentView('history')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'history' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideHistory className="inline-block mr-1 sm:mr-2" /> Histórico</button>}
                     <button onClick={() => setCurrentView('hall_of_fame')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'hall_of_fame' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideTrophy className="inline-block mr-1 sm:mr-2" /> Hall da Fama</button>
                     <button onClick={() => setCurrentView('group')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'group' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideUsers className="inline-block mr-1 sm:mr-2" /> Meu Grupo</button>
                     <button onClick={handleLogout} className="py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg text-red-500 hover:text-red-400 transition-colors duration-200"><LucideLogOut className="inline-block mr-1 sm:mr-2" /> Sair</button>
@@ -1495,6 +1558,23 @@ function App() {
                     {currentView === 'sessions' && !viewingSession && (
                         <SessionHistoryList sessions={savedSessions} onSelectSession={setViewingSession} />
                     )}
+
+                    {currentView === 'history' && isAdmin && (
+                        <div className="space-y-4">
+                            {matches.map(match => (
+                                <div key={match.id} className="bg-gray-800 p-4 rounded-lg flex justify-between items-center">
+                                    <div>
+                                        <p className="font-bold">{new Date(match.date).toLocaleString('pt-BR')}</p>
+                                        <p>{match.teams.teamA.map(p => p.name).join(', ')} {match.score.teamA} vs {match.score.teamB} {match.teams.teamB.map(p => p.name).join(', ')}</p>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => setEditingMatch(match)} className="p-2 bg-blue-600 rounded-lg"><LucideEdit /></button>
+                                        <button onClick={() => setMatchToDelete(match)} className="p-2 bg-red-600 rounded-lg"><LucideTrash2 /></button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                     
                     {currentView === 'hall_of_fame' && <HallOfFame players={players} matches={matches} />}
                     {currentView === 'group' && <GroupDashboard user={user} groupId={groupId} />}
@@ -1505,6 +1585,7 @@ function App() {
                 <ConfirmationModal isOpen={!!playerToDelete} title="Confirmar Exclusão" message={`Tem certeza que deseja apagar o jogador ${playerToDelete?.name}?`} onConfirm={confirmDeletePlayer} onClose={() => setPlayerToDelete(null)} />
                 <ConfirmationModal isOpen={!!matchToDelete} title="Confirmar Exclusão" message={`Tem certeza que deseja apagar esta partida? Esta ação não pode ser desfeita.`} onConfirm={confirmDeleteMatch} onClose={() => setMatchToDelete(null)} />
                 <PeerReviewModal isOpen={!!peerReviewPlayer} player={peerReviewPlayer} onClose={() => setPeerReviewPlayer(null)} onSave={handleSavePeerReview}/>
+                <EditMatchModal isOpen={!!editingMatch} match={editingMatch} players={players} onClose={() => setEditingMatch(null)} onSave={handleUpdateMatch} />
             </>
         );
     };
