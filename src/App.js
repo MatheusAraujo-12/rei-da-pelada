@@ -622,8 +622,7 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
     const [allTeams, setAllTeams] = useState([]);
     const [matchHistory, setMatchHistory] = useState([]);
     const [sessionMatches, setSessionMatches] = useState([]);
-    // ✅ O estado 'playersPerTeam' foi removido, pois não é mais uma regra rígida.
-    const [numberOfTeams, setNumberOfTeams] = useState(2); // Inicia com 2 times como padrão
+    const [numberOfTeams, setNumberOfTeams] = useState(2);
     const [drawType, setDrawType] = useState('self');
     const [isEditModeActive, setIsEditModeActive] = useState(false);
     const [streakLimit, setStreakLimit] = useState(2);
@@ -651,10 +650,9 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
             return { ...p, overall };
         });
 
-        // O número de jogadores por time agora é calculado dinamicamente
-        const playersPerTeam = Math.floor(availablePlayers.length / numberOfTeams);
+        const playersPerTeamDynamic = Math.floor(availablePlayers.length / numberOfTeams);
 
-        if (availablePlayers.length < 2 || playersPerTeam === 0) {
+        if (availablePlayers.length < 2 || playersPerTeamDynamic === 0) {
             alert("Jogadores insuficientes para formar pelo menos 2 times.");
             return;
         }
@@ -666,7 +664,7 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
         
         availablePlayers.forEach(player => {
             teams.sort((a, b) => a.players.length - b.players.length || a.totalOverall - b.totalOverall);
-            const targetTeam = teams.find(t => t.players.length < playersPerTeam);
+            const targetTeam = teams.find(t => t.players.length < playersPerTeamDynamic);
             if (targetTeam) {
                 targetTeam.players.push(player);
                 targetTeam.totalOverall += player.overall;
@@ -686,7 +684,6 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
         setStep('pre_game');
     };
 
-    // ✅ 2. LÓGICA DE FIM DE JOGO ATUALIZADA PARA INCLUIR AS NOVAS REGRAS
     const handleSingleMatchEnd = async (matchResult) => {
         setIsEditModeActive(false);
         const savedMatch = await onMatchEnd(matchResult);
@@ -696,12 +693,11 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
         const { teamA, teamB } = matchResult.teams;
         const remainingTeams = allTeams.slice(2);
         
-        // REGRA DE EMPATE
         if (matchResult.score.teamA === matchResult.score.teamB && tieBreakerRule === 'bothExit') {
             const nextTeams = remainingTeams.splice(0, 2);
             const newQueue = [...remainingTeams, teamA, teamB];
             setAllTeams([...nextTeams, ...newQueue]);
-            setWinnerStreak({ teamId: null, count: 0 }); // Reseta a sequência
+            setWinnerStreak({ teamId: null, count: 0 });
             setStep('post_game');
             return;
         }
@@ -714,24 +710,20 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
 
         let currentStreak = (winnerId === winnerStreak.teamId) ? winnerStreak.count + 1 : 1;
         
-        // REGRA DE LIMITE DE VITÓRIAS
         if (streakLimit > 0 && currentStreak >= streakLimit) {
             const nextTeams = remainingTeams.splice(0, 2);
             const newQueue = [...remainingTeams, winnerTeam, loserTeam];
             setAllTeams([...nextTeams, ...newQueue]);
-            setWinnerStreak({ teamId: null, count: 0 }); // Reseta a sequência
+            setWinnerStreak({ teamId: null, count: 0 });
         } else {
-            // LÓGICA PADRÃO
             const nextChallenger = remainingTeams.length > 0 ? remainingTeams.shift() : null;
             const newQueue = [...remainingTeams, loserTeam];
             setAllTeams([winnerTeam, ...(nextChallenger ? [nextChallenger] : []), ...newQueue]);
             setWinnerStreak({ teamId: winnerId, count: currentStreak });
         }
-
         setStep('post_game');
     };
-
-    // ✅ 3. LÓGICA DE MOVER JOGADOR (agora mais robusta)
+    
     const handleMovePlayer = (playerToMove, fromTeamIndex, toTeamIndex) => {
         setAllTeams(currentTeams => {
             const newTeams = JSON.parse(JSON.stringify(currentTeams.map(t => t || [])));
@@ -742,9 +734,6 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
 
             const playerIndex = fromTeam.findIndex(p => p.id === playerToMove.id);
             if (playerIndex === -1) return currentTeams;
-
-            // A verificação de time cheio foi REMOVIDA
-            // if (toTeam && toTeam.length >= playersPerTeam) { ... }
 
             const [player] = fromTeam.splice(playerIndex, 1);
 
@@ -765,27 +754,22 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
             
             if (!fromTeam) return currentTeams;
 
-            // Filtra o jogador para fora do time
             const updatedTeam = fromTeam.filter(p => p.id !== playerToRemove.id);
             newTeams[fromTeamIndex] = updatedTeam;
 
-            // Retorna a lista de times, removendo qualquer time que tenha ficado vazio
             return newTeams.filter(team => team.length > 0);
         });
     };
+
     const handleSetPlayingTeam = (teamRole, indexToSet) => {
         setAllTeams(currentTeams => {
             const newTeams = [...currentTeams];
             const targetIndex = teamRole === 'A' ? 0 : 1;
-            
-            // Troca o time escolhido com o time na posição de jogo (0 para A, 1 para B)
             [newTeams[targetIndex], newTeams[indexToSet]] = [newTeams[indexToSet], newTeams[targetIndex]];
-            
             return newTeams;
         });
     };
 
-    // ✅ CORREÇÃO APLICADA AQUI
     const handleReorderQueue = (indexInWaitingQueue, direction) => {
         setAllTeams(currentTeams => {
             const waitingTeams = currentTeams.slice(2);
@@ -804,9 +788,6 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
         onSessionEnd(allTeams.flat(), sessionMatches);
     };
 
-    // --- Renderização ---
-
-    // ✅ 4. CARD DO TIME ATUALIZADO COM DROPDOWN PARA MOVER JOGADOR
     const renderTeamCard = (team, name, teamIndex) => (
         <div className="bg-gray-800 p-4 rounded-lg w-full min-w-[280px]">
             <h3 className="text-yellow-400 font-bold text-xl mb-3">{name}</h3>
@@ -843,17 +824,15 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
             )}
         </div>
     );
-
+    
     if (step === 'in_game') {
         return <LiveMatchTracker teams={{ teamA: allTeams[0], teamB: allTeams[1] }} onEndMatch={handleSingleMatchEnd} durationInMinutes={10} />;
     }
 
-    // Tela de pré e pós jogo
     if (step === 'pre_game' || step === 'post_game') {
         const teamA = allTeams[0];
         const teamB = allTeams[1];
         const waitingTeams = allTeams.slice(2);
-
         return (
             <div className="text-center bg-gray-900/50 rounded-2xl p-4 sm:p-8">
                 <h2 className="text-2xl sm:text-3xl font-bold text-yellow-400 mb-2">
@@ -861,7 +840,6 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
                 </h2>
                 <p className="text-gray-400 mb-6">{isEditModeActive ? 'Organize os jogadores e os próximos times. Clique em Salvar ao terminar.' : 'Visualize os times ou inicie a próxima partida.'}</p>
                 
-                {/* --- BOTÕES DE CONTROLE PRINCIPAL --- */}
                 <div className="flex justify-center gap-4 mb-6">
                     {!isEditModeActive ? (
                         <button onClick={() => setIsEditModeActive(true)} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg flex items-center gap-2">
@@ -874,14 +852,12 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
                     )}
                 </div>
 
-                {/* --- EXIBIÇÃO DOS TIMES --- */}
                 <div className="flex flex-col md:flex-row gap-4 mb-6 justify-center items-start">
                     {teamA && renderTeamCard(teamA, "Time A (Em quadra)", 0)}
                     <div className="flex items-center justify-center h-full text-2xl font-bold text-gray-500 p-4">VS</div>
                     {teamB ? renderTeamCard(teamB, "Time B (Desafiante)", 1) : <div className="bg-gray-800 p-4 rounded-lg w-full min-w-[280px] flex items-center justify-center"><h3 className="text-yellow-400 font-bold text-xl">Sem desafiantes</h3></div>}
                 </div>
                 
-                {/* --- FILA DE ESPERA --- */}
                 {waitingTeams.length > 0 && (
                     <div className="mb-6">
                         <h3 className="text-xl font-bold text-gray-400 mb-4">Fila de Espera</h3>
@@ -915,7 +891,6 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
                     </div>
                 )}
 
-                {/* --- BOTÕES DE AÇÃO GERAL --- */}
                 {!isEditModeActive && (
                     <div className="flex flex-col sm:flex-row justify-center gap-4 mt-8 border-t border-gray-700 pt-6">
                         <button onClick={() => setStep('in_game')} disabled={!teamB} className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-500 disabled:cursor-not-allowed">
@@ -930,7 +905,7 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
         );
     }
 
-    // Tela de configuração
+    // ✅ TELA DE CONFIGURAÇÃO FINAL E CORRIGIDA
     return (
         <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-6 border border-gray-700">
             <h2 className="text-2xl font-bold text-yellow-400 mb-4">Configurar Noite de Futebol</h2>
@@ -967,31 +942,28 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
                  <legend className="px-2 text-yellow-400 font-semibold">Configuração dos Times</legend>
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                        <label className="block font-semibold mb-2 text-white">Jogadores por time:</label>
-                        <input type="number" min="2" value={playersPerTeam} onChange={e => setPlayersPerTeam(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white" />
+                        <label className="block font-semibold mb-2 text-white">Nº de times para sortear:</label>
+                        <input type="number" min="2" value={numberOfTeams} onChange={e => setNumberOfTeams(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white" />
                     </div>
                     <div>
-                        <label className="block font-semibold mb-2 text-white">Nº de times a sortear:</label>
-                        <input type="number" min="2" value={numberOfTeams} onChange={e => setNumberOfTeams(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white" />
+                        <label className="block font-semibold mb-2 text-white">Sorteio baseado em:</label>
+                        <select value={drawType} onChange={(e) => setDrawType(e.target.value)} className="w-full bg-gray-800 p-2 rounded text-white">
+                           <option value="self">Overall Próprio</option>
+                           <option value="peer">Overall da Galera</option>
+                           <option value="admin">Overall do Admin</option>
+                        </select>
                     </div>
                 </div>
             </fieldset>
 
-            <div className="my-6">
-                 <label className="block font-semibold mb-2 text-white">Sorteio baseado em:</label>
-                 <div className="flex gap-4 flex-wrap">
-                     <button onClick={() => setDrawType('self')} className={`py-2 px-4 rounded-lg ${drawType === 'self' ? 'bg-yellow-500 text-black' : 'bg-gray-700 text-white'}`}>Overall Próprio</button>
-                     <button onClick={() => setDrawType('peer')} className={`py-2 px-4 rounded-lg ${drawType === 'peer' ? 'bg-cyan-500 text-black' : 'bg-gray-700 text-white'}`}>Overall da Galera</button>
-                     <button onClick={() => setDrawType('admin')} className={`py-2 px-4 rounded-lg ${drawType === 'admin' ? 'bg-green-500 text-black' : 'bg-gray-700 text-white'}`}>Overall do Admin</button>
-                 </div>
-            </div>
             <h3 className="text-xl font-bold text-yellow-400 mb-4">Selecione os Jogadores Presentes</h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
                 {players.map(p => (<button key={p.id} onClick={() => handlePlayerToggle(p.id)} className={`p-3 rounded-lg text-center transition ${selectedPlayerIds.has(p.id) ? 'bg-yellow-500 text-black' : 'bg-gray-800 text-white hover:bg-gray-700'}`}>{p.name}</button>))}
             </div>
             <div className="text-center">
-                <button onClick={handleStartSession} disabled={selectedPlayerIds.size < playersPerTeam * 2} className="bg-yellow-500 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-500 disabled:cursor-not-allowed">Sortear Times e Iniciar</button>
-                {selectedPlayerIds.size < playersPerTeam * 2 && <p className="text-red-500 text-sm mt-2">Selecione pelo menos {playersPerTeam * 2} jogadores.</p>}
+                {/* A lógica de validação do botão foi ajustada para numberOfTeams */}
+                <button onClick={handleStartSession} disabled={selectedPlayerIds.size < numberOfTeams * 2} className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-500 disabled:cursor-not-allowed">Sortear Times e Iniciar</button>
+                {selectedPlayerIds.size < numberOfTeams * 2 && <p className="text-red-500 text-sm mt-2">Selecione pelo menos {numberOfTeams * 2} jogadores para formar {numberOfTeams} times.</p>}
             </div>
         </div>
     );
