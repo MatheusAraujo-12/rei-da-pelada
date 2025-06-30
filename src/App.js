@@ -622,18 +622,15 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
     const [allTeams, setAllTeams] = useState([]);
     const [matchHistory, setMatchHistory] = useState([]);
     const [sessionMatches, setSessionMatches] = useState([]);
-    const [numberOfTeams, setNumberOfTeams] = useState(3);
-    const [playersPerTeam, setPlayersPerTeam] = useState(5);
+    // ✅ O estado 'playersPerTeam' foi removido, pois não é mais uma regra rígida.
+    const [numberOfTeams, setNumberOfTeams] = useState(2); // Inicia com 2 times como padrão
     const [drawType, setDrawType] = useState('self');
     const [isEditModeActive, setIsEditModeActive] = useState(false);
-    
-    // ✅ 1. NOVOS ESTADOS PARA AS REGRAS AUTOMÁTICAS
-    const [streakLimit, setStreakLimit] = useState(2); // Limite de 2 vitórias seguidas como padrão
-    const [tieBreakerRule, setTieBreakerRule] = useState('winnerStays'); // Opções: 'winnerStays', 'bothExit'
-    const [winnerStreak, setWinnerStreak] = useState({ teamId: null, count: 0 }); // Rastreia a sequência de vitórias
+    const [streakLimit, setStreakLimit] = useState(2);
+    const [tieBreakerRule, setTieBreakerRule] = useState('winnerStays');
+    const [winnerStreak, setWinnerStreak] = useState({ teamId: null, count: 0 });
 
-    // --- Lógicas de Configuração e Sorteio ---
-    const handlePlayerToggle =  (playerId) => {
+    const handlePlayerToggle = (playerId) => {
         setSelectedPlayerIds(prev => {
             const newSet = new Set(prev);
             if (newSet.has(playerId)) newSet.delete(playerId);
@@ -643,8 +640,7 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
     };
 
     const handleStartSession = () => {
-        setIsEditModeActive(false); 
-        // Reseta a contagem de vitórias ao sortear novos times
+        setIsEditModeActive(false);
         setWinnerStreak({ teamId: null, count: 0 });
 
         let availablePlayers = players.filter(p => selectedPlayerIds.has(p.id)).map(p => {
@@ -655,8 +651,11 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
             return { ...p, overall };
         });
 
-        if (availablePlayers.length < playersPerTeam * 2) {
-            alert(`São necessários pelo menos ${playersPerTeam * 2} jogadores para formar 2 times.`);
+        // O número de jogadores por time agora é calculado dinamicamente
+        const playersPerTeam = Math.floor(availablePlayers.length / numberOfTeams);
+
+        if (availablePlayers.length < 2 || playersPerTeam === 0) {
+            alert("Jogadores insuficientes para formar pelo menos 2 times.");
             return;
         }
 
@@ -667,14 +666,14 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
         
         availablePlayers.forEach(player => {
             teams.sort((a, b) => a.players.length - b.players.length || a.totalOverall - b.totalOverall);
-            const targetTeam = teams[0];
-            if (targetTeam.players.length < playersPerTeam) {
+            const targetTeam = teams.find(t => t.players.length < playersPerTeam);
+            if (targetTeam) {
                 targetTeam.players.push(player);
                 targetTeam.totalOverall += player.overall;
             }
         });
 
-        const finalTeams = teams.filter(t => t.players.length === playersPerTeam);
+        const finalTeams = teams.filter(t => t.players.length > 0);
 
         if (finalTeams.length < 2) {
             alert("Não foi possível formar pelo menos 2 times completos.");
@@ -686,7 +685,6 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
         setSessionMatches([]);
         setStep('pre_game');
     };
-
 
     // ✅ 2. LÓGICA DE FIM DE JOGO ATUALIZADA PARA INCLUIR AS NOVAS REGRAS
     const handleSingleMatchEnd = async (matchResult) => {
@@ -736,35 +734,45 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
     // ✅ 3. LÓGICA DE MOVER JOGADOR (agora mais robusta)
     const handleMovePlayer = (playerToMove, fromTeamIndex, toTeamIndex) => {
         setAllTeams(currentTeams => {
-            const newTeams = JSON.parse(JSON.stringify(currentTeams.map(t => t || []))); // Garante que não haja times nulos
+            const newTeams = JSON.parse(JSON.stringify(currentTeams.map(t => t || [])));
             const fromTeam = newTeams[fromTeamIndex];
             const toTeam = newTeams[toTeamIndex];
             
-            if (!fromTeam) return currentTeams; // Segurança extra
+            if (!fromTeam) return currentTeams;
 
             const playerIndex = fromTeam.findIndex(p => p.id === playerToMove.id);
-            
             if (playerIndex === -1) return currentTeams;
 
-            if (toTeam && toTeam.length >= playersPerTeam) {
-                alert(`O time de destino já está cheio (${playersPerTeam} jogadores).`);
-                return currentTeams;
-            }
+            // A verificação de time cheio foi REMOVIDA
+            // if (toTeam && toTeam.length >= playersPerTeam) { ... }
 
             const [player] = fromTeam.splice(playerIndex, 1);
 
             if (toTeam) {
                 toTeam.push(player);
             } else {
-                // Se o time de destino não existe (caso raro), cria um novo time
                 newTeams[toTeamIndex] = [player];
             }
             
-            // Remove times que ficaram vazios
             return newTeams.filter(team => team.length > 0);
         });
     };
 
+    const handleRemovePlayer = (playerToRemove, fromTeamIndex) => {
+        setAllTeams(currentTeams => {
+            let newTeams = JSON.parse(JSON.stringify(currentTeams));
+            const fromTeam = newTeams[fromTeamIndex];
+            
+            if (!fromTeam) return currentTeams;
+
+            // Filtra o jogador para fora do time
+            const updatedTeam = fromTeam.filter(p => p.id !== playerToRemove.id);
+            newTeams[fromTeamIndex] = updatedTeam;
+
+            // Retorna a lista de times, removendo qualquer time que tenha ficado vazio
+            return newTeams.filter(team => team.length > 0);
+        });
+    };
     const handleSetPlayingTeam = (teamRole, indexToSet) => {
         setAllTeams(currentTeams => {
             const newTeams = [...currentTeams];
@@ -807,17 +815,22 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
                     <li key={p.id} className="bg-gray-900 p-2 rounded flex justify-between items-center text-white">
                         <span>{p.name}</span>
                         {isEditModeActive && (
-                            <select 
-                                value={teamIndex}
-                                onChange={(e) => handleMovePlayer(p, teamIndex, parseInt(e.target.value))}
-                                className="bg-gray-700 text-white text-xs rounded p-1 border-0"
-                            >
-                                {allTeams.map((_, i) => (
-                                    <option key={i} value={i}>
-                                        {i === 0 ? 'Time A' : i === 1 ? 'Time B' : `Fila ${i - 1}`}
-                                    </option>
-                                ))}
-                            </select>
+                            <div className="flex items-center gap-2">
+                                <select 
+                                    value={teamIndex}
+                                    onChange={(e) => handleMovePlayer(p, teamIndex, parseInt(e.target.value))}
+                                    className="bg-gray-700 text-white text-xs rounded p-1 border-0"
+                                >
+                                    {allTeams.map((_, i) => (
+                                        <option key={i} value={i}>
+                                            {i === 0 ? 'Time A' : i === 1 ? 'Time B' : `Fila ${i - 1}`}
+                                        </option>
+                                    ))}
+                                </select>
+                                <button onClick={() => handleRemovePlayer(p, teamIndex)} className="text-red-500 hover:text-red-400 p-1">
+                                    <LucideX className="w-4 h-4" />
+                                </button>
+                            </div>
                         )}
                     </li>
                 ))}
