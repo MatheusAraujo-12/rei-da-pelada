@@ -1,11 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { BrowserRouter, useNavigate } from 'react-router-dom';
 import { initializeApp } from 'firebase/app';
-import { 
-    getAuth, onAuthStateChanged, createUserWithEmailAndPassword,
-    signInWithEmailAndPassword, signOut
-} from 'firebase/auth';
-import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, getDoc, setDoc, runTransaction, where, writeBatch } from 'firebase/firestore';
+import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, getDoc, setDoc, runTransaction, where, writeBatch, serverTimestamp, orderBy } from 'firebase/firestore';
 import { 
     LucideUser, LucideUserPlus, LucideX, LucideShield, LucideGoal, LucideHand, 
     LucideEdit, LucideTrash2, LucideUsers, LucideSwords, LucideUndo, LucideTrophy, 
@@ -40,7 +37,7 @@ const calculateOverall = (skills) => {
 
 // --- Componentes ---
 
-const AuthScreen = ({ onLoginSuccess }) => {
+const AuthScreen = () => {
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -146,7 +143,7 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
             setPreferredSide('Qualquer');
             if(isAdmin) setAdminSkills(initialLineSkills);
         }
-    }, [player, isOpen, isAdmin, initialLineSkills]);
+    }, [player, isOpen, isAdmin, initialLineSkills, initialGkSkills]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -177,7 +174,7 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
             });
             onClose();
         } else {
-            console.warn("Por favor, preencha todos os campos.");
+            alert("Por favor, preencha todos os campos.");
         }
     };
 
@@ -353,7 +350,6 @@ const PeerReviewModal = ({ isOpen, player, onClose, onSave }) => {
         </div>
     );
 };
-
 
 const CreatePlayerProfile = ({ onSave, user }) => {
     const [name, setName] = useState('');
@@ -613,484 +609,6 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
         </>
     );
 };
-
-// CÓDIGO COMPLETO E ATUALIZADO PARA O COMPONENTE MatchFlow
-const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
-    // --- Estados ---
-    const [step, setStep] = useState('config');
-    const [selectedPlayerIds, setSelectedPlayerIds] = useState(new Set());
-    const [allTeams, setAllTeams] = useState([]);
-    const [matchHistory, setMatchHistory] = useState([]);
-    const [sessionPlayerStats, setSessionPlayerStats] = useState({});
-    const [numberOfTeams, setNumberOfTeams] = useState(2);
-    const [drawType, setDrawType] = useState('self');
-    const [isEditModeActive, setIsEditModeActive] = useState(false);
-    const [streakLimit, setStreakLimit] = useState(2);
-    const [tieBreakerRule, setTieBreakerRule] = useState('winnerStays');
-    const [winnerStreak, setWinnerStreak] = useState({ teamId: null, count: 0 });
-
-    // --- Lógicas de Configuração e Jogo ---
-
-    const handlePlayerToggle = (playerId) => {
-        setSelectedPlayerIds(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(playerId)) newSet.delete(playerId);
-            else newSet.add(playerId);
-            return newSet;
-        });
-    };
-
-    const handleStartSession = () => {
-        setIsEditModeActive(false);
-        setWinnerStreak({ teamId: null, count: 0 });
-
-        const availablePlayers = players.filter(p => selectedPlayerIds.has(p.id)).map(p => {
-            let overall;
-            if (drawType === 'admin' && p.adminOverall) overall = calculateOverall(p.adminOverall);
-            else if (drawType === 'peer' && p.peerOverall) overall = calculateOverall(p.peerOverall.avgSkills);
-            else overall = calculateOverall(p.selfOverall);
-            return { ...p, overall };
-        });
-
-        const playersPerTeamDynamic = Math.floor(availablePlayers.length / numberOfTeams);
-
-        if (availablePlayers.length < 2 || playersPerTeamDynamic === 0) {
-            alert("Jogadores insuficientes para formar pelo menos 2 times.");
-            return;
-        }
-
-        const posOrder = { 'Goleiro': 1, 'Defensor': 2, 'Volante': 3, 'Meio-Campo': 4, 'Ponta': 5, 'Atacante': 6 };
-        availablePlayers.sort((a, b) => (posOrder[a.detailedPosition] || 99) - (posOrder[b.detailedPosition] || 99) || b.overall - a.overall);
-
-        let teams = Array.from({ length: numberOfTeams }, () => ({ players: [] }));
-
-        availablePlayers.forEach(player => {
-            const targetTeam = teams.find(t => t.players.length < playersPerTeamDynamic) || teams.sort((a, b) => a.players.length - b.players.length)[0];
-            if (targetTeam) {
-                targetTeam.players.push(player);
-            }
-        });
-
-        const finalTeams = teams.filter(t => t.players.length > 0);
-
-        if (finalTeams.length < 2) {
-            alert("Não foi possível formar pelo menos 2 times completos.");
-            return;
-        }
-
-        const initialStats = {};
-        availablePlayers.forEach(p => {
-            initialStats[p.id] = { name: p.name, wins: 0, draws: 0, losses: 0, goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 };
-        });
-        setSessionPlayerStats(initialStats);
-
-        setAllTeams(finalTeams.map(t => t.players));
-        setMatchHistory([]);
-        setStep('pre_game');
-    };
-
-    const handleSingleMatchEnd = async (matchResult) => {
-        setIsEditModeActive(false);
-        setMatchHistory(prev => [...prev, matchResult]);
-
-        setSessionPlayerStats(prevStats => {
-            const newStats = JSON.parse(JSON.stringify(prevStats));
-            for (const playerId in matchResult.playerStats) {
-                if (newStats[playerId]) {
-                    for (const stat in matchResult.playerStats[playerId]) {
-                        newStats[playerId][stat] = (newStats[playerId][stat] || 0) + matchResult.playerStats[playerId][stat];
-                    }
-                }
-            }
-            return newStats;
-        });
-        
-        const { teamA, teamB } = matchResult.teams;
-        const remainingTeams = allTeams.slice(2);
-        
-        const updatePlayerRecords = (team, result) => {
-            setSessionPlayerStats(prevStats => {
-                const newStats = JSON.parse(JSON.stringify(prevStats));
-                team.forEach(player => {
-                    if (newStats[player.id]) {
-                        newStats[player.id][result]++;
-                    }
-                });
-                return newStats;
-            });
-        };
-
-        if (matchResult.score.teamA === matchResult.score.teamB) {
-            updatePlayerRecords(teamA, 'draws');
-            updatePlayerRecords(teamB, 'draws');
-            if (tieBreakerRule === 'bothExit') {
-                const nextTeams = remainingTeams.splice(0, 2);
-                const newQueue = [...remainingTeams, teamA, teamB];
-                setAllTeams([...nextTeams, ...newQueue].filter(Boolean));
-                setWinnerStreak({ teamId: null, count: 0 });
-                setStep('post_game');
-                return;
-            }
-        }
-        
-        const winnerTeam = matchResult.score.teamA >= matchResult.score.teamB ? teamA : teamB;
-        const loserTeam = winnerTeam === teamA ? teamB : teamA;
-        updatePlayerRecords(winnerTeam, 'wins');
-        updatePlayerRecords(loserTeam, 'losses');
-
-        const getTeamId = (team) => team.map(p => p.id).sort().join('-');
-        const winnerId = getTeamId(winnerTeam);
-        let currentStreak = (winnerId === winnerStreak.teamId) ? winnerStreak.count + 1 : 1;
-        
-        if (streakLimit > 0 && currentStreak >= streakLimit) {
-            const nextTeams = remainingTeams.splice(0, 2);
-            const newQueue = [...remainingTeams, winnerTeam, loserTeam];
-            setAllTeams([...nextTeams, ...newQueue].filter(Boolean));
-            setWinnerStreak({ teamId: null, count: 0 });
-        } else {
-            const nextChallenger = remainingTeams.length > 0 ? remainingTeams.shift() : null;
-            const newQueue = [...remainingTeams, loserTeam];
-            setAllTeams([winnerTeam, ...(nextChallenger ? [nextChallenger] : []), ...newQueue].filter(Boolean));
-            setWinnerStreak({ teamId: winnerId, count: currentStreak });
-        }
-        setStep('post_game');
-    };
-
-    const handleMovePlayer = (playerToMove, fromTeamIndex, toTeamIndex) => {
-        setAllTeams(currentTeams => {
-            const newTeams = JSON.parse(JSON.stringify(currentTeams.map(t => t || [])));
-            const fromTeam = newTeams[fromTeamIndex];
-            const toTeam = newTeams[toTeamIndex];
-            
-            if (!fromTeam) return currentTeams;
-
-            const playerIndex = fromTeam.findIndex(p => p.id === playerToMove.id);
-            if (playerIndex === -1) return currentTeams;
-            
-            const [player] = fromTeam.splice(playerIndex, 1);
-
-            if (toTeam) {
-                toTeam.push(player);
-            } else {
-                newTeams[toTeamIndex] = [player];
-            }
-            
-            return newTeams.filter(team => team.length > 0);
-        });
-    };
-
-    const handleRemovePlayer = (playerToRemove, fromTeamIndex) => {
-        setAllTeams(currentTeams => {
-            let newTeams = JSON.parse(JSON.stringify(currentTeams));
-            const fromTeam = newTeams[fromTeamIndex];
-            
-            if (!fromTeam) return currentTeams;
-
-            const updatedTeam = fromTeam.filter(p => p.id !== playerToRemove.id);
-            newTeams[fromTeamIndex] = updatedTeam;
-
-            return newTeams.filter(team => team.length > 0);
-        });
-    };
-
-    const handleSetPlayingTeam = (teamRole, indexToSet) => {
-        setAllTeams(currentTeams => {
-            const newTeams = [...currentTeams];
-            const targetIndex = teamRole === 'A' ? 0 : 1;
-            [newTeams[targetIndex], newTeams[indexToSet]] = [newTeams[indexToSet], newTeams[targetIndex]];
-            return newTeams;
-        });
-    };
-
-    const handleReorderQueue = (indexInWaitingQueue, direction) => {
-        setAllTeams(currentTeams => {
-            const waitingTeams = currentTeams.slice(2);
-            const actualIndex = indexInWaitingQueue;
-
-            if (direction === 'up' && actualIndex > 0) {
-                [waitingTeams[actualIndex], waitingTeams[actualIndex - 1]] = [waitingTeams[actualIndex - 1], waitingTeams[actualIndex]];
-            } else if (direction === 'down' && actualIndex < waitingTeams.length - 1) {
-                [waitingTeams[actualIndex], waitingTeams[actualIndex + 1]] = [waitingTeams[actualIndex + 1], waitingTeams[actualIndex]];
-            }
-            return [currentTeams[0], currentTeams[1], ...waitingTeams];
-        });
-    };
-
-    const handleForceEndSession = () => {
-        // onSessionEnd(allTeams.flat(), matchHistory);
-        setStep('session_report');
-    };
-
-    // --- Funções de Renderização ---
-
-    const renderTeamCard = (team, teamIndex) => {
-        const teamLetter = String.fromCharCode(65 + teamIndex);
-        let teamLabel = `Time ${teamLetter}`;
-        if (step !== 'pre_game') {
-             if(teamIndex === 0) teamLabel = `Time ${teamLetter} (Em quadra)`;
-             if(teamIndex === 1) teamLabel = `Time ${teamLetter} (Desafiante)`;
-        }
-
-        return (
-            <div className="bg-gray-800 p-4 rounded-lg w-full min-w-[280px]">
-                <h3 className="text-yellow-400 font-bold text-xl mb-3">{teamLabel}</h3>
-                <ul className="space-y-2">
-                    {team.map(p => (
-                        <li key={p.id} className="bg-gray-900 p-2 rounded flex justify-between items-center text-white">
-                            <span>{p.name}</span>
-                            {isEditModeActive && (
-                                <div className="flex items-center gap-2">
-                                    <select 
-                                        value={teamIndex}
-                                        onChange={(e) => handleMovePlayer(p, teamIndex, parseInt(e.target.value))}
-                                        className="bg-gray-700 text-white text-xs rounded p-1 border-0"
-                                    >
-                                        {allTeams.map((_, i) => (
-                                            <option key={i} value={i}>
-                                                Time {String.fromCharCode(65 + i)}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    <button onClick={() => handleRemovePlayer(p, teamIndex)} className="text-red-500 hover:text-red-400 p-1">
-                                        <LucideX className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            )}
-                        </li>
-                    ))}
-                </ul>
-                {isEditModeActive && teamIndex > 1 && (
-                    <div className="flex justify-center gap-2 mt-3">
-                        <button onClick={() => handleSetPlayingTeam('A', teamIndex)} className="text-xs bg-gray-700 hover:bg-yellow-500 hover:text-black py-1 px-2 rounded">Definir como Time A</button>
-                        <button onClick={() => handleSetPlayingTeam('B', teamIndex)} className="text-xs bg-gray-700 hover:bg-yellow-500 hover:text-black py-1 px-2 rounded">Definir como Time B</button>
-                    </div>
-                )}
-            </div>
-        );
-    };
-
-    // --- Lógica de Renderização Principal ---
-
-    if (step === 'in_game') {
-        return <LiveMatchTracker teams={{ teamA: allTeams[0], teamB: allTeams[1] }} onEndMatch={handleSingleMatchEnd} durationInMinutes={10} />;
-    }
-
-    if (step === 'session_report') {
-        const sortedStats = Object.values(sessionPlayerStats).sort((a, b) => b.wins - a.wins || b.goals - a.goals);
-        return (
-            <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-8 text-white">
-                <h2 className="text-3xl font-bold text-yellow-400 mb-6 text-center">Relatório Final da Pelada</h2>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left min-w-[600px]">
-                        <thead className="bg-gray-800">
-                            <tr>
-                                <th className="p-3">Jogador</th>
-                                <th className="p-3 text-center">V</th>
-                                <th className="p-3 text-center">E</th>
-                                <th className="p-3 text-center">D</th>
-                                <th className="p-3 text-center">Gols</th>
-                                <th className="p-3 text-center">Assist.</th>
-                                <th className="p-3 text-center">Desarmes</th>
-                                <th className="p-3 text-center">Falhas</th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-gray-800/50">
-                            {sortedStats.map(player => (
-                                <tr key={player.name} className="border-b border-gray-700">
-                                    <td className="p-3 font-semibold">{player.name}</td>
-                                    <td className="p-3 text-center text-green-400 font-bold">{player.wins}</td>
-                                    <td className="p-3 text-center text-gray-400 font-bold">{player.draws}</td>
-                                    <td className="p-3 text-center text-red-400 font-bold">{player.losses}</td>
-                                    <td className="p-3 text-center">{player.goals}</td>
-                                    <td className="p-3 text-center">{player.assists}</td>
-                                    <td className="p-3 text-center">{player.tackles}</td>
-                                    <td className="p-3 text-center">{player.failures}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-                <div className="text-center mt-8">
-                    <button onClick={() => setStep('config')} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg">
-                        Voltar para Configuração
-                    </button>
-                </div>
-            </div>
-        );
-    }
-
-    if (step === 'pre_game' || step === 'post_game') {
-        const teamA = allTeams[0];
-        const teamB = allTeams[1];
-        const waitingTeams = allTeams.slice(2);
-        return (
-            <div className="text-center bg-gray-900/50 rounded-2xl p-4 sm:p-8">
-                <h2 className="text-2xl sm:text-3xl font-bold text-yellow-400 mb-2">
-                    {isEditModeActive ? 'Modo de Edição' : step === 'post_game' ? `Fim da Partida ${matchHistory.length}` : `Prontos para Começar!`}
-                </h2>
-                <p className="text-gray-400 mb-6">{isEditModeActive ? 'Organize os jogadores e os próximos times. Clique em Salvar ao terminar.' : 'Visualize os times ou inicie a próxima partida.'}</p>
-                
-                <div className="flex justify-center gap-4 mb-6">
-                    {!isEditModeActive ? (
-                        <button onClick={() => setIsEditModeActive(true)} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg flex items-center gap-2">
-                            <LucideEdit className="w-4 h-4"/>Editar Partida
-                        </button>
-                    ) : (
-                        <button onClick={() => setIsEditModeActive(false)} className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-6 rounded-lg flex items-center gap-2">
-                            <LucideShieldCheck className="w-4 h-4"/>Salvar Alterações
-                        </button>
-                    )}
-                </div>
-
-                <div className="flex flex-col md:flex-row gap-4 mb-6 justify-center items-start">
-                    {teamA && renderTeamCard(teamA, 0)}
-                    <div className="flex items-center justify-center h-full text-2xl font-bold text-gray-500 p-4">VS</div>
-                    {teamB ? renderTeamCard(teamB, 1) : <div className="bg-gray-800 p-4 rounded-lg w-full min-w-[280px] flex items-center justify-center"><h3 className="text-yellow-400 font-bold text-xl">Sem desafiantes</h3></div>}
-                </div>
-                
-                {waitingTeams.length > 0 && (
-                    <div className="mb-6">
-                        <h3 className="text-xl font-bold text-gray-400 mb-4">Times na Fila</h3>
-                        <div className="flex flex-wrap gap-4 justify-center">
-                            {waitingTeams.map((team, index) => (
-                                <div key={index} className="flex flex-col gap-2 items-center">
-                                    {renderTeamCard(team, index + 2)}
-                                    {!isEditModeActive && (
-                                        <div className="flex gap-2 mt-2">
-                                            <button 
-                                                onClick={() => handleReorderQueue(index, 'up')} 
-                                                disabled={index === 0} 
-                                                className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1 px-3 text-sm rounded-lg disabled:opacity-50 flex items-center justify-center"
-                                                title="Subir na Fila"
-                                            >
-                                                <LucideUndo className="w-4 h-4 transform rotate-90"/>
-                                            </button>
-                                            <button 
-                                                onClick={() => handleReorderQueue(index, 'down')} 
-                                                disabled={index === waitingTeams.length - 1} 
-                                                className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1 px-3 text-sm rounded-lg disabled:opacity-50 flex items-center justify-center"
-                                                title="Descer na Fila"
-                                            >
-                                                <LucideUndo className="w-4 h-4 transform -rotate-90"/>
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {!isEditModeActive && (
-                    <div className="flex flex-col sm:flex-row justify-center gap-4 mt-8 border-t border-gray-700 pt-6">
-                        <button onClick={() => setStep('in_game')} disabled={!teamB} className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-500 disabled:cursor-not-allowed">
-                            Começar Próxima Partida
-                        </button>
-                        <button onClick={handleForceEndSession} className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg text-lg">
-                            Encerrar Pelada
-                        </button>
-                    </div>
-                )}
-            </div>
-        );
-    }
-    
-    return (
-        <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-6 border border-gray-700">
-            <h2 className="text-2xl font-bold text-yellow-400 mb-4">Configurar Noite de Futebol</h2>
-            <fieldset className="border border-gray-700 p-4 rounded-lg mb-6">
-                <legend className="px-2 text-yellow-400 font-semibold">Regras da Partida</legend>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <label className="block font-semibold mb-2 text-white">Limite de vitórias seguidas:</label>
-                        <input 
-                            type="number" 
-                            min="0"
-                            value={streakLimit} 
-                            onChange={e => setStreakLimit(Number(e.target.value))} 
-                            className="w-full bg-gray-800 p-2 rounded text-white" 
-                            title="Deixe 0 para desativar o limite."
-                        />
-                        <p className="text-xs text-gray-500 mt-1">O time sai após X vitórias. (0 = desativado)</p>
-                    </div>
-                    <div>
-                        <label className="block font-semibold mb-2 text-white">Regra de empate:</label>
-                        <select 
-                            value={tieBreakerRule} 
-                            onChange={e => setTieBreakerRule(e.target.value)} 
-                            className="w-full bg-gray-800 p-2 rounded text-white"
-                        >
-                            <option value="winnerStays">Vencedor anterior fica</option>
-                            <option value="bothExit">Ambos os times saem</option>
-                        </select>
-                    </div>
-                </div>
-            </fieldset>
-
-            <fieldset className="border border-gray-700 p-4 rounded-lg mb-6">
-                 <legend className="px-2 text-yellow-400 font-semibold">Configuração dos Times</legend>
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <label className="block font-semibold mb-2 text-white">Nº de times para sortear:</label>
-                        <input type="number" min="2" value={numberOfTeams} onChange={e => setNumberOfTeams(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white" />
-                    </div>
-                    <div>
-                        <label className="block font-semibold mb-2 text-white">Sorteio baseado em:</label>
-                        <select value={drawType} onChange={(e) => setDrawType(e.target.value)} className="w-full bg-gray-800 p-2 rounded text-white">
-                           <option value="self">Overall Próprio</option>
-                           <option value="peer">Overall da Galera</option>
-                           <option value="admin">Overall do Admin</option>
-                        </select>
-                    </div>
-                </div>
-            </fieldset>
-
-            <h3 className="text-xl font-bold text-yellow-400 mb-4">Selecione os Jogadores Presentes</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
-                {players.map(p => (<button key={p.id} onClick={() => handlePlayerToggle(p.id)} className={`p-3 rounded-lg text-center transition ${selectedPlayerIds.has(p.id) ? 'bg-yellow-500 text-black' : 'bg-gray-800 text-white hover:bg-gray-700'}`}>{p.name}</button>))}
-            </div>
-            <div className="text-center">
-                <button onClick={handleStartSession} disabled={selectedPlayerIds.size < numberOfTeams * 2} className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-500 disabled:cursor-not-allowed">Sortear Times e Iniciar</button>
-                {selectedPlayerIds.size < numberOfTeams * 2 && <p className="text-red-500 text-sm mt-2">Selecione pelo menos {numberOfTeams * 2} jogadores para formar {numberOfTeams} times.</p>}
-            </div>
-        </div>
-    );
-};
-
-const MatchHistory = ({ matches, players, onEditMatch, onDeleteMatch }) => {
-    if (matches.length === 0) {
-        return (
-            <div className="text-center py-16 px-6 bg-gray-900/50 rounded-2xl border-2 border-dashed border-gray-700">
-                <h3 className="text-xl font-semibold text-gray-300">Nenhuma partida encontrada</h3>
-                <p className="text-gray-500 mt-2">Jogue algumas partidas para ver o histórico aqui.</p>
-            </div>
-        );
-    }
-
-    const formatDate = (isoString) => {
-        return new Date(isoString).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    };
-
-    return (
-        <div className="space-y-4">
-            {matches.sort((a, b) => new Date(b.date) - new Date(a.date)).map(match => (
-                <div key={match.id} className="bg-gray-900/50 p-4 rounded-lg border border-gray-700">
-                    <div className="flex justify-between items-center flex-wrap gap-2">
-                        <div>
-                            <p className="text-sm text-gray-400">{formatDate(match.date)}</p>
-                            <p className="text-xl sm:text-2xl font-bold text-white">Time A <span className="text-yellow-400">{match.score.teamA}</span> vs <span className="text-yellow-400">{match.score.teamB}</span> Time B</p>
-                        </div>
-                        <div className="flex gap-2">
-                             <button onClick={() => onEditMatch(match)} className="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-lg flex items-center gap-2 text-sm"><LucideEdit className="w-5 h-5" /></button>
-                             <button onClick={() => onDeleteMatch(match)} className="bg-red-600 hover:bg-red-500 text-white p-2 rounded-lg flex items-center gap-2 text-sm"><LucideTrash2 className="w-5 h-5" /></button>
-                        </div>
-                    </div>
-                </div>
-            ))}
-        </div>
-    );
-};
-
 const HallOfFame = ({ players, matches }) => {
     const [filter, setFilter] = useState('all');
 
@@ -1432,11 +950,528 @@ const PostMatchScreen = ({ session, players, matches, currentUserId, groupId, on
     return null;
 };
 
-// --- COMPONENTE PRINCIPAL QUE INICIA TUDO ---
+const SessionReportDetail = ({ session, onBack }) => {
+    if (!session || !session.date) {
+        return (
+            <div className="text-center text-gray-400 p-8">
+                Nenhuma sessão selecionada ou dados inválidos.
+                <div className="mt-4">
+                    <button onClick={onBack} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg">
+                        Voltar
+                    </button>
+                </div>
+            </div>
+        );
+    }
+    const sortedStats = Object.values(session.finalStats).sort((a, b) => b.wins - a.wins || b.goals - a.goals);
+    const sessionDate = new Date(session.date.seconds * 1000).toLocaleDateString('pt-BR', {
+        day: '2-digit', month: 'long', year: 'numeric'
+    });
+
+    return (
+        <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-8 text-white">
+            <h2 className="text-3xl font-bold text-yellow-400 mb-2 text-center">Relatório da Pelada</h2>
+            <p className="text-center text-gray-400 mb-6">{sessionDate}</p>
+            <div className="overflow-x-auto">
+                <table className="w-full text-left min-w-[600px]">
+                    <thead className="bg-gray-800">
+                        <tr>
+                            <th className="p-3">Jogador</th>
+                            <th className="p-3 text-center">V</th>
+                            <th className="p-3 text-center">E</th>
+                            <th className="p-3 text-center">D</th>
+                            <th className="p-3 text-center">Gols</th>
+                            <th className="p-3 text-center">Assist.</th>
+                            <th className="p-3 text-center">Desarmes</th>
+                        </tr>
+                    </thead>
+                    <tbody className="bg-gray-800/50">
+                        {sortedStats.map(player => (
+                            <tr key={player.name} className="border-b border-gray-700">
+                                <td className="p-3 font-semibold">{player.name}</td>
+                                <td className="p-3 text-center text-green-400 font-bold">{player.wins}</td>
+                                <td className="p-3 text-center text-gray-400 font-bold">{player.draws}</td>
+                                <td className="p-3 text-center text-red-400 font-bold">{player.losses}</td>
+                                <td className="p-3 text-center">{player.goals}</td>
+                                <td className="p-3 text-center">{player.assists}</td>
+                                <td className="p-3 text-center">{player.tackles}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            <div className="text-center mt-8">
+                <button onClick={onBack} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg">
+                    Voltar para o Histórico
+                </button>
+            </div>
+        </div>
+    );
+};
+
+const SessionHistoryList = ({ sessions, onSelectSession }) => {
+    if (sessions.length === 0) {
+        return <div className="text-center text-gray-400 p-8">Nenhuma sessão anterior encontrada.</div>;
+    }
+
+    return (
+        <div className="space-y-4">
+            <h2 className="text-3xl font-bold text-yellow-400 mb-6 text-center">Histórico de Sessões</h2>
+            {sessions.map(session => (
+                <button 
+                    key={session.id}
+                    onClick={() => onSelectSession(session)}
+                    className="w-full text-left bg-gray-800 p-4 rounded-lg border border-gray-700 hover:border-yellow-500 transition-all"
+                >
+                    <p className="font-bold text-xl text-white">
+                        Pelada de {new Date(session.date.seconds * 1000).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                    </p>
+                    <p className="text-sm text-gray-400">{Object.keys(session.players).length} participantes</p>
+                </button>
+            ))}
+        </div>
+    );
+};
+
+const MatchFlow = ({ players, groupId, onSessionEnd }) => {
+    const [step, setStep] = useState('config');
+    const [selectedPlayerIds, setSelectedPlayerIds] = useState(new Set());
+    const [allTeams, setAllTeams] = useState([]);
+    const [matchHistory, setMatchHistory] = useState([]);
+    const [sessionPlayerStats, setSessionPlayerStats] = useState({});
+    const [numberOfTeams, setNumberOfTeams] = useState(2);
+    const [drawType, setDrawType] = useState('self');
+    const [isEditModeActive, setIsEditModeActive] = useState(false);
+    const [streakLimit, setStreakLimit] = useState(2);
+    const [tieBreakerRule, setTieBreakerRule] = useState('winnerStays');
+    const [winnerStreak, setWinnerStreak] = useState({ teamId: null, count: 0 });
+
+    const handlePlayerToggle = (playerId) => {
+        setSelectedPlayerIds(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(playerId)) newSet.delete(playerId);
+            else newSet.add(playerId);
+            return newSet;
+        });
+    };
+
+    const handleStartSession = () => {
+        setIsEditModeActive(false);
+        setWinnerStreak({ teamId: null, count: 0 });
+        const availablePlayers = players.filter(p => selectedPlayerIds.has(p.id)).map(p => {
+            let overall;
+            if (drawType === 'admin' && p.adminOverall) overall = calculateOverall(p.adminOverall);
+            else if (drawType === 'peer' && p.peerOverall) overall = calculateOverall(p.peerOverall.avgSkills);
+            else overall = calculateOverall(p.selfOverall);
+            return { ...p, overall };
+        });
+        const playersPerTeamDynamic = Math.floor(availablePlayers.length / numberOfTeams);
+        if (availablePlayers.length < 2 || playersPerTeamDynamic === 0) {
+            alert("Jogadores insuficientes para formar pelo menos 2 times.");
+            return;
+        }
+        const posOrder = { 'Goleiro': 1, 'Defensor': 2, 'Volante': 3, 'Meio-Campo': 4, 'Ponta': 5, 'Atacante': 6 };
+        availablePlayers.sort((a, b) => (posOrder[a.detailedPosition] || 99) - (posOrder[b.detailedPosition] || 99) || b.overall - a.overall);
+        let teams = Array.from({ length: numberOfTeams }, () => ({ players: [] }));
+        availablePlayers.forEach(player => {
+            const targetTeam = teams.find(t => t.players.length < playersPerTeamDynamic) || teams.sort((a, b) => a.players.length - b.players.length)[0];
+            if (targetTeam) {
+                targetTeam.players.push(player);
+            }
+        });
+        const finalTeams = teams.filter(t => t.players.length > 0);
+        if (finalTeams.length < 2) {
+            alert("Não foi possível formar pelo menos 2 times completos.");
+            return;
+        }
+        const initialStats = {};
+        availablePlayers.forEach(p => {
+            initialStats[p.id] = { name: p.name, wins: 0, draws: 0, losses: 0, goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 };
+        });
+        setSessionPlayerStats(initialStats);
+        setAllTeams(finalTeams.map(t => t.players));
+        setMatchHistory([]);
+        setStep('pre_game');
+    };
+    
+    const handleSingleMatchEnd = async (matchResult) => {
+        setIsEditModeActive(false);
+        setMatchHistory(prev => [...prev, matchResult]);
+
+        setSessionPlayerStats(prevStats => {
+            const newStats = JSON.parse(JSON.stringify(prevStats));
+            for (const playerId in matchResult.playerStats) {
+                if (newStats[playerId]) {
+                    for (const stat in matchResult.playerStats[playerId]) {
+                        newStats[playerId][stat] = (newStats[playerId][stat] || 0) + matchResult.playerStats[playerId][stat];
+                    }
+                }
+            }
+            return newStats;
+        });
+        
+        const { teamA, teamB } = matchResult.teams;
+        const remainingTeams = allTeams.slice(2);
+        
+        const updatePlayerRecords = (team, result) => {
+            setSessionPlayerStats(prevStats => {
+                const newStats = JSON.parse(JSON.stringify(prevStats));
+                team.forEach(player => {
+                    if (newStats[player.id]) {
+                        newStats[player.id][result]++;
+                    }
+                });
+                return newStats;
+            });
+        };
+
+        if (matchResult.score.teamA === matchResult.score.teamB) {
+            updatePlayerRecords(teamA, 'draws');
+            updatePlayerRecords(teamB, 'draws');
+            if (tieBreakerRule === 'bothExit') {
+                const nextTeams = remainingTeams.splice(0, 2);
+                const newQueue = [...remainingTeams, teamA, teamB];
+                setAllTeams([...nextTeams, ...newQueue].filter(Boolean));
+                setWinnerStreak({ teamId: null, count: 0 });
+                setStep('post_game');
+                return;
+            }
+        }
+        
+        const winnerTeam = matchResult.score.teamA >= matchResult.score.teamB ? teamA : teamB;
+        const loserTeam = winnerTeam === teamA ? teamB : teamA;
+        updatePlayerRecords(winnerTeam, 'wins');
+        updatePlayerRecords(loserTeam, 'losses');
+
+        const getTeamId = (team) => team.map(p => p.id).sort().join('-');
+        const winnerId = getTeamId(winnerTeam);
+        let currentStreak = (winnerId === winnerStreak.teamId) ? winnerStreak.count + 1 : 1;
+        
+        if (streakLimit > 0 && currentStreak >= streakLimit) {
+            const nextTeams = remainingTeams.splice(0, 2);
+            const newQueue = [...remainingTeams, winnerTeam, loserTeam];
+            setAllTeams([...nextTeams, ...newQueue].filter(Boolean));
+            setWinnerStreak({ teamId: null, count: 0 });
+        } else {
+            const nextChallenger = remainingTeams.length > 0 ? remainingTeams.shift() : null;
+            const newQueue = [...remainingTeams, loserTeam];
+            setAllTeams([winnerTeam, ...(nextChallenger ? [nextChallenger] : []), ...newQueue].filter(Boolean));
+            setWinnerStreak({ teamId: winnerId, count: currentStreak });
+        }
+        setStep('post_game');
+    };
+
+    const handleMovePlayer = (playerToMove, fromTeamIndex, toTeamIndex) => {
+        setAllTeams(currentTeams => {
+            const newTeams = JSON.parse(JSON.stringify(currentTeams.map(t => t || [])));
+            const fromTeam = newTeams[fromTeamIndex];
+            const toTeam = newTeams[toTeamIndex];
+            if (!fromTeam) return currentTeams;
+            const playerIndex = fromTeam.findIndex(p => p.id === playerToMove.id);
+            if (playerIndex === -1) return currentTeams;
+            const [player] = fromTeam.splice(playerIndex, 1);
+            if (toTeam) {
+                toTeam.push(player);
+            } else {
+                newTeams[toTeamIndex] = [player];
+            }
+            return newTeams.filter(team => team.length > 0);
+        });
+    };
+
+    const handleRemovePlayer = (playerToRemove, fromTeamIndex) => {
+        setAllTeams(currentTeams => {
+            let newTeams = JSON.parse(JSON.stringify(currentTeams));
+            const fromTeam = newTeams[fromTeamIndex];
+            if (!fromTeam) return currentTeams;
+            const updatedTeam = fromTeam.filter(p => p.id !== playerToRemove.id);
+            newTeams[fromTeamIndex] = updatedTeam;
+            return newTeams.filter(team => team.length > 0);
+        });
+    };
+
+    const handleSetPlayingTeam = (teamRole, indexToSet) => {
+        setAllTeams(currentTeams => {
+            const newTeams = [...currentTeams];
+            const targetIndex = teamRole === 'A' ? 0 : 1;
+            [newTeams[targetIndex], newTeams[indexToSet]] = [newTeams[indexToSet], newTeams[targetIndex]];
+            return newTeams;
+        });
+    };
+
+    const handleReorderQueue = (indexInWaitingQueue, direction) => {
+        setAllTeams(currentTeams => {
+            const waitingTeams = currentTeams.slice(2);
+            const actualIndex = indexInWaitingQueue;
+            if (direction === 'up' && actualIndex > 0) {
+                [waitingTeams[actualIndex], waitingTeams[actualIndex - 1]] = [waitingTeams[actualIndex - 1], waitingTeams[actualIndex]];
+            } else if (direction === 'down' && actualIndex < waitingTeams.length - 1) {
+                [waitingTeams[actualIndex], waitingTeams[actualIndex + 1]] = [waitingTeams[actualIndex + 1], waitingTeams[actualIndex]];
+            }
+            return [currentTeams[0], currentTeams[1], ...waitingTeams];
+        });
+    };
+
+    const handleForceEndSession = async () => {
+        if (!groupId) {
+            alert("Erro: ID do grupo não encontrado para salvar a sessão.");
+            return;
+        }
+        try {
+            const sessionData = {
+                date: serverTimestamp(),
+                players: Object.keys(sessionPlayerStats),
+                finalStats: sessionPlayerStats,
+            };
+            const sessionsColRef = collection(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions`);
+            await addDoc(sessionsColRef, sessionData);
+            onSessionEnd();
+            setStep('session_report');
+        } catch (error) {
+            console.error("Erro ao salvar a sessão:", error);
+            alert("Ocorreu um erro ao salvar a sessão. Verifique o console.");
+        }
+    };
+    
+    const renderTeamCard = (team, teamIndex) => {
+        const teamLetter = String.fromCharCode(65 + teamIndex);
+        let teamLabel = `Time ${teamLetter}`;
+        if (step !== 'pre_game') {
+             if (teamIndex === 0) teamLabel = `Time ${teamLetter} (Em quadra)`;
+             if (teamIndex === 1) teamLabel = `Time ${teamLetter} (Desafiante)`;
+        } else {
+             if (teamIndex === 0) teamLabel = `Time A`;
+             if (teamIndex === 1) teamLabel = `Time B`;
+        }
+
+        return (
+            <div className="bg-gray-800 p-4 rounded-lg w-full min-w-[280px]">
+                <h3 className="text-yellow-400 font-bold text-xl mb-3">{teamLabel}</h3>
+                <ul className="space-y-2">
+                    {team.map(p => (
+                        <li key={p.id} className="bg-gray-900 p-2 rounded flex justify-between items-center text-white">
+                            <span>{p.name}</span>
+                            {isEditModeActive && (
+                                <div className="flex items-center gap-2">
+                                    <select 
+                                        value={teamIndex}
+                                        onChange={(e) => handleMovePlayer(p, teamIndex, parseInt(e.target.value))}
+                                        className="bg-gray-700 text-white text-xs rounded p-1 border-0"
+                                    >
+                                        {allTeams.map((_, i) => (
+                                            <option key={i} value={i}>
+                                                Time {String.fromCharCode(65 + i)}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <button onClick={() => handleRemovePlayer(p, teamIndex)} className="text-red-500 hover:text-red-400 p-1">
+                                        <LucideX className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            )}
+                        </li>
+                    ))}
+                </ul>
+                {isEditModeActive && teamIndex > 1 && (
+                    <div className="flex justify-center gap-2 mt-3">
+                        <button onClick={() => handleSetPlayingTeam('A', teamIndex)} className="text-xs bg-gray-700 hover:bg-yellow-500 hover:text-black py-1 px-2 rounded">Definir como Time A</button>
+                        <button onClick={() => handleSetPlayingTeam('B', teamIndex)} className="text-xs bg-gray-700 hover:bg-yellow-500 hover:text-black py-1 px-2 rounded">Definir como Time B</button>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    if (step === 'in_game') {
+        return <LiveMatchTracker teams={{ teamA: allTeams[0], teamB: allTeams[1] }} onEndMatch={handleSingleMatchEnd} durationInMinutes={10} />;
+    }
+
+    if (step === 'session_report') {
+        const sortedStats = Object.values(sessionPlayerStats).sort((a, b) => b.wins - a.wins || b.goals - a.goals);
+        return (
+            <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-8 text-white">
+                <h2 className="text-3xl font-bold text-yellow-400 mb-6 text-center">Relatório Final da Pelada</h2>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left min-w-[600px]">
+                        <thead className="bg-gray-800">
+                            <tr>
+                                <th className="p-3">Jogador</th>
+                                <th className="p-3 text-center">V</th>
+                                <th className="p-3 text-center">E</th>
+                                <th className="p-3 text-center">D</th>
+                                <th className="p-3 text-center">Gols</th>
+                                <th className="p-3 text-center">Assist.</th>
+                                <th className="p-3 text-center">Desarmes</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-gray-800/50">
+                            {sortedStats.map(player => (
+                                <tr key={player.name} className="border-b border-gray-700">
+                                    <td className="p-3 font-semibold">{player.name}</td>
+                                    <td className="p-3 text-center text-green-400 font-bold">{player.wins}</td>
+                                    <td className="p-3 text-center text-gray-400 font-bold">{player.draws}</td>
+                                    <td className="p-3 text-center text-red-400 font-bold">{player.losses}</td>
+                                    <td className="p-3 text-center">{player.goals}</td>
+                                    <td className="p-3 text-center">{player.assists}</td>
+                                    <td className="p-3 text-center">{player.tackles}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+                <div className="text-center mt-8">
+                    <button onClick={() => { setStep('config'); setAllTeams([]); }} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg">
+                        Nova Sessão de Jogos
+                    </button>
+                </div>
+            </div>
+        );
+    }
+    
+    if (step === 'pre_game' || step === 'post_game') {
+        const teamA = allTeams[0];
+        const teamB = allTeams[1];
+        const waitingTeams = allTeams.slice(2);
+        return (
+            <div className="text-center bg-gray-900/50 rounded-2xl p-4 sm:p-8">
+                <h2 className="text-2xl sm:text-3xl font-bold text-yellow-400 mb-2">
+                    {isEditModeActive ? 'Modo de Edição' : step === 'post_game' ? `Fim da Partida ${matchHistory.length}` : `Prontos para Começar!`}
+                </h2>
+                <p className="text-gray-400 mb-6">{isEditModeActive ? 'Organize os jogadores e os próximos times. Clique em Salvar ao terminar.' : 'Visualize os times ou inicie a próxima partida.'}</p>
+                
+                <div className="flex justify-center gap-4 mb-6">
+                    {!isEditModeActive ? (
+                        <button onClick={() => setIsEditModeActive(true)} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg flex items-center gap-2">
+                            <LucideEdit className="w-4 h-4"/>Editar Partida
+                        </button>
+                    ) : (
+                        <button onClick={() => setIsEditModeActive(false)} className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-6 rounded-lg flex items-center gap-2">
+                            <LucideShieldCheck className="w-4 h-4"/>Salvar Alterações
+                        </button>
+                    )}
+                </div>
+
+                <div className="flex flex-col md:flex-row gap-4 mb-6 justify-center items-start">
+                    {teamA && renderTeamCard(teamA, 0)}
+                    <div className="flex items-center justify-center h-full text-2xl font-bold text-gray-500 p-4">VS</div>
+                    {teamB ? renderTeamCard(teamB, 1) : <div className="bg-gray-800 p-4 rounded-lg w-full min-w-[280px] flex items-center justify-center"><h3 className="text-yellow-400 font-bold text-xl">Sem desafiantes</h3></div>}
+                </div>
+                
+                {waitingTeams.length > 0 && (
+                    <div className="mb-6">
+                        <h3 className="text-xl font-bold text-gray-400 mb-4">Times na Fila</h3>
+                        <div className="flex flex-wrap gap-4 justify-center">
+                            {waitingTeams.map((team, index) => (
+                                <div key={index} className="flex flex-col gap-2 items-center">
+                                    {renderTeamCard(team, index + 2)}
+                                    {!isEditModeActive && (
+                                        <div className="flex gap-2 mt-2">
+                                            <button 
+                                                onClick={() => handleReorderQueue(index, 'up')} 
+                                                disabled={index === 0} 
+                                                className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1 px-3 text-sm rounded-lg disabled:opacity-50 flex items-center justify-center"
+                                                title="Subir na Fila"
+                                            >
+                                                <LucideUndo className="w-4 h-4 transform rotate-90"/>
+                                            </button>
+                                            <button 
+                                                onClick={() => handleReorderQueue(index, 'down')} 
+                                                disabled={index === waitingTeams.length - 1} 
+                                                className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1 px-3 text-sm rounded-lg disabled:opacity-50 flex items-center justify-center"
+                                                title="Descer na Fila"
+                                            >
+                                                <LucideUndo className="w-4 h-4 transform -rotate-90"/>
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {!isEditModeActive && (
+                    <div className="flex flex-col sm:flex-row justify-center gap-4 mt-8 border-t border-gray-700 pt-6">
+                        <button onClick={() => setStep('in_game')} disabled={!teamB} className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-500 disabled:cursor-not-allowed">
+                            Começar Próxima Partida
+                        </button>
+                        <button onClick={handleForceEndSession} className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg text-lg">
+                            Encerrar Pelada
+                        </button>
+                    </div>
+                )}
+            </div>
+        );
+    }
+    
+    return (
+        <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-6 border border-gray-700">
+            <h2 className="text-2xl font-bold text-yellow-400 mb-4">Configurar Noite de Futebol</h2>
+            <fieldset className="border border-gray-700 p-4 rounded-lg mb-6">
+                <legend className="px-2 text-yellow-400 font-semibold">Regras da Partida</legend>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label className="block font-semibold mb-2 text-white">Limite de vitórias seguidas:</label>
+                        <input 
+                            type="number" 
+                            min="0"
+                            value={streakLimit} 
+                            onChange={e => setStreakLimit(Number(e.target.value))} 
+                            className="w-full bg-gray-800 p-2 rounded text-white" 
+                            title="Deixe 0 para desativar o limite."
+                        />
+                        <p className="text-xs text-gray-500 mt-1">O time sai após X vitórias. (0 = desativado)</p>
+                    </div>
+                    <div>
+                        <label className="block font-semibold mb-2 text-white">Regra de empate:</label>
+                        <select 
+                            value={tieBreakerRule} 
+                            onChange={e => setTieBreakerRule(e.target.value)} 
+                            className="w-full bg-gray-800 p-2 rounded text-white"
+                        >
+                            <option value="winnerStays">Vencedor anterior fica</option>
+                            <option value="bothExit">Ambos os times saem</option>
+                        </select>
+                    </div>
+                </div>
+            </fieldset>
+
+            <fieldset className="border border-gray-700 p-4 rounded-lg mb-6">
+                 <legend className="px-2 text-yellow-400 font-semibold">Configuração dos Times</legend>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label className="block font-semibold mb-2 text-white">Nº de times para sortear:</label>
+                        <input type="number" min="2" value={numberOfTeams} onChange={e => setNumberOfTeams(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white" />
+                    </div>
+                    <div>
+                        <label className="block font-semibold mb-2 text-white">Sorteio baseado em:</label>
+                        <select value={drawType} onChange={(e) => setDrawType(e.target.value)} className="w-full bg-gray-800 p-2 rounded text-white">
+                           <option value="self">Overall Próprio</option>
+                           <option value="peer">Overall da Galera</option>
+                           <option value="admin">Overall do Admin</option>
+                        </select>
+                    </div>
+                </div>
+            </fieldset>
+
+            <h3 className="text-xl font-bold text-yellow-400 mb-4">Selecione os Jogadores Presentes</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
+                {players.map(p => (<button key={p.id} onClick={() => handlePlayerToggle(p.id)} className={`p-3 rounded-lg text-center transition ${selectedPlayerIds.has(p.id) ? 'bg-yellow-500 text-black' : 'bg-gray-800 text-white hover:bg-gray-700'}`}>{p.name}</button>))}
+            </div>
+            <div className="text-center">
+                <button onClick={handleStartSession} disabled={selectedPlayerIds.size < numberOfTeams * 2} className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-500 disabled:cursor-not-allowed">Sortear Times e Iniciar</button>
+                {selectedPlayerIds.size < numberOfTeams * 2 && <p className="text-red-500 text-sm mt-2">Selecione pelo menos {numberOfTeams * 2} jogadores para formar {numberOfTeams} times.</p>}
+            </div>
+        </div>
+    );
+};
+
+// --- COMPONENTE PRINCIPAL ---
+
 export default function AppWrapper() {
     return (
         <div className="app-bg min-h-screen">
-             <style>{`body { background-color: #0c1116; color: white; } .app-bg { background-image: radial-gradient(circle at 50% 50%, rgba(12, 17, 22, 0.8) 0%, rgba(12, 17, 22, 1) 70%), url('https://www.transparenttextures.com/patterns/dark-grass.png'); min-height: 100vh; } .range-slider::-webkit-slider-thumb { background: #f59e0b; } .range-slider::-moz-range-thumb { background: #f59e0b; }`}</style>
+            <style>{`body { background-color: #0c1116; color: white; } .app-bg { background-image: radial-gradient(circle at 50% 50%, rgba(12, 17, 22, 0.8) 0%, rgba(12, 17, 22, 1) 70%), url('https://www.transparenttextures.com/patterns/dark-grass.png'); min-height: 100vh; } .range-slider::-webkit-slider-thumb { background: #f59e0b; } .range-slider::-moz-range-thumb { background: #f59e0b; }`}</style>
             <BrowserRouter>
                 <App />
             </BrowserRouter>
@@ -1460,8 +1495,11 @@ function App() {
     const [matchToDelete, setMatchToDelete] = useState(null);
     const [sessionsToVote, setSessionsToVote] = useState([]);
     const [sessionToVoteOn, setSessionToVoteOn] = useState(null);
-    const { groupId, isAdmin } = userData;
+    const [savedSessions, setSavedSessions] = useState([]);
+    const [viewingSession, setViewingSession] = useState(null);
+    
     const navigate = useNavigate();
+    const { groupId, isAdmin } = userData;
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (u) => {
@@ -1485,19 +1523,23 @@ function App() {
 
     useEffect(() => {
         if (!user || !groupId) {
-            setPlayers([]); setMatches([]); setPlayerProfile(null);
+            setPlayers([]);
+            setMatches([]);
+            setSavedSessions([]);
             if (user) setIsLoading(false);
             return;
         }
 
         setIsLoading(true);
+        let unsubGroup, unsubPlayers, mSub, sSub, sessionsSub;
+
         const groupDocRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}`);
-        const unsubGroup = onSnapshot(groupDocRef, (docSnap) => {
+        unsubGroup = onSnapshot(groupDocRef, (docSnap) => {
             setUserData(prev => ({ ...prev, isAdmin: docSnap.exists() && docSnap.data().createdBy === user.uid }));
         });
 
         const playersColRef = collection(db, `artifacts/${appId}/public/data/groups/${groupId}/players`);
-        const unsubPlayers = onSnapshot(query(playersColRef), (snapshot) => {
+        unsubPlayers = onSnapshot(query(playersColRef), (snapshot) => {
             const allPlayers = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
             setPlayers(allPlayers);
             setPlayerProfile(allPlayers.find(p => p.createdBy === user.uid) || null);
@@ -1505,33 +1547,27 @@ function App() {
         });
         
         const matchesColRef = collection(db, `artifacts/${appId}/public/data/groups/${groupId}/matches`);
-        const mSub = onSnapshot(query(matchesColRef), (s) => setMatches(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+        mSub = onSnapshot(query(matchesColRef), (s) => setMatches(s.docs.map(d => ({ id: d.id, ...d.data() }))));
         
-        const sessionsRef = collection(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions`);
-        const q = query(sessionsRef, where("status", "==", "voting_open"));
-        const sSub = onSnapshot(q, async (snapshot) => {
-            const now = new Date();
-            const openSessions = snapshot.docs
-                .map(d => ({id: d.id, ...d.data()}))
-                .filter(session => session.votingDeadline.toDate() > now);
+        const votingSessionsRef = collection(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions`);
+        const q = query(votingSessionsRef, where("status", "==", "voting_open"));
+        sSub = onSnapshot(q, async (snapshot) => { /* ... (código de votação) ... */ });
 
-            const userVotedSessions = [];
-            for (const session of openSessions) {
-                const ratingDocRef = doc(db, `artifacts/${appId}/public/data/groups/${session.id}/ratings/${user.uid}`);
-                const ratingDocSnap = await getDoc(ratingDocRef);
-                if (!ratingDocSnap.exists()) {
-                    userVotedSessions.push(session);
-                }
-            }
-            setSessionsToVote(userVotedSessions);
+        const sessionsColRef = collection(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions`);
+        const qSessions = query(sessionsColRef, orderBy('date', 'desc'));
+        sessionsSub = onSnapshot(qSessions, (snapshot) => {
+            setSavedSessions(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
         });
 
-        return () => { unsubGroup(); unsubPlayers(); mSub(); sSub(); };
+        return () => { 
+            if(unsubGroup) unsubGroup(); 
+            if(unsubPlayers) unsubPlayers();
+            if(mSub) mSub(); 
+            if(sSub) sSub();
+            if(sessionsSub) sessionsSub();
+        };
     }, [user, groupId]);
-
-    const handleGroupAssociated = (newGroupId) => {
-        setUserData(prev => ({ ...prev, groupId: newGroupId }));
-    };
+    
 
     const handleSavePlayer = async (playerData) => {
         if (!groupId || !user) return;
@@ -1620,7 +1656,6 @@ function App() {
             alert("Falha ao salvar avaliação.");
         }
     };
-
     const handleSessionEnd = async (playedPlayers, allMatches) => {
          if (!groupId) return;
         const now = new Date();
@@ -1636,70 +1671,52 @@ function App() {
 
         setCurrentView('players');
         alert("Sessão de jogos encerrada! A votação está aberta por 24 horas para todos os jogadores.");
-    };
-
+    };   
     const openEditModal = (p) => { setEditingPlayer(p); setIsPlayerModalOpen(true); };
     const openAddModal = () => { setEditingPlayer(null); setIsPlayerModalOpen(true); };
     const handleLogout = () => signOut(auth);
-    
-    const handleStartVote = (session) => {
-        setSessionToVoteOn(session);
-        setCurrentView('session_rating');
-    };
+    const handleStartVote = (session) => { setSessionToVoteOn(session); setCurrentView('session_rating'); };
 
     const renderContent = () => {
-        if (isLoading) { return <div className="text-center p-10 text-white">Carregando...</div>; }
-        if (!user) { return <AuthScreen />; }
-        if (!groupId) { return <GroupGate user={user} onGroupAssociated={handleGroupAssociated} />; }
-        if (!playerProfile) { 
-            return <CreatePlayerProfile user={user} onSave={handleSavePlayer} />; 
+        if (isLoading) return <div className="text-center p-10 text-white">Carregando...</div>;
+        if (!user) return <AuthScreen />;
+        if (!groupId) return <GroupGate user={user} onGroupAssociated={(id) => setUserData(prev => ({ ...prev, groupId: id }))} />;
+        if (!playerProfile) return <CreatePlayerProfile user={user} onSave={handleSavePlayer} />;
+
+        if (currentView === 'sessions' && viewingSession) {
+            return <SessionReportDetail session={viewingSession} onBack={() => setViewingSession(null)} />;
         }
-    
-        if (currentView === 'session_rating') {
-            return <PostMatchScreen session={sessionToVoteOn} players={players} matches={matches} currentUserId={user.uid} groupId={groupId} onFinishRating={() => { setCurrentView('players'); setSessionToVoteOn(null); }} />;
-        }
-        
+
         return (
             <>
                 <nav className="flex justify-center border-b border-gray-700 mb-8 flex-wrap">
                     <button onClick={() => setCurrentView('players')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'players' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideUsers className="inline-block mr-1 sm:mr-2" /> Jogadores</button>
                     {isAdmin && <button onClick={() => setCurrentView('match')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'match' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideSwords className="inline-block mr-1 sm:mr-2" /> Partida</button>}
-                    {isAdmin && <button onClick={() => setCurrentView('history')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'history' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideHistory className="inline-block mr-1 sm:mr-2" /> Histórico</button>}
+                    <button onClick={() => { setCurrentView('sessions'); setViewingSession(null); }} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'sessions' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideHistory className="inline-block mr-1 sm:mr-2" /> Sessões</button>
                     <button onClick={() => setCurrentView('hall_of_fame')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'hall_of_fame' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideTrophy className="inline-block mr-1 sm:mr-2" /> Hall da Fama</button>
                     <button onClick={() => setCurrentView('group')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'group' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideUsers className="inline-block mr-1 sm:mr-2" /> Meu Grupo</button>
                     <button onClick={handleLogout} className="py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg text-red-500 hover:text-red-400 transition-colors duration-200"><LucideLogOut className="inline-block mr-1 sm:mr-2" /> Sair</button>
                 </nav>
-                {!isAdmin && sessionsToVote.length > 0 && currentView !== 'session_rating' && (
-                     <div className="w-full p-4 mb-6 bg-blue-900/50 border-2 border-cyan-400 rounded-xl text-center">
-                        <h3 className="text-2xl font-bold text-cyan-400 mb-4">Votações Abertas</h3>
-                        <p className="text-gray-300 mb-4">Sua avaliação é importante! Dê suas notas para a(s) seguinte(s) pelada(s):</p>
-                        <div className="flex flex-col gap-2">
-                            {sessionsToVote.map(session => (
-                                <button 
-                                    key={session.id} 
-                                    onClick={() => handleStartVote(session)} 
-                                    className="bg-cyan-500 hover:bg-cyan-600 text-black font-bold py-2 px-4 rounded-lg"
-                                >
-                                    Votar na Pelada de {new Date(session.createdAt.toDate()).toLocaleDateString()}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                )}
+
                 <main>
                     {currentView === 'players' && (
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-                           {isAdmin && <div onClick={openAddModal} className="cursor-pointer w-full max-w-[280px] mx-auto h-[400px] border-4 border-dashed border-gray-700 rounded-2xl flex items-center justify-center text-gray-500 hover:border-yellow-400 hover:text-yellow-400 transition-colors duration-300">
-                                <LucideUserPlus className="w-20 h-20" />
-                            </div>}
+                            {isAdmin && <div onClick={openAddModal} className="cursor-pointer w-full max-w-[280px] mx-auto h-[400px] border-4 border-dashed border-gray-700 rounded-2xl flex items-center justify-center text-gray-500 hover:border-yellow-400 hover:text-yellow-400 transition-colors duration-300"><LucideUserPlus className="w-20 h-20" /></div>}
                             {players.map(p => <PlayerCard key={p.id} player={p} onEdit={openEditModal} onDelete={setPlayerToDelete} onOpenPeerReview={setPeerReviewPlayer} isAdmin={isAdmin}/>)}
                         </div>
                     )}
-                    {currentView === 'match' && isAdmin && <MatchFlow players={players} onMatchEnd={handleMatchEnd} onSessionEnd={handleSessionEnd} />}
+                    
+                    {currentView === 'match' && isAdmin && <MatchFlow players={players} groupId={groupId} onSessionEnd={handleSessionEnd} />}
+                    
+                    {currentView === 'sessions' && !viewingSession && (
+                        <SessionHistoryList sessions={savedSessions} onSelectSession={setViewingSession} />
+                    )}
                     {currentView === 'history' && isAdmin && <MatchHistory matches={matches} players={players} onEditMatch={setEditingMatch} onDeleteMatch={setMatchToDelete}/>}
                     {currentView === 'hall_of_fame' && <HallOfFame players={players} matches={matches} />}
                     {currentView === 'group' && <GroupDashboard user={user} groupId={groupId} />}
+
                 </main>
+
                 <PlayerModal isOpen={isPlayerModalOpen} onClose={() => setIsPlayerModalOpen(false)} onSave={handleSavePlayer} player={editingPlayer} isAdmin={isAdmin} />
                 <EditMatchModal isOpen={!!editingMatch} match={editingMatch} players={players} onClose={() => setEditingMatch(null)} onSave={handleUpdateMatch} />
                 <ConfirmationModal isOpen={!!playerToDelete} title="Confirmar Exclusão" message={`Tem certeza que deseja apagar o jogador ${playerToDelete?.name}?`} onConfirm={confirmDeletePlayer} onClose={() => setPlayerToDelete(null)} />
