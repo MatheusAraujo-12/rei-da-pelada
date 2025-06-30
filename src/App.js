@@ -468,61 +468,6 @@ const StatButton = ({ Icon, count, onClick, colorClass, label }) => (
     </button>
 );
 
-const EditMatchModal = ({ isOpen, match, players, onClose, onSave }) => {
-    const [editableStats, setEditableStats] = useState({});
-
-    useEffect(() => {
-        if (match) {
-            setEditableStats(JSON.parse(JSON.stringify(match.playerStats)));
-        }
-    }, [match]);
-
-    if (!isOpen || !match) return null;
-
-    const handleStatChange = (playerId, stat, delta) => {
-        setEditableStats(prev => {
-            const newPlayerStats = { ...prev[playerId] };
-            newPlayerStats[stat] = Math.max(0, (newPlayerStats[stat] || 0) + delta);
-            return { ...prev, [playerId]: newPlayerStats };
-        });
-    };
-
-    const allPlayerIdsInMatch = [...match.teams.teamA.map(p => p.id), ...match.teams.teamB.map(p => p.id)];
-    const playerDetails = allPlayerIdsInMatch.map(id => players.find(p => p.id === id)).filter(Boolean);
-
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-80 flex justify-center items-center z-50 p-4">
-            <div className="bg-gradient-to-br from-gray-900 to-black rounded-2xl shadow-2xl p-6 w-full max-w-2xl max-h-full overflow-y-auto text-white border border-yellow-400/30">
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold text-yellow-400">Editar Partida</h2>
-                    <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-700 transition-colors"><LucideX className="w-6 h-6" /></button>
-                </div>
-                <div className="space-y-4">
-                    {playerDetails.map(player => (
-                        <div key={player.id} className="bg-gray-800 p-4 rounded-lg">
-                            <h3 className="font-bold text-lg mb-2">{player.name}</h3>
-                            <div className="flex items-center gap-4 flex-wrap">
-                                {editableStats[player.id] && Object.keys(editableStats[player.id]).map(stat => (
-                                    <div key={stat} className="flex items-center gap-2">
-                                        <span className="font-semibold capitalize text-sm">{stat}:</span>
-                                        <button onClick={() => handleStatChange(player.id, stat, -1)} className="bg-red-600 rounded-full w-6 h-6">-</button>
-                                        <span className="font-bold text-lg w-6 text-center">{editableStats[player.id][stat]}</span>
-                                        <button onClick={() => handleStatChange(player.id, stat, 1)} className="bg-green-600 rounded-full w-6 h-6">+</button>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-                <div className="mt-8 flex justify-end gap-4">
-                    <button onClick={onClose} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-2 px-6 rounded-lg">Cancelar</button>
-                    <button onClick={() => onSave(match.id, editableStats)} className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-2 px-6 rounded-lg">Salvar Alterações</button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
 const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
     const [timeLeft, setTimeLeft] = useState(durationInMinutes * 60);
     const [isPaused, setIsPaused] = useState(false);
@@ -617,26 +562,14 @@ const HallOfFame = ({ players, matches }) => {
         if (filter === 'all') return matches;
         const now = new Date();
         let startDate;
-
         switch (filter) {
-            case 'month':
-                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-                break;
-            case 'quarter':
-                startDate = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
-                break;
-            case 'semester':
-                 startDate = new Date(now.getFullYear(), now.getMonth() < 6 ? 0 : 6, 1);
-                break;
-            case 'year':
-                 startDate = new Date(now.getFullYear(), 0, 1);
-                break;
-            default:
-                return matches;
+            case 'month': startDate = new Date(now.getFullYear(), now.getMonth(), 1); break;
+            case 'quarter': startDate = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1); break;
+            case 'semester': startDate = new Date(now.getFullYear(), now.getMonth() < 6 ? 0 : 6, 1); break;
+            case 'year': startDate = new Date(now.getFullYear(), 0, 1); break;
+            default: return matches;
         }
-
         return matches.filter(match => new Date(match.date) >= startDate);
-
     }, [matches, filter]);
 
     const rankings = useMemo(() => {
@@ -842,113 +775,14 @@ const GroupGate = ({ user, onGroupAssociated }) => {
     );
 };
 
-const PostMatchScreen = ({ session, players, matches, currentUserId, groupId, onFinishRating }) => {
-    const [step, setStep] = useState('rating');
-    const [ratings, setRatings] = useState({});
-    const [mvp, setMvp] = useState(null);
-    
-    const sessionPlayers = useMemo(() => players.filter(p => session.players.includes(p.id)), [players, session.players]);
-    
-    const handleRatingChange = (playerId, rating) => {
-        setRatings(prev => ({...prev, [playerId]: rating}));
-    };
-    
-    const submitRatingsAndMvp = async () => {
-        if (!mvp || Object.keys(ratings).length < sessionPlayers.length) {
-            alert("Por favor, avalie todos os jogadores e escolha o MVP.");
-            return;
-        }
-
-        const batch = writeBatch(db);
-        const sessionRatingRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions/${session.id}/ratings`, currentUserId);
-        batch.set(sessionRatingRef, {
-            createdAt: new Date(),
-            ratings,
-            mvp,
-        });
-
-        for (const player of sessionPlayers) {
-            let playerStats = { goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 };
-            session.matches.forEach(matchId => {
-                const match = matches.find(m => m.id === matchId);
-                if (match && match.playerStats[player.id]) {
-                    Object.keys(playerStats).forEach(stat => {
-                        playerStats[stat] += match.playerStats[player.id][stat] || 0;
-                    });
-                }
-            });
-            
-            const playerRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}/players/${player.id}`);
-            const newSelfOverall = { ...player.selfOverall };
-
-            newSelfOverall.finalizacao = Math.min(99, newSelfOverall.finalizacao + (playerStats.goals * 0.5));
-            newSelfOverall.passe = Math.min(99, newSelfOverall.passe + (playerStats.assists * 0.8));
-            newSelfOverall.desarme = Math.min(99, newSelfOverall.desarme + (playerStats.tackles * 1));
-            
-            if(player.position === 'Goleiro') {
-                newSelfOverall.reflexo = Math.min(99, newSelfOverall.reflexo + (playerStats.saves * 1));
-            }
-
-            for (let i = 0; i < playerStats.failures * 2; i++) {
-                const skillsKeys = Object.keys(newSelfOverall);
-                const randomSkill = skillsKeys[Math.floor(Math.random() * skillsKeys.length)];
-                newSelfOverall[randomSkill] = Math.max(1, newSelfOverall[randomSkill] - 1);
-            }
-            
-            batch.update(playerRef, { selfOverall: newSelfOverall });
-        }
-        
-        const sessionDocRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions`, session.id);
-        batch.update(sessionDocRef, { status: "voting_closed" });
-
-
-        await batch.commit();
-        onFinishRating();
-    };
-    
-    if (step === 'rating') {
-        return (
-            <div className="bg-gray-900/50 rounded-2xl p-6 border border-gray-700">
-                <h2 className="text-3xl font-bold text-yellow-400 mb-6 text-center">Avalie os Jogadores da Noite</h2>
-                <div className="space-y-4">
-                    {sessionPlayers.map(p => (
-                        <div key={p.id} className="bg-gray-800 p-4 rounded-lg flex justify-between items-center">
-                            <span className="font-semibold text-lg">{p.name}</span>
-                            <div className="flex gap-1">
-                                {[1,2,3,4,5].map(star => (
-                                    <LucideStar key={star} onClick={() => handleRatingChange(p.id, star)} className={`w-8 h-8 cursor-pointer transition-colors ${ratings[p.id] >= star ? 'text-yellow-400 fill-current' : 'text-gray-600'}`}/>
-                                ))}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-                <div className="text-center mt-8">
-                    <button onClick={() => setStep('mvp')} disabled={Object.keys(ratings).length < sessionPlayers.length} className="bg-yellow-500 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:opacity-50">Próximo</button>
-                </div>
-            </div>
-        );
-    }
-
-    if (step === 'mvp') {
-        return (
-            <div className="bg-gray-900/50 rounded-2xl p-6 border border-gray-700">
-                <h2 className="text-3xl font-bold text-yellow-400 mb-6 text-center">Vote no Craque da Noite (MVP)</h2>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                    {sessionPlayers.map(p => (
-                        <button key={p.id} onClick={() => setMvp(p.id)} className={`p-4 rounded-lg text-center transition-all duration-200 ${mvp === p.id ? 'bg-yellow-500 text-black ring-2 ring-white' : 'bg-gray-800 hover:bg-gray-700'}`}>
-                            <LucideUser className="w-12 h-12 mx-auto mb-2 text-white"/>
-                            <span className="font-bold">{p.name}</span>
-                        </button>
-                    ))}
-                </div>
-                <div className="text-center mt-8">
-                    <button onClick={submitRatingsAndMvp} disabled={!mvp} className="bg-yellow-500 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-600">Finalizar Avaliação</button>
-                </div>
-            </div>
-        );
-    }
-    
-    return null;
+const PostMatchScreen = ({ players, onFinishRating }) => {
+    // Este componente pode ser simplificado ou removido se a votação pós-sessão for removida
+    return (
+        <div>
+            <h2>Votação Pós-Sessão (A ser implementado)</h2>
+            <button onClick={onFinishRating}>Finalizar</button>
+        </div>
+    );
 };
 
 const SessionReportDetail = ({ session, onBack }) => {
@@ -1492,10 +1326,7 @@ function App() {
     const [editingPlayer, setEditingPlayer] = useState(null);
     const [playerToDelete, setPlayerToDelete] = useState(null);
     const [peerReviewPlayer, setPeerReviewPlayer] = useState(null);
-    const [editingMatch, setEditingMatch] = useState(null);
     const [matchToDelete, setMatchToDelete] = useState(null);
-    const [sessionsToVote, setSessionsToVote] = useState([]);
-    const [sessionToVoteOn, setSessionToVoteOn] = useState(null);
     const [savedSessions, setSavedSessions] = useState([]);
     const [viewingSession, setViewingSession] = useState(null);
     
@@ -1532,7 +1363,7 @@ function App() {
         }
 
         setIsLoading(true);
-        let unsubGroup, unsubPlayers, mSub, sSub, sessionsSub;
+        let unsubGroup, unsubPlayers, mSub, sessionsSub;
 
         const groupDocRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}`);
         unsubGroup = onSnapshot(groupDocRef, (docSnap) => {
@@ -1550,25 +1381,6 @@ function App() {
         const matchesColRef = collection(db, `artifacts/${appId}/public/data/groups/${groupId}/matches`);
         mSub = onSnapshot(query(matchesColRef, orderBy('date', 'desc')), (s) => setMatches(s.docs.map(d => ({ id: d.id, ...d.data() }))));
         
-        const votingSessionsRef = collection(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions`);
-        const q = query(votingSessionsRef, where("status", "==", "voting_open"));
-        sSub = onSnapshot(q, async (snapshot) => {
-             const now = new Date();
-             const openSessions = snapshot.docs
-                 .map(d => ({id: d.id, ...d.data()}))
-                 .filter(session => session.votingDeadline.toDate() > now);
-
-             const userVotedSessions = [];
-             for (const session of openSessions) {
-                 const ratingDocRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions/${session.id}/ratings/${user.uid}`);
-                 const ratingDocSnap = await getDoc(ratingDocRef);
-                 if (!ratingDocSnap.exists()) {
-                     userVotedSessions.push(session);
-                 }
-             }
-             setSessionsToVote(userVotedSessions);
-        });
-
         const sessionsColRef = collection(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions`);
         const qSessions = query(sessionsColRef, orderBy('date', 'desc'));
         sessionsSub = onSnapshot(qSessions, (snapshot) => {
@@ -1579,7 +1391,6 @@ function App() {
             if(unsubGroup) unsubGroup(); 
             if(unsubPlayers) unsubPlayers();
             if(mSub) mSub(); 
-            if(sSub) sSub();
             if(sessionsSub) sessionsSub();
         };
     }, [user, groupId]);
@@ -1596,6 +1407,9 @@ function App() {
                 await addDoc(collection(db, `artifacts/${appId}/public/data/groups/${groupId}/players`), { ...data, createdBy: user.uid });
             }
         } catch (e) { console.error("Erro ao salvar jogador:", e); }
+        finally {
+            setIsPlayerModalOpen(false);
+        }
     };
 
     const confirmDeletePlayer = async () => {
@@ -1614,14 +1428,6 @@ function App() {
         } finally {
             setMatchToDelete(null);
         }
-    };
-
-    const handleUpdateMatch = async (matchId, newStats) => {
-        if (!groupId) return;
-        try {
-            await updateDoc(doc(db, `artifacts/${appId}/public/data/groups/${groupId}/matches`, matchId), { playerStats: newStats });
-            setEditingMatch(null);
-        } catch (e) { console.error("Erro ao atualizar a partida: ", e); }
     };
     
     const handleSavePeerReview = async (playerToReview, newSkills) => {
@@ -1661,6 +1467,9 @@ function App() {
             console.error("Erro ao salvar avaliação:", e);
             alert("Falha ao salvar avaliação.");
         }
+        finally {
+            setPeerReviewPlayer(null);
+        }
     };
 
     const handleSessionEnd = () => {
@@ -1671,7 +1480,6 @@ function App() {
     const openEditModal = (p) => { setEditingPlayer(p); setIsPlayerModalOpen(true); };
     const openAddModal = () => { setEditingPlayer(null); setIsPlayerModalOpen(true); };
     const handleLogout = () => signOut(auth);
-    const handleStartVote = (session) => { setSessionToVoteOn(session); setCurrentView('session_rating'); };
 
     const renderContent = () => {
         if (isLoading) return <div className="text-center p-10 text-white">Carregando...</div>;
@@ -1679,10 +1487,6 @@ function App() {
         if (!groupId) return <GroupGate user={user} onGroupAssociated={(id) => setUserData(prev => ({ ...prev, groupId: id }))} />;
         if (!playerProfile) return <CreatePlayerProfile user={user} onSave={handleSavePlayer} />;
 
-        if (currentView === 'session_rating') {
-            return <PostMatchScreen session={sessionToVoteOn} players={players} matches={matches} currentUserId={user.uid} groupId={groupId} onFinishRating={() => { setCurrentView('players'); setSessionToVoteOn(null); }} />;
-        }
-        
         if (currentView === 'sessions' && viewingSession) {
             return <SessionReportDetail session={viewingSession} onBack={() => setViewingSession(null)} />;
         }
