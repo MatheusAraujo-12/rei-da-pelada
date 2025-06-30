@@ -528,31 +528,76 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
     const [isPaused, setIsPaused] = useState(false);
     const [showConfirm, setShowConfirm] = useState(false);
     const [history, setHistory] = useState([]);
-    const intervalRef = useRef(null);
-    const synth = useRef(null);
-
-    useEffect(() => { synth.current = new Tone.Synth().toDestination(); }, []);
-    useEffect(() => {
-        if (!isPaused && timeLeft > 0) {
-            intervalRef.current = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
-        } else if (timeLeft === 0) {
-            clearInterval(intervalRef.current);
-            synth.current.triggerAttackRelease("C5", "0.5");
-            setTimeout(() => synth.current.triggerAttackRelease("C5", "1"), 600);
-        }
-        return () => clearInterval(intervalRef.current);
-    }, [isPaused, timeLeft]);
-
-    const togglePause = () => setIsPaused(prev => !prev);
-    const confirmAddMinute = () => { setTimeLeft(prev => prev + 60); setShowConfirm(false); };
-    const formatTime = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+    const [score, setScore] = useState({ teamA: 0, teamB: 0 });
     const initialStats = useMemo(() => {
         const s = {};
         [...teams.teamA, ...teams.teamB].forEach(p => { s[p.id] = { goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 }; });
         return s;
     }, [teams]);
-    const [score, setScore] = useState({ teamA: 0, teamB: 0 });
     const [playerStats, setPlayerStats] = useState(initialStats);
+
+    // ✅ Lógica do Web Worker
+    const workerRef = useRef(null);
+    const synth = useRef(null);
+
+    useEffect(() => {
+        // Inicializa o sintetizador de som
+        synth.current = new Tone.Synth().toDestination();
+
+        // Cria uma nova instância do nosso worker
+        // O caminho é relativo à pasta 'public'
+        const worker = new Worker('/timer.worker.js');
+        workerRef.current = worker;
+
+        // Começa o timer
+        worker.postMessage({ command: 'start', value: durationInMinutes * 60 });
+
+        // Função para receber mensagens do worker
+        worker.onmessage = (e) => {
+            const { type, timeLeft: workerTimeLeft } = e.data;
+            if (type === 'tick') {
+                setTimeLeft(workerTimeLeft);
+            } else if (type === 'done') {
+                setTimeLeft(0);
+                // Toca o som de fim de partida
+                synth.current.triggerAttackRelease("C5", "0.5");
+                setTimeout(() => synth.current.triggerAttackRelease("C5", "1"), 600);
+            }
+        };
+
+        // Função de limpeza: para o worker quando o componente é desmontado
+        return () => {
+            worker.postMessage({ command: 'stop' });
+            worker.terminate();
+        };
+    }, [durationInMinutes]); // Roda apenas uma vez quando o componente é montado
+
+    const togglePause = () => {
+        if (workerRef.current) {
+            if (isPaused) {
+                // Se estava pausado, manda o worker continuar de onde parou
+                workerRef.current.postMessage({ command: 'start', value: timeLeft });
+            } else {
+                // Se estava rodando, manda o worker pausar
+                workerRef.current.postMessage({ command: 'pause' });
+            }
+            setIsPaused(!isPaused);
+        }
+    };
+    
+    const confirmAddMinute = () => {
+        const newTime = timeLeft + 60;
+        setTimeLeft(newTime);
+        if (workerRef.current) {
+            // Reinicia o worker com o novo tempo
+            workerRef.current.postMessage({ command: 'start', value: newTime });
+        }
+        setShowConfirm(false);
+        // Se estava pausado, força o play
+        if(isPaused) setIsPaused(false);
+    };
+
+    const formatTime = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 
     const handleStat = (playerId, stat, team) => {
         setHistory(prev => [...prev, { score: { ...score }, playerStats: JSON.parse(JSON.stringify(playerStats)) }]);
@@ -944,8 +989,12 @@ const MatchHistory = ({ matches, onEditMatch, onDeleteMatch }) => {
     );
 };
 
-
+// --- modules/matches/MatchFlow.js --- (VERSÃO ATUALIZADA)
 const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
+    // Chave única para salvar os dados no localStorage
+    const localStorageKey = `reiDaPeladaConfig-${groupId}`;
+
+    // --- Estados ---
     const [step, setStep] = useState('config');
     const [selectedPlayerIds, setSelectedPlayerIds] = useState(new Set());
     const [allTeams, setAllTeams] = useState([]);
@@ -957,6 +1006,40 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
     const [streakLimit, setStreakLimit] = useState(2);
     const [tieBreakerRule, setTieBreakerRule] = useState('winnerStays');
     const [winnerStreak, setWinnerStreak] = useState({ teamId: null, count: 0 });
+
+    // ✅ 1. EFEITO PARA CARREGAR DADOS SALVOS QUANDO O COMPONENTE MONTA
+    useEffect(() => {
+        try {
+            const savedConfig = localStorage.getItem(localStorageKey);
+            if (savedConfig) {
+                const config = JSON.parse(savedConfig);
+                setSelectedPlayerIds(new Set(config.selectedPlayerIds || []));
+                setNumberOfTeams(config.numberOfTeams || 2);
+                setDrawType(config.drawType || 'self');
+                setStreakLimit(config.streakLimit || 2);
+                setTieBreakerRule(config.tieBreakerRule || 'winnerStays');
+            }
+        } catch (error) {
+            console.error("Erro ao carregar configuração do localStorage:", error);
+        }
+    }, [localStorageKey]); // Executa apenas uma vez
+
+    // ✅ 2. EFEITO PARA SALVAR DADOS AUTOMATICAMENTE QUANDO ALGO MUDA
+    useEffect(() => {
+        try {
+            const configToSave = {
+                selectedPlayerIds: Array.from(selectedPlayerIds), // Converte Set para Array para salvar
+                numberOfTeams,
+                drawType,
+                streakLimit,
+                tieBreakerRule
+            };
+            localStorage.setItem(localStorageKey, JSON.stringify(configToSave));
+        } catch (error) {
+            console.error("Erro ao salvar configuração no localStorage:", error);
+        }
+    }, [selectedPlayerIds, numberOfTeams, drawType, streakLimit, tieBreakerRule, localStorageKey]);
+
 
     const handlePlayerToggle = (playerId) => {
         setSelectedPlayerIds(prev => {
@@ -970,6 +1053,10 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
     const handleStartSession = () => {
         setIsEditModeActive(false);
         setWinnerStreak({ teamId: null, count: 0 });
+        
+        // Limpa a configuração salva ao iniciar a sessão, para a próxima vez começar do zero
+        localStorage.removeItem(localStorageKey);
+
         const availablePlayers = players.filter(p => selectedPlayerIds.has(p.id)).map(p => {
             let overall;
             if (drawType === 'admin' && p.adminOverall) overall = calculateOverall(p.adminOverall);
@@ -1011,6 +1098,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
         setStep('pre_game');
     };
     
+    // ... (O restante das funções handle... e de renderização continuam iguais)
     const handleSingleMatchEnd = async (matchResult) => {
         setIsEditModeActive(false);
         const savedMatch = await onMatchEnd(matchResult);
