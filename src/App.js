@@ -40,7 +40,7 @@ const calculateOverall = (skills) => {
 
 // --- Componentes ---
 
-const AuthScreen = () => {
+const AuthScreen = ({ onLoginSuccess }) => {
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -112,42 +112,31 @@ const ConfirmationModal = ({ isOpen, title, message, onConfirm, onClose }) => {
     );
 };
 
-// --- modules/players/PlayerModal.js ---
 const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
-    // Estados existentes
     const [name, setName] = useState('');
     const [age, setAge] = useState('');
     const [position, setPosition] = useState('Linha');
-    
-    // ✅ 1. ADICIONANDO NOVOS ESTADOS PARA OS NOVOS CAMPOS
     const [detailedPosition, setDetailedPosition] = useState('Meio-Campo');
     const [preferredFoot, setPreferredFoot] = useState('Direita');
     const [preferredSide, setPreferredSide] = useState('Qualquer');
-
     const initialLineSkills = useMemo(() => ({ finalizacao: 50, drible: 50, velocidade: 50, folego: 50, passe: 50, desarme: 50 }), []);
     const initialGkSkills = useMemo(() => ({ reflexo: 50, posicionamento: 50, lancamento: 50 }), []);
     const [skills, setSkills] = useState(initialLineSkills);
     const [adminSkills, setAdminSkills] = useState(null);
 
-    // ✅ 2. ATUALIZANDO O USEEFFECT PARA POPULAR OS NOVOS CAMPOS
     useEffect(() => {
         if (player) {
-            // Popula campos existentes
             setName(player.name);
             setAge(player.age);
             setPosition(player.position);
             setSkills(player.selfOverall);
-
-            // Popula os novos campos com os dados do jogador (ou valores padrão)
             setDetailedPosition(player.detailedPosition || 'Meio-Campo');
             setPreferredFoot(player.preferredFoot || 'Direita');
             setPreferredSide(player.preferredSide || 'Qualquer');
-
             if (isAdmin) {
                 setAdminSkills(player.adminOverall || player.selfOverall);
             }
         } else {
-            // Reseta todos os campos para um novo jogador
             setName('');
             setAge('');
             setPosition('Linha');
@@ -165,7 +154,7 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
         if (player && player.position === position) {
             setSkills(player.selfOverall);
             if(isAdmin) setAdminSkills(player.adminOverall || player.selfOverall);
-        } else if (!player) { // Se for um novo jogador, reseta as skills ao mudar a posição
+        } else if (!player) {
             setSkills(newSkills);
             if(isAdmin) setAdminSkills(newSkills);
         }
@@ -173,7 +162,6 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
 
     if (!isOpen) return null;
 
-    // ✅ 3. ATUALIZANDO A FUNÇÃO DE SALVAR PARA INCLUIR OS NOVOS DADOS
     const handleSave = () => {
         if (name && age && position) {
             onSave({ 
@@ -183,7 +171,6 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
                 position, 
                 selfOverall: skills, 
                 adminOverall: isAdmin ? adminSkills : player?.adminOverall,
-                // Novos campos sendo salvos
                 detailedPosition: position === 'Linha' ? detailedPosition : null,
                 preferredFoot,
                 preferredSide
@@ -202,7 +189,6 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
                     <h2 className="text-2xl font-bold text-yellow-400">{player ? 'Editar Jogador' : 'Novo Craque'}</h2>
                     <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-700 transition-colors"><LucideX className="w-6 h-6" /></button>
                 </div>
-                {/* ✅ 4. ADICIONANDO OS CAMPOS AO FORMULÁRIO (JSX) */}
                 <div className="space-y-4">
                     <h3 className="text-lg font-semibold text-yellow-400 mb-3">Dados Básicos</h3>
                     <div><label className="block text-sm font-medium text-gray-300 mb-1">Nome</label><input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-yellow-500 focus:outline-none transition" /></div>
@@ -244,12 +230,11 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
                         </select>
                     </div>
                 </div>
-
                 {isAdmin && adminSkills && (
                     <div className="pt-4 mt-4 border-t border-gray-700">
                         <h3 className="text-lg font-semibold text-cyan-400 mb-3">Overall do Administrador</h3>
                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            {Object.entries(adminSkills).map(([skill, value]) => (<div key={`admin-${skill}`}><label className="capitalize flex items-center text-sm font-medium text-gray-300 mb-1">{skill.replace('_', ' ')}</label><div className="flex items-center space-x-3"><input type="range" min="1" max="99" value={value} onChange={e => handleAdminSkillChange(skill, e.target.value)} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer range-slider" /><span className="text-cyan-400 font-bold w-8 text-center">{value}</span></div></div>))}
+                             {Object.entries(adminSkills).map(([skill, value]) => (<div key={`admin-${skill}`}><label className="capitalize flex items-center text-sm font-medium text-gray-300 mb-1">{skill.replace('_', ' ')}</label><div className="flex items-center space-x-3"><input type="range" min="1" max="99" value={value} onChange={e => handleAdminSkillChange(skill, e.target.value)} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer range-slider" /><span className="text-cyan-400 font-bold w-8 text-center">{value}</span></div></div>))}
                          </div>
                     </div>
                 )}
@@ -259,9 +244,7 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
     );
 };
 
-// --- modules/players/PlayerCard.js ---
 const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => {
-    // ✅ 1. CÁLCULO DOS OVERALLS RESTAURADO
     const selfOverall = calculateOverall(player.selfOverall);
     const peerOverall = player.peerOverall ? calculateOverall(player.peerOverall.avgSkills) : 0;
     const adminOverall = player.adminOverall ? calculateOverall(player.adminOverall) : 0;
@@ -279,8 +262,6 @@ const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => 
                         <p className="text-5xl font-black text-yellow-400">{selfOverall}</p>
                         <p className="font-bold text-white -mt-1">{player.detailedPosition || player.position}</p>
                     </div>
-
-                    {/* ✅ 2. EXIBIÇÃO DOS OVERALLS DA GALERA E ADMIN RESTAURADA */}
                     <div className="text-right space-y-1">
                         {peerOverall > 0 && (
                             <>
@@ -313,7 +294,6 @@ const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => 
                     ))}
                 </div>
                 
-                {/* ✅ 3. BOTÕES DE AÇÃO (EDITAR/APAGAR) RESTAURADOS */}
                 <div className="absolute top-2 right-2 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                     {isAdmin && (
                         <>
@@ -328,9 +308,8 @@ const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => 
     );
 };
 
-// --- modules/players/PeerReviewModal.js ---
 const PeerReviewModal = ({ isOpen, player, onClose, onSave }) => {
-     const [skills, setSkills] = useState({});
+    const [skills, setSkills] = useState({});
 
     useEffect(() => {
         if (player && isOpen) {
@@ -340,7 +319,7 @@ const PeerReviewModal = ({ isOpen, player, onClose, onSave }) => {
 
     if (!isOpen || !player) return null;
 
-     const handleSkillChange = (skill, value) => {
+    const handleSkillChange = (skill, value) => {
         setSkills(prev => ({ ...prev, [skill]: Number(value) }));
     };
 
@@ -376,13 +355,12 @@ const PeerReviewModal = ({ isOpen, player, onClose, onSave }) => {
 };
 
 
-// --- modules/players/CreatePlayerProfile.js ---
 const CreatePlayerProfile = ({ onSave, user }) => {
     const [name, setName] = useState('');
     const [age, setAge] = useState('');
     const [position, setPosition] = useState('Linha');
-    const [detailedPosition, setDetailedPosition] = useState('Defensor', 'Atacante', 'Volante', 'Meio-Campo', 'Ponta');
-    const [preferredFoot, setPreferredFoot] = useState('Direita', 'Esquerda');
+    const [detailedPosition, setDetailedPosition] = useState('Meio-Campo');
+    const [preferredFoot, setPreferredFoot] = useState('Direita');
     const [preferredSide, setPreferredSide] = useState('Qualquer');
 
     const initialLineSkills = useMemo(() => ({ finalizacao: 50, drible: 50, velocidade: 50, folego: 50, passe: 50, desarme: 50 }), []);
@@ -392,17 +370,15 @@ const CreatePlayerProfile = ({ onSave, user }) => {
     useEffect(() => {
         setSkills(position === 'Goleiro' ? initialGkSkills : initialLineSkills);
     }, [position, initialGkSkills, initialLineSkills]);
-// <--- CORREÇÃO APLICADA
 
     const handleSave = () => {
-         if (name && age && position) {
-                   const playerData = {
+       if (name && age && position) {
+            const playerData = {
                 name,
                 age: Number(age),
-                position, // Posição geral (Linha/Goleiro)
+                position,
                 selfOverall: skills,
                 createdBy: user.uid,
-                // Novos campos
                 detailedPosition: position === 'Linha' ? detailedPosition : null,
                 preferredFoot,
                 preferredSide,
@@ -487,7 +463,6 @@ const CreatePlayerProfile = ({ onSave, user }) => {
     );
 };
 
-// --- modules/matches/StatButton.js ---
 const StatButton = ({ Icon, count, onClick, colorClass, label }) => (
     <button title={label} onClick={onClick} className={`relative w-10 h-10 flex items-center justify-center rounded-lg ${colorClass} transition-transform transform active:scale-90`}>
         <Icon className="w-5 h-5" />
@@ -497,7 +472,6 @@ const StatButton = ({ Icon, count, onClick, colorClass, label }) => (
     </button>
 );
 
-// --- modules/history/EditMatchModal.js ---
 const EditMatchModal = ({ isOpen, match, players, onClose, onSave }) => {
     const [editableStats, setEditableStats] = useState({});
 
@@ -553,7 +527,6 @@ const EditMatchModal = ({ isOpen, match, players, onClose, onSave }) => {
     );
 };
 
-// --- modules/matches/LiveMatchTracker.js ---
 const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
     const [timeLeft, setTimeLeft] = useState(durationInMinutes * 60);
     const [isPaused, setIsPaused] = useState(false);
@@ -640,19 +613,17 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
         </>
     );
 };
-// --- modules/matches/MatchFlow.js ---
+
 const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
-    // --- Estados ---
     const [step, setStep] = useState('config');
     const [selectedPlayerIds, setSelectedPlayerIds] = useState(new Set());
-    const [allTeams, setAllTeams] = useState([]); // Array com todos os times sorteados. Ex: [[...timeA], [...timeB], [...timeC]]
+    const [allTeams, setAllTeams] = useState([]);
     const [matchHistory, setMatchHistory] = useState([]);
     const [sessionMatches, setSessionMatches] = useState([]);
     const [numberOfTeams, setNumberOfTeams] = useState(3);
     const [playersPerTeam, setPlayersPerTeam] = useState(5);
     const [drawType, setDrawType] = useState('self');
 
-    // --- Lógica de Seleção de Jogadores ---
     const handlePlayerToggle = (playerId) => {
         setSelectedPlayerIds(prev => {
             const newSet = new Set(prev);
@@ -662,7 +633,6 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
         });
     };
 
-    // --- Lógica de Sorteio de Times ---
     const handleStartSession = () => {
         let availablePlayers = players.filter(p => selectedPlayerIds.has(p.id)).map(p => {
             let overall;
@@ -704,7 +674,6 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
         setStep('pre_game');
     };
 
-    // ✅ --- (RESTAURADO) LÓGICA DE FIM DE PARTIDA E ROTAÇÃO ---
     const handleSingleMatchEnd = async (matchResult) => {
         const savedMatch = await onMatchEnd(matchResult);
         if (savedMatch) setSessionMatches(prev => [...prev, savedMatch]);
@@ -723,7 +692,6 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
         setStep('post_game');
     };
 
-    // ✅ --- (RESTAURADO) LÓGICA PARA MOVER JOGADORES MANUALMENTE ---
     const handleMovePlayer = (playerToMove, fromTeamIndex, toTeamIndex) => {
         setAllTeams(currentTeams => {
             const newTeams = JSON.parse(JSON.stringify(currentTeams));
@@ -732,7 +700,6 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
 
             const playerIndex = fromTeam.findIndex(p => p.id === playerToMove.id);
             if (playerIndex === -1 || toTeam.length >= playersPerTeam) {
-                // Não mover se o jogador não for encontrado ou se o time de destino estiver cheio
                 return currentTeams;
             }
 
@@ -742,17 +709,13 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
             return newTeams;
         });
     };
-
-    // ✅ --- (NOVO) LÓGICA PARA TROCAR O PRÓXIMO ADVERSÁRIO ---
+    
     const handleSwapOpponent = (teamToSwapIndex) => {
         setAllTeams(currentTeams => {
             const newTeams = [...currentTeams];
-            // O próximo oponente é sempre o índice 1. O time a ser trocado está na fila,
-            // então seu índice real na array `allTeams` é `teamToSwapIndex + 2`.
             const actualIndexToSwap = teamToSwapIndex + 2;
 
             if (actualIndexToSwap < newTeams.length) {
-                // Simplesmente troca as posições dos times na array principal
                 [newTeams[1], newTeams[actualIndexToSwap]] = [newTeams[actualIndexToSwap], newTeams[1]];
             }
             return newTeams;
@@ -763,7 +726,6 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
         onSessionEnd(allTeams.flat(), sessionMatches);
     };
 
-    // --- Renderização ---
     const renderTeamCard = (team, name, teamIndex, isEditable = false) => (
         <div className="bg-gray-800 p-4 rounded-lg w-full min-w-[250px]">
             <h3 className="text-yellow-400 font-bold text-xl mb-3">{name}</h3>
@@ -810,7 +772,6 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
                             {waitingTeams.map((team, index) => (
                                 <div key={index} className="flex flex-col gap-2 items-center">
                                     {renderTeamCard(team, `Fila ${index + 1}`, index + 2, true)}
-                                    {/* ✅ (NOVO) BOTÃO PARA TROCAR ADVERSÁRIO */}
                                     <button onClick={() => handleSwapOpponent(index)} className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-1 px-3 text-sm rounded-lg">
                                         Jogar Agora
                                     </button>
@@ -832,10 +793,8 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
         );
     }
     
-    // Tela de Configuração Inicial (sem mudanças)
     return (
         <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-6 border border-gray-700">
-            {/* ...código da tela de configuração não foi alterado... */}
              <h2 className="text-2xl font-bold text-yellow-400 mb-4">Configurar Noite de Futebol</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 <div>
@@ -867,7 +826,6 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
     );
 };
 
-// --- modules/history/MatchHistory.js ---
 const MatchHistory = ({ matches, players, onEditMatch, onDeleteMatch }) => {
     if (matches.length === 0) {
         return (
@@ -902,7 +860,6 @@ const MatchHistory = ({ matches, players, onEditMatch, onDeleteMatch }) => {
     );
 };
 
-// --- modules/rankings/HallOfFame.js ---
 const HallOfFame = ({ players, matches }) => {
     const [filter, setFilter] = useState('all');
 
@@ -995,7 +952,6 @@ const HallOfFame = ({ players, matches }) => {
     );
 };
 
-// --- modules/group/GroupDashboard.js ---
 const GroupDashboard = ({ user, groupId }) => {
     const [groupData, setGroupData] = useState(null);
     const [groupPlayers, setGroupPlayers] = useState([]);
@@ -1062,7 +1018,6 @@ const GroupDashboard = ({ user, groupId }) => {
     );
 };
 
-// --- modules/group/GroupGate.js ---
 const GroupGate = ({ user, onGroupAssociated }) => {
     const [mode, setMode] = useState('select');
     const [groupName, setGroupName] = useState('');
@@ -1137,10 +1092,9 @@ const GroupGate = ({ user, onGroupAssociated }) => {
     );
 };
 
-// --- modules/ratings/PostMatchScreen.js ---
 const PostMatchScreen = ({ session, players, matches, currentUserId, groupId, onFinishRating }) => {
-    const [step, setStep] = useState('rating'); // rating, mvp
-    const [ratings, setRatings] = useState({}); // { playerId: score }
+    const [step, setStep] = useState('rating');
+    const [ratings, setRatings] = useState({});
     const [mvp, setMvp] = useState(null);
     
     const sessionPlayers = useMemo(() => players.filter(p => session.players.includes(p.id)), [players, session.players]);
@@ -1156,8 +1110,6 @@ const PostMatchScreen = ({ session, players, matches, currentUserId, groupId, on
         }
 
         const batch = writeBatch(db);
-
-        // Salva a avaliação
         const sessionRatingRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions/${session.id}/ratings`, currentUserId);
         batch.set(sessionRatingRef, {
             createdAt: new Date(),
@@ -1165,7 +1117,6 @@ const PostMatchScreen = ({ session, players, matches, currentUserId, groupId, on
             mvp,
         });
 
-        // Atualiza os atributos dos jogadores
         for (const player of sessionPlayers) {
             let playerStats = { goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 };
             session.matches.forEach(matchId => {
@@ -1197,7 +1148,6 @@ const PostMatchScreen = ({ session, players, matches, currentUserId, groupId, on
             batch.update(playerRef, { selfOverall: newSelfOverall });
         }
         
-        // Atualiza o status da sessão para 'closed'
         const sessionDocRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions`, session.id);
         batch.update(sessionDocRef, { status: "voting_closed" });
 
@@ -1253,7 +1203,6 @@ const PostMatchScreen = ({ session, players, matches, currentUserId, groupId, on
 
 
 // --- App.js ---
-// ✅ COMPONENTE PRINCIPAL QUE INICIA TUDO
 export default function AppWrapper() {
     return (
         <div className="app-bg min-h-screen">
@@ -1265,304 +1214,286 @@ export default function AppWrapper() {
     );
 }
 
+// ✅ COMPONENTE APP INTERNO (GERENCIA ESTADO E ROTAS) - VERSÃO CORRIGIDA
 function App() {
-    const [user, setUser] = useState(null);
-    const [userData, setUserData] = useState({ groupId: null, isAdmin: false });
-    const [players, setPlayers] = useState([]);
-    const [matches, setMatches] = useState([]);
-    const [playerProfile, setPlayerProfile] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
+    const [user, setUser] = useState(null);
+    const [userData, setUserData] = useState({ groupId: null, isAdmin: false });
+    const [players, setPlayers] = useState([]);
+    const [matches, setMatches] = useState([]);
+    const [playerProfile, setPlayerProfile] = useState(null);
+    const [isLoading, setIsLoading] = useState(true);
 
-    // --- CORREÇÃO 1: Declaração do estado de visualização ---
-    // A variável 'currentView' e sua função 'setCurrentView' não estavam declaradas.
-    // Elas são essenciais para controlar qual tela (Jogadores, Partida, etc.) é exibida.
     const [currentView, setCurrentView] = useState('players');
 
-    // Estados para os modais
-    const [isPlayerModalOpen, setIsPlayerModalOpen] = useState(false);
-    const [editingPlayer, setEditingPlayer] = useState(null);
-    const [playerToDelete, setPlayerToDelete] = useState(null);
-    const [peerReviewPlayer, setPeerReviewPlayer] = useState(null);
-    const [editingMatch, setEditingMatch] = useState(null);
-    const [matchToDelete, setMatchToDelete] = useState(null);
-    const [sessionsToVote, setSessionsToVote] = useState([]);
-    const [sessionToVoteOn, setSessionToVoteOn] = useState(null);
+    const [isPlayerModalOpen, setIsPlayerModalOpen] = useState(false);
+    const [editingPlayer, setEditingPlayer] = useState(null);
+    const [playerToDelete, setPlayerToDelete] = useState(null);
+    const [peerReviewPlayer, setPeerReviewPlayer] = useState(null);
+    const [editingMatch, setEditingMatch] = useState(null);
+    const [matchToDelete, setMatchToDelete] = useState(null);
+    const [sessionsToVote, setSessionsToVote] = useState([]);
+    const [sessionToVoteOn, setSessionToVoteOn] = useState(null);
 
-    // --- CORREÇÃO 2: Desestruturação de 'groupId' e 'isAdmin' ---
-    // Para usar 'groupId' e 'isAdmin' diretamente, extraímos elas do estado 'userData'.
-    // Isso limpa o código e resolve os erros 'is not defined'.
     const { groupId, isAdmin } = userData;
-    
-    const navigate = useNavigate();
-    const location = useLocation();
+    
+    const navigate = useNavigate();
+    const location = useLocation();
 
-    useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (u) => {
-            if (u) {
-                setUser(u);
-                const userDocRef = doc(db, `artifacts/${appId}/users/${u.uid}`);
-                const userDocSnap = await getDoc(userDocRef);
-                if (userDocSnap.exists() && userDocSnap.data().groupId) {
-                    // Atualiza o estado com o groupId encontrado
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, async (u) => {
+            if (u) {
+                setUser(u);
+                const userDocRef = doc(db, `artifacts/${appId}/users/${u.uid}`);
+                const userDocSnap = await getDoc(userDocRef);
+                if (userDocSnap.exists() && userDocSnap.data().groupId) {
                     setUserData(prev => ({ ...prev, groupId: userDocSnap.data().groupId }));
-                } else {
-                    setUserData({ groupId: null, isAdmin: false });
-                    setIsLoading(false);
-                }
-            } else {
-                setUser(null); setUserData({ groupId: null, isAdmin: false }); setIsLoading(false);
-                navigate('/login');
-            }
-        });
-        return () => unsubscribe();
-    }, [navigate]);
+                } else {
+                    setUserData({ groupId: null, isAdmin: false });
+                    setIsLoading(false);
+                }
+            } else {
+                setUser(null); setUserData({ groupId: null, isAdmin: false }); setIsLoading(false);
+                navigate('/login');
+            }
+        });
+        return () => unsubscribe();
+    }, [navigate]);
 
-    useEffect(() => {
-        if (!user || !groupId) {
-            setPlayers([]); setMatches([]); setPlayerProfile(null);
-            if (user) setIsLoading(false);
-            return;
-        }
+    useEffect(() => {
+        if (!user || !groupId) {
+            setPlayers([]); setMatches([]); setPlayerProfile(null);
+            if (user) setIsLoading(false);
+            return;
+        }
 
-        setIsLoading(true);
-        const groupDocRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}`);
-        const unsubGroup = onSnapshot(groupDocRef, (docSnap) => {
-            setUserData(prev => ({ ...prev, isAdmin: docSnap.exists() && docSnap.data().createdBy === user.uid }));
-        });
+        setIsLoading(true);
+        const groupDocRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}`);
+        const unsubGroup = onSnapshot(groupDocRef, (docSnap) => {
+            setUserData(prev => ({ ...prev, isAdmin: docSnap.exists() && docSnap.data().createdBy === user.uid }));
+        });
 
-        const playersColRef = collection(db, `artifacts/${appId}/public/data/groups/${groupId}/players`);
-        const unsubPlayers = onSnapshot(query(playersColRef), (snapshot) => {
-            const allPlayers = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-            setPlayers(allPlayers);
-            setPlayerProfile(allPlayers.find(p => p.createdBy === user.uid) || null);
-            setIsLoading(false);
-        });
-        
-        const matchesColRef = collection(db, `artifacts/${appId}/public/data/groups/${groupId}/matches`);
-        const mSub = onSnapshot(query(matchesColRef), (s) => setMatches(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-        
-        const sessionsRef = collection(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions`);
-        const q = query(sessionsRef, where("status", "==", "voting_open"));
-        const sSub = onSnapshot(q, async (snapshot) => {
-            const now = new Date();
-            const openSessions = snapshot.docs
-                .map(d => ({id: d.id, ...d.data()}))
-                .filter(session => session.votingDeadline.toDate() > now);
+        const playersColRef = collection(db, `artifacts/${appId}/public/data/groups/${groupId}/players`);
+        const unsubPlayers = onSnapshot(query(playersColRef), (snapshot) => {
+            const allPlayers = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+            setPlayers(allPlayers);
+            setPlayerProfile(allPlayers.find(p => p.createdBy === user.uid) || null);
+            setIsLoading(false);
+        });
+        
+        const matchesColRef = collection(db, `artifacts/${appId}/public/data/groups/${groupId}/matches`);
+        const mSub = onSnapshot(query(matchesColRef), (s) => setMatches(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+        
+        const sessionsRef = collection(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions`);
+        const q = query(sessionsRef, where("status", "==", "voting_open"));
+        const sSub = onSnapshot(q, async (snapshot) => {
+            const now = new Date();
+            const openSessions = snapshot.docs
+                .map(d => ({id: d.id, ...d.data()}))
+                .filter(session => session.votingDeadline.toDate() > now);
 
-            const userVotedSessions = [];
-            for (const session of openSessions) {
-                const ratingDocRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions/${session.id}/ratings/${user.uid}`);
-                const ratingDocSnap = await getDoc(ratingDocRef);
-                if (!ratingDocSnap.exists()) {
-                    userVotedSessions.push(session);
-                }
-            }
-            setSessionsToVote(userVotedSessions);
-        });
+            const userVotedSessions = [];
+            for (const session of openSessions) {
+                const ratingDocRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions/${session.id}/ratings/${user.uid}`);
+                const ratingDocSnap = await getDoc(ratingDocRef);
+                if (!ratingDocSnap.exists()) {
+                    userVotedSessions.push(session);
+                }
+            }
+            setSessionsToVote(userVotedSessions);
+        });
 
-        // --- CORREÇÃO 4: Limpeza correta dos listeners do Firebase ---
-        // A função de limpeza chamava 'pSub()', que não existia (era um erro de digitação de 'unsubPlayers').
-        // Também adicionei 'unsubGroup()' para evitar vazamentos de memória.
-        return () => { unsubGroup(); unsubPlayers(); mSub(); sSub(); };
-    }, [user, groupId]); // A dependência 'groupId' agora funciona por causa da desestruturação
+        return () => { unsubGroup(); unsubPlayers(); mSub(); sSub(); };
+    }, [user, groupId]);
 
-    // --- CORREÇÃO 3: Função para associar o grupo ---
-    // A função 'setGroupId' não existia. Criei esta função para
-    // atualizar o estado 'userData' quando o usuário cria ou entra em um grupo.
     const handleGroupAssociated = (newGroupId) => {
         setUserData(prev => ({ ...prev, groupId: newGroupId }));
     };
 
-    const handleSavePlayer = async (playerData) => {
-        if (!groupId || !user) return;
-        const { id, ...data } = playerData;
-        try {
-            if (id) {
-                if (isAdmin) {
-                    await updateDoc(doc(db, `artifacts/${appId}/public/data/groups/${groupId}/players`, id), data);
-                }
-            } else {
-                await addDoc(collection(db, `artifacts/${appId}/public/data/groups/${groupId}/players`), { ...data, createdBy: user.uid });
-            }
-        } catch (e) { console.error("Erro ao salvar jogador:", e); }
-    };
+    const handleSavePlayer = async (playerData) => {
+        if (!groupId || !user) return;
+        const { id, ...data } = playerData;
+        try {
+            if (id) {
+                if (isAdmin) {
+                    await updateDoc(doc(db, `artifacts/${appId}/public/data/groups/${groupId}/players`, id), data);
+                }
+            } else {
+                await addDoc(collection(db, `artifacts/${appId}/public/data/groups/${groupId}/players`), { ...data, createdBy: user.uid });
+            }
+        } catch (e) { console.error("Erro ao salvar jogador:", e); }
+    };
 
-    const confirmDeletePlayer = async () => {
-        if (!groupId || !playerToDelete || !isAdmin) return;
-        try {
-            await deleteDoc(doc(db, `artifacts/${appId}/public/data/groups/${groupId}/players`, playerToDelete.id));
-        } catch (e) { console.error("Erro ao apagar jogador:", e); } finally { setPlayerToDelete(null); }
-    };
+    const confirmDeletePlayer = async () => {
+        if (!groupId || !playerToDelete || !isAdmin) return;
+        try {
+            await deleteDoc(doc(db, `artifacts/${appId}/public/data/groups/${groupId}/players`, playerToDelete.id));
+        } catch (e) { console.error("Erro ao apagar jogador:", e); } finally { setPlayerToDelete(null); }
+    };
 
-    const confirmDeleteMatch = async () => {
-        if(!groupId || !matchToDelete || !isAdmin) return;
-        try {
-            await deleteDoc(doc(db, `artifacts/${appId}/public/data/groups/${groupId}/matches`, matchToDelete.id));
-        } catch(e) {
-            console.error("Erro ao apagar partida:", e);
-        } finally {
-            setMatchToDelete(null);
-        }
-    };
+    const confirmDeleteMatch = async () => {
+        if(!groupId || !matchToDelete || !isAdmin) return;
+        try {
+            await deleteDoc(doc(db, `artifacts/${appId}/public/data/groups/${groupId}/matches`, matchToDelete.id));
+        } catch(e) {
+            console.error("Erro ao apagar partida:", e);
+        } finally {
+            setMatchToDelete(null);
+        }
+    };
 
-    const handleMatchEnd = async (matchData) => {
-        if (!groupId) return null;
-        try {
-            const matchDocRef = await addDoc(collection(db, `artifacts/${appId}/public/data/groups/${groupId}/matches`), matchData);
-            return { id: matchDocRef.id, ...matchData };
-        } catch (e) { console.error("Erro ao salvar a partida:", e); }
-        return null;
-    };
+    const handleMatchEnd = async (matchData) => {
+        if (!groupId) return null;
+        try {
+            const matchDocRef = await addDoc(collection(db, `artifacts/${appId}/public/data/groups/${groupId}/matches`), matchData);
+            return { id: matchDocRef.id, ...matchData };
+        } catch (e) { console.error("Erro ao salvar a partida:", e); }
+        return null;
+    };
 
-    const handleUpdateMatch = async (matchId, newStats) => {
-        if (!groupId) return;
-        try {
-            await updateDoc(doc(db, `artifacts/${appId}/public/data/groups/${groupId}/matches`, matchId), { playerStats: newStats });
-            setEditingMatch(null);
-        } catch (e) { console.error("Erro ao atualizar a partida: ", e); }
-    };
-    
-    const handleSavePeerReview = async (playerToReview, newSkills) => {
-        if (!groupId || !user) return;
-        const playerRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}/players`, playerToReview.id);
-        
-        try {
-            await runTransaction(db, async (transaction) => {
-                const playerDoc = await transaction.get(playerRef);
-                if (!playerDoc.exists()) { throw new Error("Documento não existe!"); }
-                
-                const currentData = playerDoc.data();
-                const currentPeerOverall = currentData.peerOverall || { ratingsCount: 0, skillsSum: {} };
-                
-                const newRatingsCount = currentPeerOverall.ratingsCount + 1;
-                const newSkillsSum = { ...currentPeerOverall.skillsSum };
+    const handleUpdateMatch = async (matchId, newStats) => {
+        if (!groupId) return;
+        try {
+            await updateDoc(doc(db, `artifacts/${appId}/public/data/groups/${groupId}/matches`, matchId), { playerStats: newStats });
+            setEditingMatch(null);
+        } catch (e) { console.error("Erro ao atualizar a partida: ", e); }
+    };
+    
+    const handleSavePeerReview = async (playerToReview, newSkills) => {
+        if (!groupId || !user) return;
+        const playerRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}/players`, playerToReview.id);
+        
+        try {
+            await runTransaction(db, async (transaction) => {
+                const playerDoc = await transaction.get(playerRef);
+                if (!playerDoc.exists()) { throw new Error("Documento não existe!"); }
+                
+                const currentData = playerDoc.data();
+                const currentPeerOverall = currentData.peerOverall || { ratingsCount: 0, skillsSum: {} };
+                
+                const newRatingsCount = currentPeerOverall.ratingsCount + 1;
+                const newSkillsSum = { ...currentPeerOverall.skillsSum };
 
-                Object.keys(newSkills).forEach(skill => {
-                    newSkillsSum[skill] = (newSkillsSum[skill] || 0) + newSkills[skill];
-                });
+                Object.keys(newSkills).forEach(skill => {
+                    newSkillsSum[skill] = (newSkillsSum[skill] || 0) + newSkills[skill];
+                });
 
-                const newAvgSkills = {};
-                Object.keys(newSkillsSum).forEach(skill => {
-                    newAvgSkills[skill] = Math.round(newSkillsSum[skill] / newRatingsCount);
-                });
-                
-                transaction.update(playerRef, { 
-                    peerOverall: {
-                        ratingsCount: newRatingsCount,
-                        skillsSum: newSkillsSum,
-                        avgSkills: newAvgSkills
-                    }
-                });
-            });
-            alert("Avaliação salva com sucesso!");
-        } catch (e) {
-            console.error("Erro ao salvar avaliação:", e);
-            alert("Falha ao salvar avaliação.");
-        }
-    };
+                const newAvgSkills = {};
+                Object.keys(newSkillsSum).forEach(skill => {
+                    newAvgSkills[skill] = Math.round(newSkillsSum[skill] / newRatingsCount);
+                });
+                
+                transaction.update(playerRef, { 
+                    peerOverall: {
+                        ratingsCount: newRatingsCount,
+                        skillsSum: newSkillsSum,
+                        avgSkills: newAvgSkills
+                    }
+                });
+            });
+            alert("Avaliação salva com sucesso!");
+        } catch (e) {
+            console.error("Erro ao salvar avaliação:", e);
+            alert("Falha ao salvar avaliação.");
+        }
+    };
 
+    const handleSessionEnd = async (playedPlayers, allMatches) => {
+         if (!groupId) return;
+        const now = new Date();
+        const deadline = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 horas
+        
+        await addDoc(collection(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions`), {
+            createdAt: now,
+            status: 'voting_open',
+            votingDeadline: deadline,
+            players: playedPlayers.map(p => p.id),
+            matches: allMatches.map(m => m.id),
+        });
 
-    const handleSessionEnd = async (playedPlayers, allMatches) => {
-         if (!groupId) return;
-        const now = new Date();
-        const deadline = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 horas a partir de agora
-        
-        await addDoc(collection(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions`), {
-            createdAt: now,
-            status: 'voting_open',
-            votingDeadline: deadline,
-            players: playedPlayers.map(p => p.id),
-            matches: allMatches.map(m => m.id),
-        });
+        setCurrentView('players');
+        alert("Sessão de jogos encerrada! A votação está aberta por 24 horas para todos os jogadores.");
+    };
 
-        setCurrentView('players');
-        alert("Sessão de jogos encerrada! A votação está aberta por 24 horas para todos os jogadores.");
-    };
+    const openEditModal = (p) => { setEditingPlayer(p); setIsPlayerModalOpen(true); };
+    const openAddModal = () => { setEditingPlayer(null); setIsPlayerModalOpen(true); };
+    const handleLogout = () => signOut(auth);
+    
+    const handleStartVote = (session) => {
+        setSessionToVoteOn(session);
+        setCurrentView('session_rating');
+    };
 
-    const openEditModal = (p) => { setEditingPlayer(p); setIsPlayerModalOpen(true); };
-    const openAddModal = () => { setEditingPlayer(null); setIsPlayerModalOpen(true); };
-    const handleLogout = () => signOut(auth);
-    
-    const handleStartVote = (session) => {
-        setSessionToVoteOn(session);
-        setCurrentView('session_rating');
-    };
+    const renderContent = () => {
+        if (isLoading) { return <div className="text-center p-10 text-white">Carregando...</div>; }
+        if (!user) { return <AuthScreen />; }
+        if (!groupId) { return <GroupGate user={user} onGroupAssociated={handleGroupAssociated} />; }
+        if (!playerProfile) { 
+            return <CreatePlayerProfile user={user} onSave={handleSavePlayer} />; 
+        }
+    
+        if (currentView === 'session_rating') {
+            return <PostMatchScreen session={sessionToVoteOn} players={players} matches={matches} currentUserId={user.uid} groupId={groupId} onFinishRating={() => { setCurrentView('players'); setSessionToVoteOn(null); }} />;
+        }
+        
+        return (
+            <>
+                <nav className="flex justify-center border-b border-gray-700 mb-8 flex-wrap">
+                    <button onClick={() => setCurrentView('players')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'players' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideUsers className="inline-block mr-1 sm:mr-2" /> Jogadores</button>
+                    {isAdmin && <button onClick={() => setCurrentView('match')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'match' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideSwords className="inline-block mr-1 sm:mr-2" /> Partida</button>}
+                    {isAdmin && <button onClick={() => setCurrentView('history')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'history' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideHistory className="inline-block mr-1 sm:mr-2" /> Histórico</button>}
+                    <button onClick={() => setCurrentView('hall_of_fame')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'hall_of_fame' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideTrophy className="inline-block mr-1 sm:mr-2" /> Hall da Fama</button>
+                    <button onClick={() => setCurrentView('group')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'group' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideUsers className="inline-block mr-1 sm:mr-2" /> Meu Grupo</button>
+                    <button onClick={handleLogout} className="py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg text-red-500 hover:text-red-400 transition-colors duration-200"><LucideLogOut className="inline-block mr-1 sm:mr-2" /> Sair</button>
+                </nav>
+                {!isAdmin && sessionsToVote.length > 0 && currentView !== 'session_rating' && (
+                     <div className="w-full p-4 mb-6 bg-blue-900/50 border-2 border-cyan-400 rounded-xl text-center">
+                        <h3 className="text-2xl font-bold text-cyan-400 mb-4">Votações Abertas</h3>
+                        <p className="text-gray-300 mb-4">Sua avaliação é importante! Dê suas notas para a(s) seguinte(s) pelada(s):</p>
+                        <div className="flex flex-col gap-2">
+                            {sessionsToVote.map(session => (
+                                <button 
+                                    key={session.id} 
+                                    onClick={() => handleStartVote(session)} 
+                                    className="bg-cyan-500 hover:bg-cyan-600 text-black font-bold py-2 px-4 rounded-lg"
+                                >
+                                    Votar na Pelada de {new Date(session.createdAt.toDate()).toLocaleDateString()}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+                <main>
+                    {currentView === 'players' && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                           {isAdmin && <div onClick={openAddModal} className="cursor-pointer w-full max-w-[280px] mx-auto h-[400px] border-4 border-dashed border-gray-700 rounded-2xl flex items-center justify-center text-gray-500 hover:border-yellow-400 hover:text-yellow-400 transition-colors duration-300">
+                                <LucideUserPlus className="w-20 h-20" />
+                            </div>}
+                            {players.map(p => <PlayerCard key={p.id} player={p} onEdit={openEditModal} onDelete={setPlayerToDelete} onOpenPeerReview={setPeerReviewPlayer} isAdmin={isAdmin}/>)}
+                        </div>
+                    )}
+                    {currentView === 'match' && isAdmin && <MatchFlow players={players} onMatchEnd={handleMatchEnd} onSessionEnd={handleSessionEnd} />}
+                    {currentView === 'history' && isAdmin && <MatchHistory matches={matches} players={players} onEditMatch={setEditingMatch} onDeleteMatch={setMatchToDelete}/>}
+                    {currentView === 'hall_of_fame' && <HallOfFame players={players} matches={matches} />}
+                    {currentView === 'group' && <GroupDashboard user={user} groupId={groupId} />}
+                </main>
+                <PlayerModal isOpen={isPlayerModalOpen} onClose={() => setIsPlayerModalOpen(false)} onSave={handleSavePlayer} player={editingPlayer} isAdmin={isAdmin} />
+                <EditMatchModal isOpen={!!editingMatch} match={editingMatch} players={players} onClose={() => setEditingMatch(null)} onSave={handleUpdateMatch} />
+                <ConfirmationModal isOpen={!!playerToDelete} title="Confirmar Exclusão" message={`Tem certeza que deseja apagar o jogador ${playerToDelete?.name}?`} onConfirm={confirmDeletePlayer} onClose={() => setPlayerToDelete(null)} />
+                <ConfirmationModal isOpen={!!matchToDelete} title="Confirmar Exclusão" message={`Tem certeza que deseja apagar esta partida? Esta ação não pode ser desfeita.`} onConfirm={confirmDeleteMatch} onClose={() => setMatchToDelete(null)} />
+                <PeerReviewModal isOpen={!!peerReviewPlayer} player={peerReviewPlayer} onClose={() => setPeerReviewPlayer(null)} onSave={handleSavePeerReview}/>
+            </>
+        );
+    };
 
-    const renderContent = () => {
-        if (isLoading) { return <div className="text-center p-10 text-white">Carregando...</div>; }
-        if (!user) { return <AuthScreen />; }
-        // Passa a função correta 'handleGroupAssociated' em vez da 'setGroupId' que não existe
-        if (!groupId) { return <GroupGate user={user} onGroupAssociated={handleGroupAssociated} />; }
-        if (!playerProfile) { 
-            return <CreatePlayerProfile user={user} onSave={handleSavePlayer} />; 
-        }
-    
-        if (currentView === 'session_rating') {
-            return <PostMatchScreen session={sessionToVoteOn} players={players} matches={matches} currentUserId={user.uid} groupId={groupId} onFinishRating={() => { setCurrentView('players'); setSessionToVoteOn(null); }} />;
-        }
-
-        return (
-            <>
-                <nav className="flex justify-center border-b border-gray-700 mb-8 flex-wrap">
-                    <button onClick={() => setCurrentView('players')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'players' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideUsers className="inline-block mr-1 sm:mr-2" /> Jogadores</button>
-                    {isAdmin && <button onClick={() => setCurrentView('match')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'match' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideSwords className="inline-block mr-1 sm:mr-2" /> Partida</button>}
-                    {isAdmin && <button onClick={() => setCurrentView('history')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'history' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideHistory className="inline-block mr-1 sm:mr-2" /> Histórico</button>}
-                    <button onClick={() => setCurrentView('hall_of_fame')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'hall_of_fame' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideTrophy className="inline-block mr-1 sm:mr-2" /> Hall da Fama</button>
-                    <button onClick={() => setCurrentView('group')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'group' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideUsers className="inline-block mr-1 sm:mr-2" /> Meu Grupo</button>
-                    <button onClick={handleLogout} className="py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg text-red-500 hover:text-red-400 transition-colors duration-200"><LucideLogOut className="inline-block mr-1 sm:mr-2" /> Sair</button>
-                </nav>
-                {!isAdmin && sessionsToVote.length > 0 && currentView !== 'session_rating' && (
-                     <div className="w-full p-4 mb-6 bg-blue-900/50 border-2 border-cyan-400 rounded-xl text-center">
-                        <h3 className="text-2xl font-bold text-cyan-400 mb-4">Votações Abertas</h3>
-                        <p className="text-gray-300 mb-4">Sua avaliação é importante! Dê suas notas para a(s) seguinte(s) pelada(s):</p>
-                        <div className="flex flex-col gap-2">
-                            {sessionsToVote.map(session => (
-                                <button 
-                                    key={session.id} 
-                                    onClick={() => handleStartVote(session)} 
-                                    className="bg-cyan-500 hover:bg-cyan-600 text-black font-bold py-2 px-4 rounded-lg"
-                                >
-                                    Votar na Pelada de {new Date(session.createdAt.toDate()).toLocaleDateString()}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                )}
-                <main>
-                    {currentView === 'players' && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-                           {isAdmin && <div onClick={openAddModal} className="cursor-pointer w-full max-w-[280px] mx-auto h-[400px] border-4 border-dashed border-gray-700 rounded-2xl flex items-center justify-center text-gray-500 hover:border-yellow-400 hover:text-yellow-400 transition-colors duration-300">
-                                <LucideUserPlus className="w-20 h-20" />
-                            </div>}
-                            {players.map(p => <PlayerCard key={p.id} player={p} onEdit={openEditModal} onDelete={setPlayerToDelete} onOpenPeerReview={setPeerReviewPlayer} isAdmin={isAdmin}/>)}
-                        </div>
-                    )}
-                    {currentView === 'match' && isAdmin && <MatchFlow players={players} onMatchEnd={handleMatchEnd} onSessionEnd={handleSessionEnd} />}
-                    {currentView === 'history' && isAdmin && <MatchHistory matches={matches} players={players} onEditMatch={setEditingMatch} onDeleteMatch={setMatchToDelete}/>}
-                    {currentView === 'hall_of_fame' && <HallOfFame players={players} matches={matches} />}
-                    {currentView === 'group' && <GroupDashboard user={user} groupId={groupId} />}
-                </main>
-                <PlayerModal isOpen={isPlayerModalOpen} onClose={() => setIsPlayerModalOpen(false)} onSave={handleSavePlayer} player={editingPlayer} isAdmin={isAdmin} />
-                <EditMatchModal isOpen={!!editingMatch} match={editingMatch} players={players} onClose={() => setEditingMatch(null)} onSave={handleUpdateMatch} />
-                <ConfirmationModal isOpen={!!playerToDelete} title="Confirmar Exclusão" message={`Tem certeza que deseja apagar o jogador ${playerToDelete?.name}?`} onConfirm={confirmDeletePlayer} onClose={() => setPlayerToDelete(null)} />
-                <ConfirmationModal isOpen={!!matchToDelete} title="Confirmar Exclusão" message={`Tem certeza que deseja apagar esta partida? Esta ação não pode ser desfeita.`} onConfirm={confirmDeleteMatch} onClose={() => setMatchToDelete(null)} />
-                <PeerReviewModal isOpen={!!peerReviewPlayer} player={peerReviewPlayer} onClose={() => setPeerReviewPlayer(null)} onSave={handleSavePeerReview}/>
-            </>
-        );
-    };
-
-    return (
-        <div className="app-bg">
-             <style>{`
-            /* ... Estilos ... */
-          `}</style>
-            <header className="mb-8 flex flex-col items-center justify-center text-center pt-4 sm:pt-6 lg:pt-8">
-                <h1 className="text-4xl sm:text-5xl font-black text-white uppercase tracking-widest" style={{ textShadow: '0 0 15px rgba(250, 204, 21, 0.5)' }}>Rei da <span className="text-yellow-400">Pelada</span></h1>
-                <p className="text-center text-gray-400 mt-2">Gerencie, compita e domine o campo.</p>
-            </header>
-            <div className="p-4 sm:p-6 lg:p-8">
-                {renderContent()}
-            </div>
-        </div>
-    );
+    return (
+        <div className="app-bg">
+            <header className="mb-8 flex flex-col items-center justify-center text-center pt-4 sm:pt-6 lg:pt-8">
+                <h1 className="text-4xl sm:text-5xl font-black text-white uppercase tracking-widest" style={{ textShadow: '0 0 15px rgba(250, 204, 21, 0.5)' }}>Rei da <span className="text-yellow-400">Pelada</span></h1>
+                <p className="text-center text-gray-400 mt-2">Gerencie, compita e domine o campo.</p>
+            </header>
+            <div className="p-4 sm:p-6 lg:p-8">
+                {renderContent()}
+            </div>
+        </div>
+    );
 }
