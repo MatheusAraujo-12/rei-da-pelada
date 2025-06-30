@@ -614,16 +614,16 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
     );
 };
 
+// --- modules/matches/MatchFlow.js --- (VERSÃO ATUALIZADA)
 const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
     const [step, setStep] = useState('config');
     const [selectedPlayerIds, setSelectedPlayerIds] = useState(new Set());
-    const [allTeams, setAllTeams] = useState([]);
+    const [allTeams, setAllTeams] = useState([]); 
     const [matchHistory, setMatchHistory] = useState([]);
     const [sessionMatches, setSessionMatches] = useState([]);
     const [numberOfTeams, setNumberOfTeams] = useState(3);
     const [playersPerTeam, setPlayersPerTeam] = useState(5);
     const [drawType, setDrawType] = useState('self');
-
     const handlePlayerToggle = (playerId) => {
         setSelectedPlayerIds(prev => {
             const newSet = new Set(prev);
@@ -710,22 +710,41 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
         });
     };
     
-    const handleSwapOpponent = (teamToSwapIndex) => {
+    // ✅ 1. NOVA FUNÇÃO: FAZER O VENCEDOR SAIR
+    const handleWinnerExits = () => {
         setAllTeams(currentTeams => {
+            if (currentTeams.length < 2) return currentTeams; // Não faz nada se tiver menos de 2 times
             const newTeams = [...currentTeams];
-            const actualIndexToSwap = teamToSwapIndex + 2;
-
-            if (actualIndexToSwap < newTeams.length) {
-                [newTeams[1], newTeams[actualIndexToSwap]] = [newTeams[actualIndexToSwap], newTeams[1]];
-            }
+            const winner = newTeams.shift(); // Remove o vencedor (time 0) do início
+            newTeams.push(winner);          // Adiciona o vencedor no final da fila
             return newTeams;
         });
     };
-    
+
+    // ✅ 2. NOVA FUNÇÃO: REORDENAR A FILA DE ESPERA
+    const handleReorderQueue = (indexToMove, direction) => {
+        setAllTeams(currentTeams => {
+            const newTeams = [...currentTeams];
+            // O índice real na array `allTeams` é `indexToMove + 2`, pois os 2 primeiros são os que estão em quadra.
+            const actualIndex = indexToMove + 2;
+
+            if (direction === 'up' && actualIndex > 1) { // Só pode subir se não for o desafiante (índice 1)
+                // Troca de posição com o time anterior
+                [newTeams[actualIndex], newTeams[actualIndex - 1]] = [newTeams[actualIndex - 1], newTeams[actualIndex]];
+            } else if (direction === 'down' && actualIndex < newTeams.length - 1) {
+                // Troca de posição com o time seguinte
+                [newTeams[actualIndex], newTeams[actualIndex + 1]] = [newTeams[actualIndex + 1], newTeams[actualIndex]];
+            }
+            
+            return newTeams;
+        });
+    };
+
     const handleForceEndSession = () => {
         onSessionEnd(allTeams.flat(), sessionMatches);
     };
 
+    // --- Renderização (sem alterações no renderTeamCard) ---
     const renderTeamCard = (team, name, teamIndex, isEditable = false) => (
         <div className="bg-gray-800 p-4 rounded-lg w-full min-w-[250px]">
             <h3 className="text-yellow-400 font-bold text-xl mb-3">{name}</h3>
@@ -735,8 +754,10 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
                         <span>{p.name} <span className="text-xs text-gray-400">OVR {p.overall}</span></span>
                         {isEditable && (
                             <div className="flex gap-1">
-                                {teamIndex !== 0 && <button onClick={() => handleMovePlayer(p, teamIndex, 0)} title="Mover para Time 1" className="p-1 bg-blue-600 rounded text-xs leading-none">T1</button>}
-                                {teamIndex !== 1 && <button onClick={() => handleMovePlayer(p, teamIndex, 1)} title="Mover para Time 2" className="p-1 bg-green-600 rounded text-xs leading-none">T2</button>}
+                                {allTeams.map((_, i) => (
+                                    teamIndex !== i && 
+                                    <button key={i} onClick={() => handleMovePlayer(p, teamIndex, i)} title={`Mover para Time ${i+1}`} className="p-1 bg-blue-600 rounded text-xs leading-none">T{i+1}</button>
+                                ))}
                             </div>
                         )}
                     </li>
@@ -744,6 +765,8 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
             </ul>
         </div>
     );
+
+    // --- Renderização principal do componente (com as novidades) ---
 
     if (step === 'in_game') {
         return <LiveMatchTracker teams={{ teamA: allTeams[0], teamB: allTeams[1] }} onEndMatch={handleSingleMatchEnd} durationInMinutes={10} />;
@@ -760,9 +783,19 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
                     {step === 'post_game' ? `Fim da Partida ${matchHistory.length}` : `Prontos para Começar!`}
                 </h2>
 
-                <div className="flex flex-col md:flex-row gap-4 mb-6 justify-center">
-                    {teamA && renderTeamCard(teamA, step === 'post_game' ? "Vencedor (em quadra)" : "Time 1", 0, true)}
-                    {teamB ? renderTeamCard(teamB, step === 'post_game' ? "Próximo Desafiante" : "Time 2", 1, true) : <div className="bg-gray-800 p-4 rounded-lg w-full flex items-center justify-center"><h3 className="text-yellow-400 font-bold text-xl">Sem desafiantes</h3></div>}
+                <div className="flex flex-col md:flex-row gap-4 mb-6 justify-center items-start">
+                    {teamA && (
+                        <div className="flex flex-col items-center gap-2">
+                            {renderTeamCard(teamA, step === 'post_game' ? "Vencedor (em quadra)" : "Time 1", 0, true)}
+                            {/* ✅ 3. NOVO BOTÃO: APARECE NA TELA PÓS-JOGO */}
+                            {step === 'post_game' && (
+                                <button onClick={handleWinnerExits} className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
+                                    Fazer Vencedor Sair
+                                </button>
+                            )}
+                        </div>
+                    )}
+                    {teamB ? renderTeamCard(teamB, "Próximo Desafiante", 1, true) : <div className="bg-gray-800 p-4 rounded-lg w-full flex items-center justify-center"><h3 className="text-yellow-400 font-bold text-xl">Sem desafiantes</h3></div>}
                 </div>
                 
                 {waitingTeams.length > 0 && (
@@ -772,9 +805,15 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
                             {waitingTeams.map((team, index) => (
                                 <div key={index} className="flex flex-col gap-2 items-center">
                                     {renderTeamCard(team, `Fila ${index + 1}`, index + 2, true)}
-                                    <button onClick={() => handleSwapOpponent(index)} className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-1 px-3 text-sm rounded-lg">
-                                        Jogar Agora
-                                    </button>
+                                    {/* ✅ 4. NOVOS BOTÕES: REORDENAR FILA */}
+                                    <div className="flex gap-2">
+                                        <button onClick={() => handleReorderQueue(index, 'up')} disabled={index === 0} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-1 px-3 text-sm rounded-lg disabled:opacity-50">
+                                            Subir
+                                        </button>
+                                        <button onClick={() => handleReorderQueue(index, 'down')} disabled={index === waitingTeams.length - 1} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-1 px-3 text-sm rounded-lg disabled:opacity-50">
+                                            Descer
+                                        </button>
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -793,9 +832,10 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
         );
     }
     
+    // Tela de Configuração Inicial (sem mudanças)
     return (
         <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-6 border border-gray-700">
-             <h2 className="text-2xl font-bold text-yellow-400 mb-4">Configurar Noite de Futebol</h2>
+            <h2 className="text-2xl font-bold text-yellow-400 mb-4">Configurar Noite de Futebol</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 <div>
                     <label className="block font-semibold mb-2 text-white">Jogadores por time:</label>
@@ -825,7 +865,6 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
         </div>
     );
 };
-
 const MatchHistory = ({ matches, players, onEditMatch, onDeleteMatch }) => {
     if (matches.length === 0) {
         return (
