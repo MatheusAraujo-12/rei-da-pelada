@@ -487,7 +487,7 @@ const EditMatchModal = ({ isOpen, match, players, onClose, onSave }) => {
         });
     };
 
-    const allPlayerIdsInMatch = [...match.teams.teamA.map(p => p.id), ...match.teams.teamB.map(p => p.id)];
+    const allPlayerIdsInMatch = match ? [...match.teams.teamA.map(p => p.id), ...match.teams.teamB.map(p => p.id)] : [];
     const playerDetails = allPlayerIdsInMatch.map(id => players.find(p => p.id === id)).filter(Boolean);
 
     return (
@@ -624,18 +624,20 @@ const HallOfFame = ({ players, matches }) => {
             case 'year': startDate = new Date(now.getFullYear(), 0, 1); break;
             default: return matches;
         }
-        return matches.filter(match => new Date(match.date) >= startDate);
+        return matches.filter(match => match.date && new Date(match.date) >= startDate);
     }, [matches, filter]);
 
     const rankings = useMemo(() => {
         const aggregatedStats = {};
         players.forEach(p => { aggregatedStats[p.id] = { name: p.name, position: p.position, goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 }; });
         filteredMatches.forEach(match => {
-            for (const playerId in match.playerStats) {
-                if (aggregatedStats[playerId]) {
-                    Object.keys(match.playerStats[playerId]).forEach(stat => {
-                        aggregatedStats[playerId][stat] += match.playerStats[playerId][stat] || 0;
-                    });
+            if(match.playerStats) {
+                for (const playerId in match.playerStats) {
+                    if (aggregatedStats[playerId]) {
+                        Object.keys(match.playerStats[playerId]).forEach(stat => {
+                            aggregatedStats[playerId][stat] += match.playerStats[playerId][stat] || 0;
+                        });
+                    }
                 }
             }
         });
@@ -877,7 +879,7 @@ const SessionReportDetail = ({ session, onBack }) => {
     );
 };
 
-const SessionHistoryList = ({ sessions, onSelectSession }) => {
+const SessionHistoryList = ({ sessions, onSelectSession, onDeleteSession, isAdmin }) => {
     if (sessions.length === 0) {
         return <div className="text-center text-gray-400 p-8">Nenhuma sessão anterior encontrada.</div>;
     }
@@ -886,23 +888,64 @@ const SessionHistoryList = ({ sessions, onSelectSession }) => {
         <div className="space-y-4">
             <h2 className="text-3xl font-bold text-yellow-400 mb-6 text-center">Histórico de Sessões</h2>
             {sessions.map(session => (
-                <button 
-                    key={session.id}
-                    onClick={() => onSelectSession(session)}
-                    className="w-full text-left bg-gray-800 p-4 rounded-lg border border-gray-700 hover:border-yellow-500 transition-all"
-                >
-                    <p className="font-bold text-xl text-white">
-                        Pelada de {session.date ? new Date(session.date.seconds * 1000).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }) : 'Data indefinida'}
-                    </p>
-                    <p className="text-sm text-gray-400">{session.players ? Object.keys(session.players).length : 0} participantes</p>
-                </button>
+                <div key={session.id} className="flex items-center gap-2">
+                    <button 
+                        onClick={() => onSelectSession(session)}
+                        className="flex-grow text-left bg-gray-800 p-4 rounded-lg border border-gray-700 hover:border-yellow-500 transition-all"
+                    >
+                        <p className="font-bold text-xl text-white">
+                            Pelada de {session.date ? new Date(session.date.seconds * 1000).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }) : 'Data indefinida'}
+                        </p>
+                        <p className="text-sm text-gray-400">{session.players ? Object.keys(session.players).length : 0} participantes</p>
+                    </button>
+                    {isAdmin && (
+                        <button onClick={() => onDeleteSession(session)} className="p-4 bg-red-800 hover:bg-red-700 rounded-lg" title="Apagar Sessão">
+                            <LucideTrash2 />
+                        </button>
+                    )}
+                </div>
             ))}
         </div>
     );
 };
-// CÓDIGO COMPLETO E ATUALIZADO PARA O COMPONENTE MatchFlow
-const MatchFlow = ({ players, groupId, onSessionEnd }) => {
-    // --- Estados ---
+
+const MatchHistory = ({ matches, onEditMatch, onDeleteMatch }) => {
+    if (!matches || matches.length === 0) {
+        return (
+            <div className="text-center py-16 px-6 bg-gray-900/50 rounded-2xl border-2 border-dashed border-gray-700">
+                <h3 className="text-xl font-semibold text-gray-300">Nenhuma partida encontrada</h3>
+                <p className="text-gray-500 mt-2">Jogue algumas partidas para que elas apareçam aqui.</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-4">
+            <h2 className="text-3xl font-bold text-yellow-400 mb-6 text-center">Histórico de Partidas Individuais</h2>
+            {matches.map(match => (
+                <div key={match.id} className="bg-gray-800 p-4 rounded-lg flex justify-between items-center flex-wrap gap-2">
+                    <div>
+                        <p className="text-sm text-gray-400">{new Date(match.date).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</p>
+                        <p className="text-lg font-bold text-white">
+                            {match.teams.teamA.map(p => p.name).join(', ')} 
+                            <span className="text-yellow-400 mx-2">{match.score.teamA}</span> 
+                            vs 
+                            <span className="text-yellow-400 mx-2">{match.score.teamB}</span> 
+                            {match.teams.teamB.map(p => p.name).join(', ')}
+                        </p>
+                    </div>
+                    <div className="flex gap-2">
+                        <button onClick={() => onEditMatch(match)} className="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-lg flex items-center gap-2 text-sm"><LucideEdit className="w-5 h-5" /></button>
+                        <button onClick={() => onDeleteMatch(match)} className="bg-red-600 hover:bg-red-500 text-white p-2 rounded-lg flex items-center gap-2 text-sm"><LucideTrash2 className="w-5 h-5" /></button>
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+};
+
+
+const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
     const [step, setStep] = useState('config');
     const [selectedPlayerIds, setSelectedPlayerIds] = useState(new Set());
     const [allTeams, setAllTeams] = useState([]);
@@ -927,7 +970,6 @@ const MatchFlow = ({ players, groupId, onSessionEnd }) => {
     const handleStartSession = () => {
         setIsEditModeActive(false);
         setWinnerStreak({ teamId: null, count: 0 });
-        
         const availablePlayers = players.filter(p => selectedPlayerIds.has(p.id)).map(p => {
             let overall;
             if (drawType === 'admin' && p.adminOverall) overall = calculateOverall(p.adminOverall);
@@ -935,36 +977,30 @@ const MatchFlow = ({ players, groupId, onSessionEnd }) => {
             else overall = calculateOverall(p.selfOverall);
             return { ...p, overall };
         });
-
-        if (availablePlayers.length < numberOfTeams) {
-            alert(`São necessários pelo menos ${numberOfTeams} jogadores para formar ${numberOfTeams} times.`);
+        const playersPerTeamDynamic = Math.floor(availablePlayers.length / numberOfTeams);
+        if (availablePlayers.length < 2 || playersPerTeamDynamic === 0) {
+            alert("Jogadores insuficientes para formar pelo menos 2 times.");
             return;
         }
-
         const posOrder = { 'Goleiro': 1, 'Defensor': 2, 'Volante': 3, 'Meio-Campo': 4, 'Ponta': 5, 'Atacante': 6 };
-        // 1. Ordena os jogadores por posição e depois do melhor para o pior overall
         availablePlayers.sort((a, b) => (posOrder[a.detailedPosition] || 99) - (posOrder[b.detailedPosition] || 99) || b.overall - a.overall);
-
-        // 2. Inicializa os times com a propriedade 'totalOverall' para o cálculo de balanceamento
+        
         let teams = Array.from({ length: numberOfTeams }, () => ({ players: [], totalOverall: 0 }));
         
-        // 3. ✅ LÓGICA DE DISTRIBUIÇÃO CORRIGIDA (Sorteio "Cobrinha")
         availablePlayers.forEach(player => {
-            // Encontra o time com a menor soma de overall para receber o próximo jogador
             teams.sort((a, b) => a.totalOverall - b.totalOverall);
             const targetTeam = teams[0];
-            
-            targetTeam.players.push(player);
-            targetTeam.totalOverall += player.overall; // Atualiza o overall do time
+            if (targetTeam) {
+                targetTeam.players.push(player);
+                targetTeam.totalOverall += player.overall;
+            }
         });
 
         const finalTeams = teams.filter(t => t.players.length > 0);
-
         if (finalTeams.length < 2) {
             alert("Não foi possível formar pelo menos 2 times completos.");
             return;
         }
-
         const initialStats = {};
         availablePlayers.forEach(p => {
             initialStats[p.id] = { name: p.name, wins: 0, draws: 0, losses: 0, goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 };
@@ -977,7 +1013,8 @@ const MatchFlow = ({ players, groupId, onSessionEnd }) => {
     
     const handleSingleMatchEnd = async (matchResult) => {
         setIsEditModeActive(false);
-        setMatchHistory(prev => [...prev, matchResult]);
+        const savedMatch = await onMatchEnd(matchResult);
+        setMatchHistory(prev => [...prev, { ...matchResult, id: savedMatch?.id }]);
 
         setSessionPlayerStats(prevStats => {
             const newStats = JSON.parse(JSON.stringify(prevStats));
@@ -1346,6 +1383,7 @@ const MatchFlow = ({ players, groupId, onSessionEnd }) => {
         </div>
     );
 };
+
 // --- COMPONENTE PRINCIPAL ---
 
 export default function AppWrapper() {
@@ -1375,6 +1413,7 @@ function App() {
     const [savedSessions, setSavedSessions] = useState([]);
     const [viewingSession, setViewingSession] = useState(null);
     const [editingMatch, setEditingMatch] = useState(null);
+    const [sessionToDelete, setSessionToDelete] = useState(null);
     
     const navigate = useNavigate();
     const { groupId, isAdmin } = userData;
@@ -1476,6 +1515,17 @@ function App() {
         }
     };
 
+    const confirmDeleteSession = async () => {
+        if (!groupId || !sessionToDelete || !isAdmin) return;
+        try {
+            await deleteDoc(doc(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions`, sessionToDelete.id));
+        } catch (e) {
+            console.error("Erro ao apagar sessão:", e);
+        } finally {
+            setSessionToDelete(null);
+        }
+    };
+
     const handleUpdateMatch = async (matchId, newStats) => {
         if (!groupId) return;
         try {
@@ -1526,6 +1576,17 @@ function App() {
         }
     };
 
+    const handleMatchEnd = async (matchData) => {
+        if (!groupId) return null;
+        try {
+            const matchDocRef = await addDoc(collection(db, `artifacts/${appId}/public/data/groups/${groupId}/matches`), matchData);
+            return { id: matchDocRef.id, ...matchData };
+        } catch (e) { 
+            console.error("Erro ao salvar a partida:", e);
+            return null;
+        }
+    };
+
     const handleSessionEnd = () => {
         setCurrentView('sessions');
         setViewingSession(null);
@@ -1551,7 +1612,7 @@ function App() {
                     <button onClick={() => setCurrentView('players')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'players' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideUsers className="inline-block mr-1 sm:mr-2" /> Jogadores</button>
                     {isAdmin && <button onClick={() => setCurrentView('match')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'match' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideSwords className="inline-block mr-1 sm:mr-2" /> Partida</button>}
                     <button onClick={() => { setCurrentView('sessions'); setViewingSession(null); }} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'sessions' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideHistory className="inline-block mr-1 sm:mr-2" /> Sessões</button>
-                    {isAdmin && <button onClick={() => setCurrentView('history')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'history' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideHistory className="inline-block mr-1 sm:mr-2" /> Histórico</button>}
+                    {isAdmin && <button onClick={() => setCurrentView('history')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'history' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideHistory className="inline-block mr-1 sm:mr-2" /> Partidas</button>}
                     <button onClick={() => setCurrentView('hall_of_fame')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'hall_of_fame' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideTrophy className="inline-block mr-1 sm:mr-2" /> Hall da Fama</button>
                     <button onClick={() => setCurrentView('group')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'group' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideUsers className="inline-block mr-1 sm:mr-2" /> Meu Grupo</button>
                     <button onClick={handleLogout} className="py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg text-red-500 hover:text-red-400 transition-colors duration-200"><LucideLogOut className="inline-block mr-1 sm:mr-2" /> Sair</button>
@@ -1565,27 +1626,14 @@ function App() {
                         </div>
                     )}
                     
-                    {currentView === 'match' && isAdmin && <MatchFlow players={players} groupId={groupId} onSessionEnd={handleSessionEnd} />}
+                    {currentView === 'match' && isAdmin && <MatchFlow players={players} groupId={groupId} onMatchEnd={handleMatchEnd} onSessionEnd={handleSessionEnd} />}
                     
                     {currentView === 'sessions' && !viewingSession && (
-                        <SessionHistoryList sessions={savedSessions} onSelectSession={setViewingSession} />
+                        <SessionHistoryList sessions={savedSessions} onSelectSession={setViewingSession} onDeleteSession={setSessionToDelete} isAdmin={isAdmin} />
                     )}
 
                     {currentView === 'history' && isAdmin && (
-                        <div className="space-y-4">
-                            {matches.map(match => (
-                                <div key={match.id} className="bg-gray-800 p-4 rounded-lg flex justify-between items-center">
-                                    <div>
-                                        <p className="font-bold">{new Date(match.date).toLocaleString('pt-BR')}</p>
-                                        <p>{match.teams.teamA.map(p => p.name).join(', ')} {match.score.teamA} vs {match.score.teamB} {match.teams.teamB.map(p => p.name).join(', ')}</p>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <button onClick={() => setEditingMatch(match)} className="p-2 bg-blue-600 rounded-lg"><LucideEdit /></button>
-                                        <button onClick={() => setMatchToDelete(match)} className="p-2 bg-red-600 rounded-lg"><LucideTrash2 /></button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                       <MatchHistory matches={matches} onEditMatch={setEditingMatch} onDeleteMatch={setMatchToDelete}/>
                     )}
                     
                     {currentView === 'hall_of_fame' && <HallOfFame players={players} matches={matches} />}
@@ -1596,6 +1644,7 @@ function App() {
                 <PlayerModal isOpen={isPlayerModalOpen} onClose={() => setIsPlayerModalOpen(false)} onSave={handleSavePlayer} player={editingPlayer} isAdmin={isAdmin} />
                 <ConfirmationModal isOpen={!!playerToDelete} title="Confirmar Exclusão" message={`Tem certeza que deseja apagar o jogador ${playerToDelete?.name}?`} onConfirm={confirmDeletePlayer} onClose={() => setPlayerToDelete(null)} />
                 <ConfirmationModal isOpen={!!matchToDelete} title="Confirmar Exclusão" message={`Tem certeza que deseja apagar esta partida? Esta ação não pode ser desfeita.`} onConfirm={confirmDeleteMatch} onClose={() => setMatchToDelete(null)} />
+                <ConfirmationModal isOpen={!!sessionToDelete} title="Confirmar Exclusão" message={`Tem certeza que deseja apagar esta sessão permanentemente? Todas as estatísticas dela serão perdidas.`} onConfirm={confirmDeleteSession} onClose={() => setSessionToDelete(null)} />
                 <PeerReviewModal isOpen={!!peerReviewPlayer} player={peerReviewPlayer} onClose={() => setPeerReviewPlayer(null)} onSave={handleSavePeerReview}/>
                 <EditMatchModal isOpen={!!editingMatch} match={editingMatch} players={players} onClose={() => setEditingMatch(null)} onSave={handleUpdateMatch} />
             </>
