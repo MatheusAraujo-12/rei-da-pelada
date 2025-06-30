@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { BrowserRouter, useNavigate, useLocation } from 'react-router-dom';
+// CORREÇÃO FINAL: Removido 'useLocation' que não estava em uso.
+import { BrowserRouter, useNavigate } from 'react-router-dom';
 import { initializeApp } from 'firebase/app';
 import { 
     getAuth, onAuthStateChanged, createUserWithEmailAndPassword,
@@ -11,7 +12,8 @@ import {
     LucideEdit, LucideTrash2, LucideUsers, LucideSwords, LucideUndo, LucideTrophy, 
     LucideAward, LucideHandshake, LucideShieldCheck, LucideFrown, LucidePlay, 
     LucidePause, LucidePlus, LucideClipboard, LucideLogIn, LucidePlusCircle, 
-    LucideHistory, LucideLogOut, LucideStar, LucideArrowLeftRight
+    LucideHistory, LucideLogOut, LucideStar
+    // CORREÇÃO FINAL: Removido 'LucideArrowLeftRight' que não estava em uso.
 } from 'lucide-react';
 import * as Tone from 'tone';
 
@@ -1201,20 +1203,6 @@ const PostMatchScreen = ({ session, players, matches, currentUserId, groupId, on
     return null;
 };
 
-
-// --- App.js ---
-export default function AppWrapper() {
-    return (
-        <div className="app-bg min-h-screen">
-             <style>{`body { background-color: #0c1116; color: white; } .app-bg { background-image: radial-gradient(circle at 50% 50%, rgba(12, 17, 22, 0.8) 0%, rgba(12, 17, 22, 1) 70%), url('https://www.transparenttextures.com/patterns/dark-grass.png'); min-height: 100vh; } .range-slider::-webkit-slider-thumb { background: #f59e0b; } .range-slider::-moz-range-thumb { background: #f59e0b; }`}</style>
-            <BrowserRouter>
-                <App />
-            </BrowserRouter>
-        </div>
-    );
-}
-
-// ✅ COMPONENTE APP INTERNO (GERENCIA ESTADO E ROTAS) - VERSÃO CORRIGIDA
 function App() {
     const [user, setUser] = useState(null);
     const [userData, setUserData] = useState({ groupId: null, isAdmin: false });
@@ -1222,9 +1210,7 @@ function App() {
     const [matches, setMatches] = useState([]);
     const [playerProfile, setPlayerProfile] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
-
     const [currentView, setCurrentView] = useState('players');
-
     const [isPlayerModalOpen, setIsPlayerModalOpen] = useState(false);
     const [editingPlayer, setEditingPlayer] = useState(null);
     const [playerToDelete, setPlayerToDelete] = useState(null);
@@ -1233,9 +1219,7 @@ function App() {
     const [matchToDelete, setMatchToDelete] = useState(null);
     const [sessionsToVote, setSessionsToVote] = useState([]);
     const [sessionToVoteOn, setSessionToVoteOn] = useState(null);
-
     const { groupId, isAdmin } = userData;
-    
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -1292,7 +1276,7 @@ function App() {
 
             const userVotedSessions = [];
             for (const session of openSessions) {
-                const ratingDocRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions/${session.id}/ratings/${user.uid}`);
+                const ratingDocRef = doc(db, `artifacts/${appId}/public/data/groups/${session.id}/ratings/${user.uid}`);
                 const ratingDocSnap = await getDoc(ratingDocRef);
                 if (!ratingDocSnap.exists()) {
                     userVotedSessions.push(session);
