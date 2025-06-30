@@ -900,8 +900,9 @@ const SessionHistoryList = ({ sessions, onSelectSession }) => {
         </div>
     );
 };
-
+// CÓDIGO COMPLETO E ATUALIZADO PARA O COMPONENTE MatchFlow
 const MatchFlow = ({ players, groupId, onSessionEnd }) => {
+    // --- Estados ---
     const [step, setStep] = useState('config');
     const [selectedPlayerIds, setSelectedPlayerIds] = useState(new Set());
     const [allTeams, setAllTeams] = useState([]);
@@ -926,6 +927,7 @@ const MatchFlow = ({ players, groupId, onSessionEnd }) => {
     const handleStartSession = () => {
         setIsEditModeActive(false);
         setWinnerStreak({ teamId: null, count: 0 });
+        
         const availablePlayers = players.filter(p => selectedPlayerIds.has(p.id)).map(p => {
             let overall;
             if (drawType === 'admin' && p.adminOverall) overall = calculateOverall(p.adminOverall);
@@ -933,25 +935,36 @@ const MatchFlow = ({ players, groupId, onSessionEnd }) => {
             else overall = calculateOverall(p.selfOverall);
             return { ...p, overall };
         });
-        const playersPerTeamDynamic = Math.floor(availablePlayers.length / numberOfTeams);
-        if (availablePlayers.length < 2 || playersPerTeamDynamic === 0) {
-            alert("Jogadores insuficientes para formar pelo menos 2 times.");
+
+        if (availablePlayers.length < numberOfTeams) {
+            alert(`São necessários pelo menos ${numberOfTeams} jogadores para formar ${numberOfTeams} times.`);
             return;
         }
+
         const posOrder = { 'Goleiro': 1, 'Defensor': 2, 'Volante': 3, 'Meio-Campo': 4, 'Ponta': 5, 'Atacante': 6 };
+        // 1. Ordena os jogadores por posição e depois do melhor para o pior overall
         availablePlayers.sort((a, b) => (posOrder[a.detailedPosition] || 99) - (posOrder[b.detailedPosition] || 99) || b.overall - a.overall);
-        let teams = Array.from({ length: numberOfTeams }, () => ({ players: [] }));
+
+        // 2. Inicializa os times com a propriedade 'totalOverall' para o cálculo de balanceamento
+        let teams = Array.from({ length: numberOfTeams }, () => ({ players: [], totalOverall: 0 }));
+        
+        // 3. ✅ LÓGICA DE DISTRIBUIÇÃO CORRIGIDA (Sorteio "Cobrinha")
         availablePlayers.forEach(player => {
-            const targetTeam = teams.find(t => t.players.length < playersPerTeamDynamic) || teams.sort((a, b) => a.players.length - b.players.length)[0];
-            if (targetTeam) {
-                targetTeam.players.push(player);
-            }
+            // Encontra o time com a menor soma de overall para receber o próximo jogador
+            teams.sort((a, b) => a.totalOverall - b.totalOverall);
+            const targetTeam = teams[0];
+            
+            targetTeam.players.push(player);
+            targetTeam.totalOverall += player.overall; // Atualiza o overall do time
         });
+
         const finalTeams = teams.filter(t => t.players.length > 0);
+
         if (finalTeams.length < 2) {
             alert("Não foi possível formar pelo menos 2 times completos.");
             return;
         }
+
         const initialStats = {};
         availablePlayers.forEach(p => {
             initialStats[p.id] = { name: p.name, wins: 0, draws: 0, losses: 0, goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 };
@@ -1327,13 +1340,12 @@ const MatchFlow = ({ players, groupId, onSessionEnd }) => {
                 {players.map(p => (<button key={p.id} onClick={() => handlePlayerToggle(p.id)} className={`p-3 rounded-lg text-center transition ${selectedPlayerIds.has(p.id) ? 'bg-yellow-500 text-black' : 'bg-gray-800 text-white hover:bg-gray-700'}`}>{p.name}</button>))}
             </div>
             <div className="text-center">
-                <button onClick={handleStartSession} disabled={selectedPlayerIds.size < numberOfTeams * 2} className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-500 disabled:cursor-not-allowed">Sortear Times e Iniciar</button>
-                {selectedPlayerIds.size < numberOfTeams * 2 && <p className="text-red-500 text-sm mt-2">Selecione pelo menos {numberOfTeams * 2} jogadores para formar {numberOfTeams} times.</p>}
+                <button onClick={handleStartSession} disabled={selectedPlayerIds.size < numberOfTeams} className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-500 disabled:cursor-not-allowed">Sortear Times e Iniciar</button>
+                {selectedPlayerIds.size < numberOfTeams && <p className="text-red-500 text-sm mt-2">Selecione pelo menos {numberOfTeams} jogadores.</p>}
             </div>
         </div>
     );
 };
-
 // --- COMPONENTE PRINCIPAL ---
 
 export default function AppWrapper() {
