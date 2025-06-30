@@ -2,13 +2,15 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { BrowserRouter, useNavigate } from 'react-router-dom';
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, getDoc, setDoc, runTransaction, where, writeBatch, serverTimestamp, orderBy } from 'firebase/firestore';
+// ✅ 'where' e 'writeBatch' removidos, pois não são mais usados
+import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, getDoc, setDoc, runTransaction, serverTimestamp, orderBy } from 'firebase/firestore';
 import { 
     LucideUser, LucideUserPlus, LucideX, LucideShield, LucideGoal, LucideHand, 
     LucideEdit, LucideTrash2, LucideUsers, LucideSwords, LucideUndo, LucideTrophy, 
     LucideAward, LucideHandshake, LucideShieldCheck, LucideFrown, LucidePlay, 
     LucidePause, LucidePlus, LucideClipboard, LucideLogIn, LucidePlusCircle, 
-    LucideHistory, LucideLogOut, LucideStar
+    LucideHistory, LucideLogOut
+    // ✅ 'LucideStar' removido, pois não é mais usado
 } from 'lucide-react';
 import * as Tone from 'tone';
 
@@ -657,18 +659,6 @@ const GroupDashboard = ({ user, groupId }) => {
             alert('ID do Grupo copiado!');
         }).catch(err => {
             console.error('Falha ao copiar ID: ', err);
-            const textArea = document.createElement("textarea");
-            textArea.value = groupId;
-            document.body.appendChild(textArea);
-            textArea.focus();
-            textArea.select();
-            try {
-                document.execCommand('copy');
-                alert('ID do Grupo copiado!');
-            } catch (err) {
-                alert('Falha ao copiar ID.');
-            }
-            document.body.removeChild(textArea);
         });
     };
 
@@ -771,16 +761,6 @@ const GroupGate = ({ user, onGroupAssociated }) => {
             <div className="w-full max-w-md text-center bg-gray-900/50 rounded-2xl p-8 border border-gray-700">
                 {renderMode()}
             </div>
-        </div>
-    );
-};
-
-const PostMatchScreen = ({ players, onFinishRating }) => {
-    // Este componente pode ser simplificado ou removido se a votação pós-sessão for removida
-    return (
-        <div>
-            <h2>Votação Pós-Sessão (A ser implementado)</h2>
-            <button onClick={onFinishRating}>Finalizar</button>
         </div>
     );
 };
