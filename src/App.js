@@ -614,7 +614,7 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
     );
 };
 
-// --- modules/matches/MatchFlow.js --- (VERSÃO ATUALIZADA)
+// --- modules/matches/MatchFlow.js --- (VERSÃO CORRIGIDA)
 const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
     // --- Estados ---
     const [step, setStep] = useState('config');
@@ -625,13 +625,15 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
     const [numberOfTeams, setNumberOfTeams] = useState(3);
     const [playersPerTeam, setPlayersPerTeam] = useState(5);
     const [drawType, setDrawType] = useState('self');
-    
-    // ✅ 1. NOVO ESTADO PARA CONTROLAR O MODO DE EDIÇÃO
     const [isEditModeActive, setIsEditModeActive] = useState(false);
+    
+    // ✅ 1. NOVOS ESTADOS PARA AS REGRAS AUTOMÁTICAS
+    const [streakLimit, setStreakLimit] = useState(2); // Limite de 2 vitórias seguidas como padrão
+    const [tieBreakerRule, setTieBreakerRule] = useState('winnerStays'); // Opções: 'winnerStays', 'bothExit'
+    const [winnerStreak, setWinnerStreak] = useState({ teamId: null, count: 0 }); // Rastreia a sequência de vitórias
 
-    // --- Lógica de Seleção e Sorteio (sem alterações) ---
-    // ... (handlePlayerToggle e handleStartSession continuam iguais)
-    const handlePlayerToggle = (playerId) => {
+    // --- Lógicas de Configuração e Sorteio ---
+    const handlePlayerToggle =  (playerId) => {
         setSelectedPlayerIds(prev => {
             const newSet = new Set(prev);
             if (newSet.has(playerId)) newSet.delete(playerId);
@@ -641,7 +643,10 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
     };
 
     const handleStartSession = () => {
-        setIsEditModeActive(false); // Garante que o modo de edição seja desativado ao sortear novos times
+        setIsEditModeActive(false); 
+        // Reseta a contagem de vitórias ao sortear novos times
+        setWinnerStreak({ teamId: null, count: 0 });
+
         let availablePlayers = players.filter(p => selectedPlayerIds.has(p.id)).map(p => {
             let overall;
             if (drawType === 'admin' && p.adminOverall) overall = calculateOverall(p.adminOverall);
@@ -682,48 +687,84 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
         setStep('pre_game');
     };
 
+
+    // ✅ 2. LÓGICA DE FIM DE JOGO ATUALIZADA PARA INCLUIR AS NOVAS REGRAS
     const handleSingleMatchEnd = async (matchResult) => {
-        setIsEditModeActive(false); // Desativa o modo de edição ao fim da partida
+        setIsEditModeActive(false);
         const savedMatch = await onMatchEnd(matchResult);
         if (savedMatch) setSessionMatches(prev => [...prev, savedMatch]);
         setMatchHistory(prev => [...prev, matchResult]);
 
         const { teamA, teamB } = matchResult.teams;
+        const remainingTeams = allTeams.slice(2);
+        
+        // REGRA DE EMPATE
+        if (matchResult.score.teamA === matchResult.score.teamB && tieBreakerRule === 'bothExit') {
+            const nextTeams = remainingTeams.splice(0, 2);
+            const newQueue = [...remainingTeams, teamA, teamB];
+            setAllTeams([...nextTeams, ...newQueue]);
+            setWinnerStreak({ teamId: null, count: 0 }); // Reseta a sequência
+            setStep('post_game');
+            return;
+        }
+
         const winnerTeam = matchResult.score.teamA >= matchResult.score.teamB ? teamA : teamB;
         const loserTeam = winnerTeam === teamA ? teamB : teamA;
 
-        const remainingTeams = allTeams.slice(2);
-        const newQueue = [...remainingTeams, loserTeam];
-        
-        const nextChallenger = newQueue.length > 0 ? newQueue.shift() : null;
+        const getTeamId = (team) => team.map(p => p.id).sort().join('-');
+        const winnerId = getTeamId(winnerTeam);
 
-        setAllTeams([winnerTeam, ...(nextChallenger ? [nextChallenger] : []), ...newQueue]);
+        let currentStreak = (winnerId === winnerStreak.teamId) ? winnerStreak.count + 1 : 1;
+        
+        // REGRA DE LIMITE DE VITÓRIAS
+        if (streakLimit > 0 && currentStreak >= streakLimit) {
+            const nextTeams = remainingTeams.splice(0, 2);
+            const newQueue = [...remainingTeams, winnerTeam, loserTeam];
+            setAllTeams([...nextTeams, ...newQueue]);
+            setWinnerStreak({ teamId: null, count: 0 }); // Reseta a sequência
+        } else {
+            // LÓGICA PADRÃO
+            const nextChallenger = remainingTeams.length > 0 ? remainingTeams.shift() : null;
+            const newQueue = [...remainingTeams, loserTeam];
+            setAllTeams([winnerTeam, ...(nextChallenger ? [nextChallenger] : []), ...newQueue]);
+            setWinnerStreak({ teamId: winnerId, count: currentStreak });
+        }
+
         setStep('post_game');
     };
 
-    // --- Funções de Manipulação Manual ---
-
+    // ✅ 3. LÓGICA DE MOVER JOGADOR (agora mais robusta)
     const handleMovePlayer = (playerToMove, fromTeamIndex, toTeamIndex) => {
         setAllTeams(currentTeams => {
-            const newTeams = JSON.parse(JSON.stringify(currentTeams));
+            const newTeams = JSON.parse(JSON.stringify(currentTeams.map(t => t || []))); // Garante que não haja times nulos
             const fromTeam = newTeams[fromTeamIndex];
             const toTeam = newTeams[toTeamIndex];
+            
+            if (!fromTeam) return currentTeams; // Segurança extra
 
             const playerIndex = fromTeam.findIndex(p => p.id === playerToMove.id);
-            if (playerIndex === -1 || (toTeam && toTeam.length >= playersPerTeam)) {
+            
+            if (playerIndex === -1) return currentTeams;
+
+            if (toTeam && toTeam.length >= playersPerTeam) {
+                alert(`O time de destino já está cheio (${playersPerTeam} jogadores).`);
                 return currentTeams;
             }
 
             const [player] = fromTeam.splice(playerIndex, 1);
+
             if (toTeam) {
                 toTeam.push(player);
+            } else {
+                // Se o time de destino não existe (caso raro), cria um novo time
+                newTeams[toTeamIndex] = [player];
             }
             
+            // Remove times que ficaram vazios
             return newTeams.filter(team => team.length > 0);
         });
     };
-    
-    // ✅ 2. NOVA FUNÇÃO: PARA DEFINIR OS TIMES A e B NO MODO DE EDIÇÃO
+
     const handleSetPlayingTeam = (teamRole, indexToSet) => {
         setAllTeams(currentTeams => {
             const newTeams = [...currentTeams];
@@ -736,6 +777,7 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
         });
     };
 
+    // ✅ CORREÇÃO APLICADA AQUI
     const handleReorderQueue = (indexInWaitingQueue, direction) => {
         setAllTeams(currentTeams => {
             const waitingTeams = currentTeams.slice(2);
@@ -749,36 +791,37 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
             return [currentTeams[0], currentTeams[1], ...waitingTeams];
         });
     };
-    
+
     const handleForceEndSession = () => {
         onSessionEnd(allTeams.flat(), sessionMatches);
     };
 
     // --- Renderização ---
 
-    // Renderização do card do time (agora mostra os botões de mover jogador apenas em modo de edição)
+    // ✅ 4. CARD DO TIME ATUALIZADO COM DROPDOWN PARA MOVER JOGADOR
     const renderTeamCard = (team, name, teamIndex) => (
         <div className="bg-gray-800 p-4 rounded-lg w-full min-w-[280px]">
             <h3 className="text-yellow-400 font-bold text-xl mb-3">{name}</h3>
             <ul className="space-y-2">
                 {team.map(p => (
                     <li key={p.id} className="bg-gray-900 p-2 rounded flex justify-between items-center text-white">
-                        <span>{p.name} <span className="text-xs text-gray-400">OVR {p.overall}</span></span>
-                        {/* ✅ 3. BOTÕES DE MOVER JOGADOR AGORA SÓ APARECEM NO MODO DE EDIÇÃO */}
+                        <span>{p.name}</span>
                         {isEditModeActive && (
-                            <div className="flex gap-1">
+                            <select 
+                                value={teamIndex}
+                                onChange={(e) => handleMovePlayer(p, teamIndex, parseInt(e.target.value))}
+                                className="bg-gray-700 text-white text-xs rounded p-1 border-0"
+                            >
                                 {allTeams.map((_, i) => (
-                                    teamIndex !== i && 
-                                    <button key={i} onClick={() => handleMovePlayer(p, teamIndex, i)} title={`Mover para ${i === 0 ? 'Time A' : i === 1 ? 'Time B' : `Fila ${i-1}`}`} className="p-1 bg-blue-600 rounded text-xs leading-none">
-                                        {i === 0 ? 'A' : i === 1 ? 'B' : `F${i-1}`}
-                                    </button>
+                                    <option key={i} value={i}>
+                                        {i === 0 ? 'Time A' : i === 1 ? 'Time B' : `Fila ${i - 1}`}
+                                    </option>
                                 ))}
-                            </div>
+                            </select>
                         )}
                     </li>
                 ))}
             </ul>
-            {/* ✅ 4. BOTÕES PARA DEFINIR TIMES A/B DENTRO DO MODO DE EDIÇÃO */}
             {isEditModeActive && teamIndex > 1 && (
                 <div className="flex justify-center gap-2 mt-3">
                     <button onClick={() => handleSetPlayingTeam('A', teamIndex)} className="text-xs bg-gray-700 hover:bg-yellow-500 hover:text-black py-1 px-2 rounded">Definir como Time A</button>
@@ -787,14 +830,12 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
             )}
         </div>
     );
-    
-    // --- Renderização principal do componente ---
 
     if (step === 'in_game') {
         return <LiveMatchTracker teams={{ teamA: allTeams[0], teamB: allTeams[1] }} onEndMatch={handleSingleMatchEnd} durationInMinutes={10} />;
     }
 
-    // ✅ 5. INTERFACE UNIFICADA PARA PRÉ E PÓS-JOGO
+    // Tela de pré e pós jogo
     if (step === 'pre_game' || step === 'post_game') {
         const teamA = allTeams[0];
         const teamB = allTeams[1];
@@ -810,12 +851,12 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
                 {/* --- BOTÕES DE CONTROLE PRINCIPAL --- */}
                 <div className="flex justify-center gap-4 mb-6">
                     {!isEditModeActive ? (
-                        <button onClick={() => setIsEditModeActive(true)} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg">
-                            <LucideEdit className="inline-block mr-2 w-4 h-4"/>Editar Partida
+                        <button onClick={() => setIsEditModeActive(true)} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg flex items-center gap-2">
+                            <LucideEdit className="w-4 h-4"/>Editar Partida
                         </button>
                     ) : (
-                        <button onClick={() => setIsEditModeActive(false)} className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-6 rounded-lg">
-                            <LucideShieldCheck className="inline-block mr-2 w-4 h-4"/>Salvar Alterações
+                        <button onClick={() => setIsEditModeActive(false)} className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-6 rounded-lg flex items-center gap-2">
+                            <LucideShieldCheck className="w-4 h-4"/>Salvar Alterações
                         </button>
                     )}
                 </div>
@@ -835,13 +876,22 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
                             {waitingTeams.map((team, index) => (
                                 <div key={index} className="flex flex-col gap-2 items-center">
                                     {renderTeamCard(team, `Fila ${index + 1}`, index + 2)}
-                                    {/* Botões de subir/descer ficam fora do modo de edição para acesso rápido */}
                                     {!isEditModeActive && (
-                                        <div className="flex gap-2">
-                                            <button onClick={() => handleReorderQueue(index, 'up')} disabled={index === 0} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1 px-3 text-sm rounded-lg disabled:opacity-50">
+                                        <div className="flex gap-2 mt-2">
+                                            <button 
+                                                onClick={() => handleReorderQueue(index, 'up')} 
+                                                disabled={index === 0} 
+                                                className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1 px-3 text-sm rounded-lg disabled:opacity-50 flex items-center justify-center"
+                                                title="Subir na Fila"
+                                            >
                                                 <LucideUndo className="w-4 h-4 transform rotate-90"/>
                                             </button>
-                                            <button onClick={() => handleReorderQueue(index, 'down')} disabled={index === waitingTeams.length - 1} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1 px-3 text-sm rounded-lg disabled:opacity-50">
+                                            <button 
+                                                onClick={() => handleReorderQueue(index, 'down')} 
+                                                disabled={index === waitingTeams.length - 1} 
+                                                className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1 px-3 text-sm rounded-lg disabled:opacity-50 flex items-center justify-center"
+                                                title="Descer na Fila"
+                                            >
                                                 <LucideUndo className="w-4 h-4 transform -rotate-90"/>
                                             </button>
                                         </div>
@@ -866,28 +916,61 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
             </div>
         );
     }
-    
-    // Tela de Configuração Inicial (sem mudanças, mas com cores padronizadas)
+
+    // Tela de configuração
     return (
         <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-6 border border-gray-700">
             <h2 className="text-2xl font-bold text-yellow-400 mb-4">Configurar Noite de Futebol</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                <div>
-                    <label className="block font-semibold mb-2 text-white">Jogadores por time:</label>
-                    <input type="number" min="2" value={playersPerTeam} onChange={e => setPlayersPerTeam(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white" />
+            <fieldset className="border border-gray-700 p-4 rounded-lg mb-6">
+                <legend className="px-2 text-yellow-400 font-semibold">Regras da Partida</legend>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label className="block font-semibold mb-2 text-white">Limite de vitórias seguidas:</label>
+                        <input 
+                            type="number" 
+                            min="0"
+                            value={streakLimit} 
+                            onChange={e => setStreakLimit(Number(e.target.value))} 
+                            className="w-full bg-gray-800 p-2 rounded text-white" 
+                            title="Deixe 0 para desativar o limite."
+                        />
+                        <p className="text-xs text-gray-500 mt-1">O time sai após X vitórias. (0 = desativado)</p>
+                    </div>
+                    <div>
+                        <label className="block font-semibold mb-2 text-white">Regra de empate:</label>
+                        <select 
+                            value={tieBreakerRule} 
+                            onChange={e => setTieBreakerRule(e.target.value)} 
+                            className="w-full bg-gray-800 p-2 rounded text-white"
+                        >
+                            <option value="winnerStays">Vencedor anterior fica</option>
+                            <option value="bothExit">Ambos os times saem</option>
+                        </select>
+                    </div>
                 </div>
-                <div>
-                    <label className="block font-semibold mb-2 text-white">Nº de times a sortear:</label>
-                    <input type="number" min="2" value={numberOfTeams} onChange={e => setNumberOfTeams(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white" />
+            </fieldset>
+
+            <fieldset className="border border-gray-700 p-4 rounded-lg mb-6">
+                 <legend className="px-2 text-yellow-400 font-semibold">Configuração dos Times</legend>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label className="block font-semibold mb-2 text-white">Jogadores por time:</label>
+                        <input type="number" min="2" value={playersPerTeam} onChange={e => setPlayersPerTeam(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white" />
+                    </div>
+                    <div>
+                        <label className="block font-semibold mb-2 text-white">Nº de times a sortear:</label>
+                        <input type="number" min="2" value={numberOfTeams} onChange={e => setNumberOfTeams(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white" />
+                    </div>
                 </div>
-            </div>
+            </fieldset>
+
             <div className="my-6">
-                <label className="block font-semibold mb-2 text-white">Sorteio baseado em:</label>
-                <div className="flex gap-4 flex-wrap">
-                    <button onClick={() => setDrawType('self')} className={`py-2 px-4 rounded-lg ${drawType === 'self' ? 'bg-yellow-500 text-black' : 'bg-gray-700 text-white'}`}>Overall Próprio</button>
-                    <button onClick={() => setDrawType('peer')} className={`py-2 px-4 rounded-lg ${drawType === 'peer' ? 'bg-cyan-500 text-black' : 'bg-gray-700 text-white'}`}>Overall da Galera</button>
-                    <button onClick={() => setDrawType('admin')} className={`py-2 px-4 rounded-lg ${drawType === 'admin' ? 'bg-green-500 text-black' : 'bg-gray-700 text-white'}`}>Overall do Admin</button>
-                </div>
+                 <label className="block font-semibold mb-2 text-white">Sorteio baseado em:</label>
+                 <div className="flex gap-4 flex-wrap">
+                     <button onClick={() => setDrawType('self')} className={`py-2 px-4 rounded-lg ${drawType === 'self' ? 'bg-yellow-500 text-black' : 'bg-gray-700 text-white'}`}>Overall Próprio</button>
+                     <button onClick={() => setDrawType('peer')} className={`py-2 px-4 rounded-lg ${drawType === 'peer' ? 'bg-cyan-500 text-black' : 'bg-gray-700 text-white'}`}>Overall da Galera</button>
+                     <button onClick={() => setDrawType('admin')} className={`py-2 px-4 rounded-lg ${drawType === 'admin' ? 'bg-green-500 text-black' : 'bg-gray-700 text-white'}`}>Overall do Admin</button>
+                 </div>
             </div>
             <h3 className="text-xl font-bold text-yellow-400 mb-4">Selecione os Jogadores Presentes</h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
