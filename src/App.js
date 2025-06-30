@@ -614,20 +614,22 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
     );
 };
 
-// --- modules/matches/MatchFlow.js --- (VERSÃO CORRIGIDA)
+// CÓDIGO COMPLETO E ATUALIZADO PARA O COMPONENTE MatchFlow
 const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
     // --- Estados ---
     const [step, setStep] = useState('config');
     const [selectedPlayerIds, setSelectedPlayerIds] = useState(new Set());
     const [allTeams, setAllTeams] = useState([]);
     const [matchHistory, setMatchHistory] = useState([]);
-    const [sessionMatches, setSessionMatches] = useState([]);
+    const [sessionPlayerStats, setSessionPlayerStats] = useState({});
     const [numberOfTeams, setNumberOfTeams] = useState(2);
     const [drawType, setDrawType] = useState('self');
     const [isEditModeActive, setIsEditModeActive] = useState(false);
     const [streakLimit, setStreakLimit] = useState(2);
     const [tieBreakerRule, setTieBreakerRule] = useState('winnerStays');
     const [winnerStreak, setWinnerStreak] = useState({ teamId: null, count: 0 });
+
+    // --- Lógicas de Configuração e Jogo ---
 
     const handlePlayerToggle = (playerId) => {
         setSelectedPlayerIds(prev => {
@@ -642,7 +644,7 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
         setIsEditModeActive(false);
         setWinnerStreak({ teamId: null, count: 0 });
 
-        let availablePlayers = players.filter(p => selectedPlayerIds.has(p.id)).map(p => {
+        const availablePlayers = players.filter(p => selectedPlayerIds.has(p.id)).map(p => {
             let overall;
             if (drawType === 'admin' && p.adminOverall) overall = calculateOverall(p.adminOverall);
             else if (drawType === 'peer' && p.peerOverall) overall = calculateOverall(p.peerOverall.avgSkills);
@@ -660,14 +662,12 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
         const posOrder = { 'Goleiro': 1, 'Defensor': 2, 'Volante': 3, 'Meio-Campo': 4, 'Ponta': 5, 'Atacante': 6 };
         availablePlayers.sort((a, b) => (posOrder[a.detailedPosition] || 99) - (posOrder[b.detailedPosition] || 99) || b.overall - a.overall);
 
-        let teams = Array.from({ length: numberOfTeams }, () => ({ players: [], totalOverall: 0 }));
-        
+        let teams = Array.from({ length: numberOfTeams }, () => ({ players: [] }));
+
         availablePlayers.forEach(player => {
-            teams.sort((a, b) => a.players.length - b.players.length || a.totalOverall - b.totalOverall);
-            const targetTeam = teams.find(t => t.players.length < playersPerTeamDynamic);
+            const targetTeam = teams.find(t => t.players.length < playersPerTeamDynamic) || teams.sort((a, b) => a.players.length - b.players.length)[0];
             if (targetTeam) {
                 targetTeam.players.push(player);
-                targetTeam.totalOverall += player.overall;
             }
         });
 
@@ -678,52 +678,84 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
             return;
         }
 
+        const initialStats = {};
+        availablePlayers.forEach(p => {
+            initialStats[p.id] = { name: p.name, wins: 0, draws: 0, losses: 0, goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 };
+        });
+        setSessionPlayerStats(initialStats);
+
         setAllTeams(finalTeams.map(t => t.players));
         setMatchHistory([]);
-        setSessionMatches([]);
         setStep('pre_game');
     };
 
     const handleSingleMatchEnd = async (matchResult) => {
         setIsEditModeActive(false);
-        const savedMatch = await onMatchEnd(matchResult);
-        if (savedMatch) setSessionMatches(prev => [...prev, savedMatch]);
         setMatchHistory(prev => [...prev, matchResult]);
 
+        setSessionPlayerStats(prevStats => {
+            const newStats = JSON.parse(JSON.stringify(prevStats));
+            for (const playerId in matchResult.playerStats) {
+                if (newStats[playerId]) {
+                    for (const stat in matchResult.playerStats[playerId]) {
+                        newStats[playerId][stat] = (newStats[playerId][stat] || 0) + matchResult.playerStats[playerId][stat];
+                    }
+                }
+            }
+            return newStats;
+        });
+        
         const { teamA, teamB } = matchResult.teams;
         const remainingTeams = allTeams.slice(2);
         
-        if (matchResult.score.teamA === matchResult.score.teamB && tieBreakerRule === 'bothExit') {
-            const nextTeams = remainingTeams.splice(0, 2);
-            const newQueue = [...remainingTeams, teamA, teamB];
-            setAllTeams([...nextTeams, ...newQueue]);
-            setWinnerStreak({ teamId: null, count: 0 });
-            setStep('post_game');
-            return;
-        }
+        const updatePlayerRecords = (team, result) => {
+            setSessionPlayerStats(prevStats => {
+                const newStats = JSON.parse(JSON.stringify(prevStats));
+                team.forEach(player => {
+                    if (newStats[player.id]) {
+                        newStats[player.id][result]++;
+                    }
+                });
+                return newStats;
+            });
+        };
 
+        if (matchResult.score.teamA === matchResult.score.teamB) {
+            updatePlayerRecords(teamA, 'draws');
+            updatePlayerRecords(teamB, 'draws');
+            if (tieBreakerRule === 'bothExit') {
+                const nextTeams = remainingTeams.splice(0, 2);
+                const newQueue = [...remainingTeams, teamA, teamB];
+                setAllTeams([...nextTeams, ...newQueue].filter(Boolean));
+                setWinnerStreak({ teamId: null, count: 0 });
+                setStep('post_game');
+                return;
+            }
+        }
+        
         const winnerTeam = matchResult.score.teamA >= matchResult.score.teamB ? teamA : teamB;
         const loserTeam = winnerTeam === teamA ? teamB : teamA;
+        updatePlayerRecords(winnerTeam, 'wins');
+        updatePlayerRecords(loserTeam, 'losses');
 
         const getTeamId = (team) => team.map(p => p.id).sort().join('-');
         const winnerId = getTeamId(winnerTeam);
-
         let currentStreak = (winnerId === winnerStreak.teamId) ? winnerStreak.count + 1 : 1;
         
         if (streakLimit > 0 && currentStreak >= streakLimit) {
             const nextTeams = remainingTeams.splice(0, 2);
             const newQueue = [...remainingTeams, winnerTeam, loserTeam];
-            setAllTeams([...nextTeams, ...newQueue]);
+            setAllTeams([...nextTeams, ...newQueue].filter(Boolean));
             setWinnerStreak({ teamId: null, count: 0 });
         } else {
             const nextChallenger = remainingTeams.length > 0 ? remainingTeams.shift() : null;
             const newQueue = [...remainingTeams, loserTeam];
-            setAllTeams([winnerTeam, ...(nextChallenger ? [nextChallenger] : []), ...newQueue]);
+            setAllTeams([winnerTeam, ...(nextChallenger ? [nextChallenger] : []), ...newQueue].filter(Boolean));
             setWinnerStreak({ teamId: winnerId, count: currentStreak });
         }
         setStep('post_game');
     };
-    
+
     const handleMovePlayer = (playerToMove, fromTeamIndex, toTeamIndex) => {
         setAllTeams(currentTeams => {
             const newTeams = JSON.parse(JSON.stringify(currentTeams.map(t => t || [])));
@@ -734,7 +766,7 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
 
             const playerIndex = fromTeam.findIndex(p => p.id === playerToMove.id);
             if (playerIndex === -1) return currentTeams;
-
+            
             const [player] = fromTeam.splice(playerIndex, 1);
 
             if (toTeam) {
@@ -785,48 +817,106 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
     };
 
     const handleForceEndSession = () => {
-        onSessionEnd(allTeams.flat(), sessionMatches);
+        // onSessionEnd(allTeams.flat(), matchHistory);
+        setStep('session_report');
     };
 
-    const renderTeamCard = (team, name, teamIndex) => (
-        <div className="bg-gray-800 p-4 rounded-lg w-full min-w-[280px]">
-            <h3 className="text-yellow-400 font-bold text-xl mb-3">{name}</h3>
-            <ul className="space-y-2">
-                {team.map(p => (
-                    <li key={p.id} className="bg-gray-900 p-2 rounded flex justify-between items-center text-white">
-                        <span>{p.name}</span>
-                        {isEditModeActive && (
-                            <div className="flex items-center gap-2">
-                                <select 
-                                    value={teamIndex}
-                                    onChange={(e) => handleMovePlayer(p, teamIndex, parseInt(e.target.value))}
-                                    className="bg-gray-700 text-white text-xs rounded p-1 border-0"
-                                >
-                                    {allTeams.map((_, i) => (
-                                        <option key={i} value={i}>
-                                            {i === 0 ? 'Time A' : i === 1 ? 'Time B' : `Fila ${i - 1}`}
-                                        </option>
-                                    ))}
-                                </select>
-                                <button onClick={() => handleRemovePlayer(p, teamIndex)} className="text-red-500 hover:text-red-400 p-1">
-                                    <LucideX className="w-4 h-4" />
-                                </button>
-                            </div>
-                        )}
-                    </li>
-                ))}
-            </ul>
-            {isEditModeActive && teamIndex > 1 && (
-                <div className="flex justify-center gap-2 mt-3">
-                    <button onClick={() => handleSetPlayingTeam('A', teamIndex)} className="text-xs bg-gray-700 hover:bg-yellow-500 hover:text-black py-1 px-2 rounded">Definir como Time A</button>
-                    <button onClick={() => handleSetPlayingTeam('B', teamIndex)} className="text-xs bg-gray-700 hover:bg-yellow-500 hover:text-black py-1 px-2 rounded">Definir como Time B</button>
-                </div>
-            )}
-        </div>
-    );
-    
+    // --- Funções de Renderização ---
+
+    const renderTeamCard = (team, teamIndex) => {
+        const teamLetter = String.fromCharCode(65 + teamIndex);
+        let teamLabel = `Time ${teamLetter}`;
+        if (step !== 'pre_game') {
+             if(teamIndex === 0) teamLabel = `Time ${teamLetter} (Em quadra)`;
+             if(teamIndex === 1) teamLabel = `Time ${teamLetter} (Desafiante)`;
+        }
+
+        return (
+            <div className="bg-gray-800 p-4 rounded-lg w-full min-w-[280px]">
+                <h3 className="text-yellow-400 font-bold text-xl mb-3">{teamLabel}</h3>
+                <ul className="space-y-2">
+                    {team.map(p => (
+                        <li key={p.id} className="bg-gray-900 p-2 rounded flex justify-between items-center text-white">
+                            <span>{p.name}</span>
+                            {isEditModeActive && (
+                                <div className="flex items-center gap-2">
+                                    <select 
+                                        value={teamIndex}
+                                        onChange={(e) => handleMovePlayer(p, teamIndex, parseInt(e.target.value))}
+                                        className="bg-gray-700 text-white text-xs rounded p-1 border-0"
+                                    >
+                                        {allTeams.map((_, i) => (
+                                            <option key={i} value={i}>
+                                                Time {String.fromCharCode(65 + i)}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <button onClick={() => handleRemovePlayer(p, teamIndex)} className="text-red-500 hover:text-red-400 p-1">
+                                        <LucideX className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            )}
+                        </li>
+                    ))}
+                </ul>
+                {isEditModeActive && teamIndex > 1 && (
+                    <div className="flex justify-center gap-2 mt-3">
+                        <button onClick={() => handleSetPlayingTeam('A', teamIndex)} className="text-xs bg-gray-700 hover:bg-yellow-500 hover:text-black py-1 px-2 rounded">Definir como Time A</button>
+                        <button onClick={() => handleSetPlayingTeam('B', teamIndex)} className="text-xs bg-gray-700 hover:bg-yellow-500 hover:text-black py-1 px-2 rounded">Definir como Time B</button>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    // --- Lógica de Renderização Principal ---
+
     if (step === 'in_game') {
         return <LiveMatchTracker teams={{ teamA: allTeams[0], teamB: allTeams[1] }} onEndMatch={handleSingleMatchEnd} durationInMinutes={10} />;
+    }
+
+    if (step === 'session_report') {
+        const sortedStats = Object.values(sessionPlayerStats).sort((a, b) => b.wins - a.wins || b.goals - a.goals);
+        return (
+            <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-8 text-white">
+                <h2 className="text-3xl font-bold text-yellow-400 mb-6 text-center">Relatório Final da Pelada</h2>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left min-w-[600px]">
+                        <thead className="bg-gray-800">
+                            <tr>
+                                <th className="p-3">Jogador</th>
+                                <th className="p-3 text-center">V</th>
+                                <th className="p-3 text-center">E</th>
+                                <th className="p-3 text-center">D</th>
+                                <th className="p-3 text-center">Gols</th>
+                                <th className="p-3 text-center">Assist.</th>
+                                <th className="p-3 text-center">Desarmes</th>
+                                <th className="p-3 text-center">Falhas</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-gray-800/50">
+                            {sortedStats.map(player => (
+                                <tr key={player.name} className="border-b border-gray-700">
+                                    <td className="p-3 font-semibold">{player.name}</td>
+                                    <td className="p-3 text-center text-green-400 font-bold">{player.wins}</td>
+                                    <td className="p-3 text-center text-gray-400 font-bold">{player.draws}</td>
+                                    <td className="p-3 text-center text-red-400 font-bold">{player.losses}</td>
+                                    <td className="p-3 text-center">{player.goals}</td>
+                                    <td className="p-3 text-center">{player.assists}</td>
+                                    <td className="p-3 text-center">{player.tackles}</td>
+                                    <td className="p-3 text-center">{player.failures}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+                <div className="text-center mt-8">
+                    <button onClick={() => setStep('config')} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg">
+                        Voltar para Configuração
+                    </button>
+                </div>
+            </div>
+        );
     }
 
     if (step === 'pre_game' || step === 'post_game') {
@@ -853,18 +943,18 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
                 </div>
 
                 <div className="flex flex-col md:flex-row gap-4 mb-6 justify-center items-start">
-                    {teamA && renderTeamCard(teamA, "Time A (Em quadra)", 0)}
+                    {teamA && renderTeamCard(teamA, 0)}
                     <div className="flex items-center justify-center h-full text-2xl font-bold text-gray-500 p-4">VS</div>
-                    {teamB ? renderTeamCard(teamB, "Time B (Desafiante)", 1) : <div className="bg-gray-800 p-4 rounded-lg w-full min-w-[280px] flex items-center justify-center"><h3 className="text-yellow-400 font-bold text-xl">Sem desafiantes</h3></div>}
+                    {teamB ? renderTeamCard(teamB, 1) : <div className="bg-gray-800 p-4 rounded-lg w-full min-w-[280px] flex items-center justify-center"><h3 className="text-yellow-400 font-bold text-xl">Sem desafiantes</h3></div>}
                 </div>
                 
                 {waitingTeams.length > 0 && (
                     <div className="mb-6">
-                        <h3 className="text-xl font-bold text-gray-400 mb-4">Fila de Espera</h3>
+                        <h3 className="text-xl font-bold text-gray-400 mb-4">Times na Fila</h3>
                         <div className="flex flex-wrap gap-4 justify-center">
                             {waitingTeams.map((team, index) => (
                                 <div key={index} className="flex flex-col gap-2 items-center">
-                                    {renderTeamCard(team, `Fila ${index + 1}`, index + 2)}
+                                    {renderTeamCard(team, index + 2)}
                                     {!isEditModeActive && (
                                         <div className="flex gap-2 mt-2">
                                             <button 
@@ -904,8 +994,7 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
             </div>
         );
     }
-
-    // ✅ TELA DE CONFIGURAÇÃO FINAL E CORRIGIDA
+    
     return (
         <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-6 border border-gray-700">
             <h2 className="text-2xl font-bold text-yellow-400 mb-4">Configurar Noite de Futebol</h2>
@@ -961,7 +1050,6 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
                 {players.map(p => (<button key={p.id} onClick={() => handlePlayerToggle(p.id)} className={`p-3 rounded-lg text-center transition ${selectedPlayerIds.has(p.id) ? 'bg-yellow-500 text-black' : 'bg-gray-800 text-white hover:bg-gray-700'}`}>{p.name}</button>))}
             </div>
             <div className="text-center">
-                {/* A lógica de validação do botão foi ajustada para numberOfTeams */}
                 <button onClick={handleStartSession} disabled={selectedPlayerIds.size < numberOfTeams * 2} className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-500 disabled:cursor-not-allowed">Sortear Times e Iniciar</button>
                 {selectedPlayerIds.size < numberOfTeams * 2 && <p className="text-red-500 text-sm mt-2">Selecione pelo menos {numberOfTeams * 2} jogadores para formar {numberOfTeams} times.</p>}
             </div>
