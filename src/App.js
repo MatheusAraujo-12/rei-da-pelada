@@ -616,14 +616,21 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
 
 // --- modules/matches/MatchFlow.js --- (VERSÃO ATUALIZADA)
 const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
+    // --- Estados ---
     const [step, setStep] = useState('config');
     const [selectedPlayerIds, setSelectedPlayerIds] = useState(new Set());
-    const [allTeams, setAllTeams] = useState([]); 
+    const [allTeams, setAllTeams] = useState([]);
     const [matchHistory, setMatchHistory] = useState([]);
     const [sessionMatches, setSessionMatches] = useState([]);
     const [numberOfTeams, setNumberOfTeams] = useState(3);
     const [playersPerTeam, setPlayersPerTeam] = useState(5);
     const [drawType, setDrawType] = useState('self');
+    
+    // ✅ 1. NOVO ESTADO PARA CONTROLAR O MODO DE EDIÇÃO
+    const [isEditModeActive, setIsEditModeActive] = useState(false);
+
+    // --- Lógica de Seleção e Sorteio (sem alterações) ---
+    // ... (handlePlayerToggle e handleStartSession continuam iguais)
     const handlePlayerToggle = (playerId) => {
         setSelectedPlayerIds(prev => {
             const newSet = new Set(prev);
@@ -634,6 +641,7 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
     };
 
     const handleStartSession = () => {
+        setIsEditModeActive(false); // Garante que o modo de edição seja desativado ao sortear novos times
         let availablePlayers = players.filter(p => selectedPlayerIds.has(p.id)).map(p => {
             let overall;
             if (drawType === 'admin' && p.adminOverall) overall = calculateOverall(p.adminOverall);
@@ -675,6 +683,7 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
     };
 
     const handleSingleMatchEnd = async (matchResult) => {
+        setIsEditModeActive(false); // Desativa o modo de edição ao fim da partida
         const savedMatch = await onMatchEnd(matchResult);
         if (savedMatch) setSessionMatches(prev => [...prev, savedMatch]);
         setMatchHistory(prev => [...prev, matchResult]);
@@ -692,6 +701,8 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
         setStep('post_game');
     };
 
+    // --- Funções de Manipulação Manual ---
+
     const handleMovePlayer = (playerToMove, fromTeamIndex, toTeamIndex) => {
         setAllTeams(currentTeams => {
             const newTeams = JSON.parse(JSON.stringify(currentTeams));
@@ -699,79 +710,91 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
             const toTeam = newTeams[toTeamIndex];
 
             const playerIndex = fromTeam.findIndex(p => p.id === playerToMove.id);
-            if (playerIndex === -1 || toTeam.length >= playersPerTeam) {
+            if (playerIndex === -1 || (toTeam && toTeam.length >= playersPerTeam)) {
                 return currentTeams;
             }
 
             const [player] = fromTeam.splice(playerIndex, 1);
-            toTeam.push(player);
+            if (toTeam) {
+                toTeam.push(player);
+            }
             
-            return newTeams;
+            return newTeams.filter(team => team.length > 0);
         });
     };
     
-    // ✅ 1. NOVA FUNÇÃO: FAZER O VENCEDOR SAIR
-    const handleWinnerExits = () => {
-        setAllTeams(currentTeams => {
-            if (currentTeams.length < 2) return currentTeams; // Não faz nada se tiver menos de 2 times
-            const newTeams = [...currentTeams];
-            const winner = newTeams.shift(); // Remove o vencedor (time 0) do início
-            newTeams.push(winner);          // Adiciona o vencedor no final da fila
-            return newTeams;
-        });
-    };
-
-    // ✅ 2. NOVA FUNÇÃO: REORDENAR A FILA DE ESPERA
-    const handleReorderQueue = (indexToMove, direction) => {
+    // ✅ 2. NOVA FUNÇÃO: PARA DEFINIR OS TIMES A e B NO MODO DE EDIÇÃO
+    const handleSetPlayingTeam = (teamRole, indexToSet) => {
         setAllTeams(currentTeams => {
             const newTeams = [...currentTeams];
-            // O índice real na array `allTeams` é `indexToMove + 2`, pois os 2 primeiros são os que estão em quadra.
-            const actualIndex = indexToMove + 2;
-
-            if (direction === 'up' && actualIndex > 1) { // Só pode subir se não for o desafiante (índice 1)
-                // Troca de posição com o time anterior
-                [newTeams[actualIndex], newTeams[actualIndex - 1]] = [newTeams[actualIndex - 1], newTeams[actualIndex]];
-            } else if (direction === 'down' && actualIndex < newTeams.length - 1) {
-                // Troca de posição com o time seguinte
-                [newTeams[actualIndex], newTeams[actualIndex + 1]] = [newTeams[actualIndex + 1], newTeams[actualIndex]];
-            }
+            const targetIndex = teamRole === 'A' ? 0 : 1;
+            
+            // Troca o time escolhido com o time na posição de jogo (0 para A, 1 para B)
+            [newTeams[targetIndex], newTeams[indexToSet]] = [newTeams[indexToSet], newTeams[targetIndex]];
             
             return newTeams;
         });
     };
 
+    const handleReorderQueue = (indexInWaitingQueue, direction) => {
+        setAllTeams(currentTeams => {
+            const waitingTeams = currentTeams.slice(2);
+            const actualIndex = indexInWaitingQueue;
+
+            if (direction === 'up' && actualIndex > 0) {
+                [waitingTeams[actualIndex], waitingTeams[actualIndex - 1]] = [waitingTeams[actualIndex - 1], waitingTeams[actualIndex]];
+            } else if (direction === 'down' && actualIndex < waitingTeams.length - 1) {
+                [waitingTeams[actualIndex], waitingTeams[actualIndex + 1]] = [waitingTeams[actualIndex + 1], waitingTeams[actualIndex]];
+            }
+            return [currentTeams[0], currentTeams[1], ...waitingTeams];
+        });
+    };
+    
     const handleForceEndSession = () => {
         onSessionEnd(allTeams.flat(), sessionMatches);
     };
 
-    // --- Renderização (sem alterações no renderTeamCard) ---
-    const renderTeamCard = (team, name, teamIndex, isEditable = false) => (
-        <div className="bg-gray-800 p-4 rounded-lg w-full min-w-[250px]">
+    // --- Renderização ---
+
+    // Renderização do card do time (agora mostra os botões de mover jogador apenas em modo de edição)
+    const renderTeamCard = (team, name, teamIndex) => (
+        <div className="bg-gray-800 p-4 rounded-lg w-full min-w-[280px]">
             <h3 className="text-yellow-400 font-bold text-xl mb-3">{name}</h3>
             <ul className="space-y-2">
                 {team.map(p => (
                     <li key={p.id} className="bg-gray-900 p-2 rounded flex justify-between items-center text-white">
                         <span>{p.name} <span className="text-xs text-gray-400">OVR {p.overall}</span></span>
-                        {isEditable && (
+                        {/* ✅ 3. BOTÕES DE MOVER JOGADOR AGORA SÓ APARECEM NO MODO DE EDIÇÃO */}
+                        {isEditModeActive && (
                             <div className="flex gap-1">
                                 {allTeams.map((_, i) => (
                                     teamIndex !== i && 
-                                    <button key={i} onClick={() => handleMovePlayer(p, teamIndex, i)} title={`Mover para Time ${i+1}`} className="p-1 bg-blue-600 rounded text-xs leading-none">T{i+1}</button>
+                                    <button key={i} onClick={() => handleMovePlayer(p, teamIndex, i)} title={`Mover para ${i === 0 ? 'Time A' : i === 1 ? 'Time B' : `Fila ${i-1}`}`} className="p-1 bg-blue-600 rounded text-xs leading-none">
+                                        {i === 0 ? 'A' : i === 1 ? 'B' : `F${i-1}`}
+                                    </button>
                                 ))}
                             </div>
                         )}
                     </li>
                 ))}
             </ul>
+            {/* ✅ 4. BOTÕES PARA DEFINIR TIMES A/B DENTRO DO MODO DE EDIÇÃO */}
+            {isEditModeActive && teamIndex > 1 && (
+                <div className="flex justify-center gap-2 mt-3">
+                    <button onClick={() => handleSetPlayingTeam('A', teamIndex)} className="text-xs bg-gray-700 hover:bg-yellow-500 hover:text-black py-1 px-2 rounded">Definir como Time A</button>
+                    <button onClick={() => handleSetPlayingTeam('B', teamIndex)} className="text-xs bg-gray-700 hover:bg-yellow-500 hover:text-black py-1 px-2 rounded">Definir como Time B</button>
+                </div>
+            )}
         </div>
     );
-
-    // --- Renderização principal do componente (com as novidades) ---
+    
+    // --- Renderização principal do componente ---
 
     if (step === 'in_game') {
         return <LiveMatchTracker teams={{ teamA: allTeams[0], teamB: allTeams[1] }} onEndMatch={handleSingleMatchEnd} durationInMinutes={10} />;
     }
 
+    // ✅ 5. INTERFACE UNIFICADA PARA PRÉ E PÓS-JOGO
     if (step === 'pre_game' || step === 'post_game') {
         const teamA = allTeams[0];
         const teamB = allTeams[1];
@@ -779,60 +802,72 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
 
         return (
             <div className="text-center bg-gray-900/50 rounded-2xl p-4 sm:p-8">
-                <h2 className="text-2xl sm:text-3xl font-bold text-yellow-400 mb-6">
-                    {step === 'post_game' ? `Fim da Partida ${matchHistory.length}` : `Prontos para Começar!`}
+                <h2 className="text-2xl sm:text-3xl font-bold text-yellow-400 mb-2">
+                    {isEditModeActive ? 'Modo de Edição' : step === 'post_game' ? `Fim da Partida ${matchHistory.length}` : `Prontos para Começar!`}
                 </h2>
-
-                <div className="flex flex-col md:flex-row gap-4 mb-6 justify-center items-start">
-                    {teamA && (
-                        <div className="flex flex-col items-center gap-2">
-                            {renderTeamCard(teamA, step === 'post_game' ? "Vencedor (em quadra)" : "Time 1", 0, true)}
-                            {/* ✅ 3. NOVO BOTÃO: APARECE NA TELA PÓS-JOGO */}
-                            {step === 'post_game' && (
-                                <button onClick={handleWinnerExits} className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-2 px-4 rounded-lg text-sm">
-                                    Fazer Vencedor Sair
-                                </button>
-                            )}
-                        </div>
+                <p className="text-gray-400 mb-6">{isEditModeActive ? 'Organize os jogadores e os próximos times. Clique em Salvar ao terminar.' : 'Visualize os times ou inicie a próxima partida.'}</p>
+                
+                {/* --- BOTÕES DE CONTROLE PRINCIPAL --- */}
+                <div className="flex justify-center gap-4 mb-6">
+                    {!isEditModeActive ? (
+                        <button onClick={() => setIsEditModeActive(true)} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg">
+                            <LucideEdit className="inline-block mr-2 w-4 h-4"/>Editar Partida
+                        </button>
+                    ) : (
+                        <button onClick={() => setIsEditModeActive(false)} className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-6 rounded-lg">
+                            <LucideShieldCheck className="inline-block mr-2 w-4 h-4"/>Salvar Alterações
+                        </button>
                     )}
-                    {teamB ? renderTeamCard(teamB, "Próximo Desafiante", 1, true) : <div className="bg-gray-800 p-4 rounded-lg w-full flex items-center justify-center"><h3 className="text-yellow-400 font-bold text-xl">Sem desafiantes</h3></div>}
+                </div>
+
+                {/* --- EXIBIÇÃO DOS TIMES --- */}
+                <div className="flex flex-col md:flex-row gap-4 mb-6 justify-center items-start">
+                    {teamA && renderTeamCard(teamA, "Time A (Em quadra)", 0)}
+                    <div className="flex items-center justify-center h-full text-2xl font-bold text-gray-500 p-4">VS</div>
+                    {teamB ? renderTeamCard(teamB, "Time B (Desafiante)", 1) : <div className="bg-gray-800 p-4 rounded-lg w-full min-w-[280px] flex items-center justify-center"><h3 className="text-yellow-400 font-bold text-xl">Sem desafiantes</h3></div>}
                 </div>
                 
+                {/* --- FILA DE ESPERA --- */}
                 {waitingTeams.length > 0 && (
                     <div className="mb-6">
                         <h3 className="text-xl font-bold text-gray-400 mb-4">Fila de Espera</h3>
                         <div className="flex flex-wrap gap-4 justify-center">
                             {waitingTeams.map((team, index) => (
                                 <div key={index} className="flex flex-col gap-2 items-center">
-                                    {renderTeamCard(team, `Fila ${index + 1}`, index + 2, true)}
-                                    {/* ✅ 4. NOVOS BOTÕES: REORDENAR FILA */}
-                                    <div className="flex gap-2">
-                                        <button onClick={() => handleReorderQueue(index, 'up')} disabled={index === 0} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-1 px-3 text-sm rounded-lg disabled:opacity-50">
-                                            Subir
-                                        </button>
-                                        <button onClick={() => handleReorderQueue(index, 'down')} disabled={index === waitingTeams.length - 1} className="bg-gray-600 hover:bg-gray-500 text-white font-bold py-1 px-3 text-sm rounded-lg disabled:opacity-50">
-                                            Descer
-                                        </button>
-                                    </div>
+                                    {renderTeamCard(team, `Fila ${index + 1}`, index + 2)}
+                                    {/* Botões de subir/descer ficam fora do modo de edição para acesso rápido */}
+                                    {!isEditModeActive && (
+                                        <div className="flex gap-2">
+                                            <button onClick={() => handleReorderQueue(index, 'up')} disabled={index === 0} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1 px-3 text-sm rounded-lg disabled:opacity-50">
+                                                <LucideUndo className="w-4 h-4 transform rotate-90"/>
+                                            </button>
+                                            <button onClick={() => handleReorderQueue(index, 'down')} disabled={index === waitingTeams.length - 1} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1 px-3 text-sm rounded-lg disabled:opacity-50">
+                                                <LucideUndo className="w-4 h-4 transform -rotate-90"/>
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
                     </div>
                 )}
 
-                <div className="flex flex-col sm:flex-row justify-center gap-4 mt-8">
-                    <button onClick={() => setStep('in_game')} disabled={!teamB} className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-600 disabled:cursor-not-allowed">
-                        Começar Partida
-                    </button>
-                    <button onClick={handleForceEndSession} className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg text-lg">
-                        Encerrar Pelada
-                    </button>
-                </div>
+                {/* --- BOTÕES DE AÇÃO GERAL --- */}
+                {!isEditModeActive && (
+                    <div className="flex flex-col sm:flex-row justify-center gap-4 mt-8 border-t border-gray-700 pt-6">
+                        <button onClick={() => setStep('in_game')} disabled={!teamB} className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-500 disabled:cursor-not-allowed">
+                            Começar Próxima Partida
+                        </button>
+                        <button onClick={handleForceEndSession} className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg text-lg">
+                            Encerrar Pelada
+                        </button>
+                    </div>
+                )}
             </div>
         );
     }
     
-    // Tela de Configuração Inicial (sem mudanças)
+    // Tela de Configuração Inicial (sem mudanças, mas com cores padronizadas)
     return (
         <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-6 border border-gray-700">
             <h2 className="text-2xl font-bold text-yellow-400 mb-4">Configurar Noite de Futebol</h2>
@@ -859,12 +894,13 @@ const MatchFlow = ({ players, onMatchEnd, onSessionEnd }) => {
                 {players.map(p => (<button key={p.id} onClick={() => handlePlayerToggle(p.id)} className={`p-3 rounded-lg text-center transition ${selectedPlayerIds.has(p.id) ? 'bg-yellow-500 text-black' : 'bg-gray-800 text-white hover:bg-gray-700'}`}>{p.name}</button>))}
             </div>
             <div className="text-center">
-                <button onClick={handleStartSession} disabled={selectedPlayerIds.size < playersPerTeam * 2} className="bg-yellow-500 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-600 disabled:cursor-not-allowed">Sortear Times e Iniciar</button>
+                <button onClick={handleStartSession} disabled={selectedPlayerIds.size < playersPerTeam * 2} className="bg-yellow-500 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-500 disabled:cursor-not-allowed">Sortear Times e Iniciar</button>
                 {selectedPlayerIds.size < playersPerTeam * 2 && <p className="text-red-500 text-sm mt-2">Selecione pelo menos {playersPerTeam * 2} jogadores.</p>}
             </div>
         </div>
     );
 };
+
 const MatchHistory = ({ matches, players, onEditMatch, onDeleteMatch }) => {
     if (matches.length === 0) {
         return (
