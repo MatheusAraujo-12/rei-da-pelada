@@ -2,14 +2,26 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import * as Tone from 'tone';
 import { LucidePlay, LucidePause, LucidePlus, LucideUndo, LucideGoal, LucideHandshake, LucideShield, LucideHand, LucideFrown } from 'lucide-react';
 import ConfirmationModal from '../../components/ConfirmationModal';
-// ✅ ESTA É A LINHA CORRIGIDA E MAIS IMPORTANTE
-import StatButton from '../../components/StatButton';
+
+// A importação do StatButton foi REMOVIDA daqui.
+
+// ✅ A DEFINIÇÃO do StatButton foi MOVIDA PARA AQUI DENTRO
+const StatButton = ({ Icon, count, onClick, colorClass, label }) => (
+    <button title={label} onClick={onClick} className={`relative w-10 h-10 flex items-center justify-center rounded-lg ${colorClass} transition-transform transform active:scale-90`}>
+        <Icon className="w-5 h-5" />
+        <div className="absolute -top-2 -right-2 bg-white text-black text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center border-2 border-gray-800">
+            {count}
+        </div>
+    </button>
+);
+
 
 const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
     const [timeLeft, setTimeLeft] = useState(durationInMinutes * 60);
     const [isPaused, setIsPaused] = useState(false);
     const [showConfirm, setShowConfirm] = useState(false);
     const [history, setHistory] = useState([]);
+    const [score, setScore] = useState({ teamA: 0, teamB: 0 });
     const initialStats = useMemo(() => {
         const s = {};
         if (teams && teams.teamA && teams.teamB) {
@@ -19,9 +31,8 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
         }
         return s;
     }, [teams]);
-    const [score, setScore] = useState({ teamA: 0, teamB: 0 });
     const [playerStats, setPlayerStats] = useState(initialStats);
-
+    
     const workerRef = useRef(null);
     const synth = useRef(null);
 
@@ -41,11 +52,7 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
                 setTimeLeft(0);
                 if (synth.current) {
                     synth.current.triggerAttackRelease("C5", "0.5");
-                    setTimeout(() => {
-                        if (synth.current) {
-                            synth.current.triggerAttackRelease("C5", "1");
-                        }
-                    }, 600);
+                    setTimeout(() => { if (synth.current) { synth.current.triggerAttackRelease("C5", "1"); } }, 600);
                 }
             }
         };
@@ -77,12 +84,20 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
         if(isPaused) setIsPaused(false);
     };
 
-    const formatTime = s => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+    const formatTime = (s) => {
+        if (isNaN(s) || s < 0) s = 0;
+        return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+    };
 
     const handleStat = (playerId, stat, team) => {
         setHistory(prev => [...prev, { score: { ...score }, playerStats: JSON.parse(JSON.stringify(playerStats)) }]);
-        setPlayerStats(prev => ({ ...prev, [playerId]: { ...prev[playerId], [stat]: prev[playerId][stat] + 1 } }));
-        if (stat === 'goals') { setScore(prev => ({ ...prev, [team]: prev[team] + 1 })); }
+        setPlayerStats(prev => ({ 
+            ...prev, 
+            [playerId]: { ...prev[playerId], [stat]: (prev[playerId]?.[stat] || 0) + 1 } 
+        }));
+        if (stat === 'goals') { 
+            setScore(prev => ({ ...prev, [team]: prev[team] + 1 })); 
+        }
     };
 
     const handleUndo = () => {
@@ -100,7 +115,7 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
             <h3 className="text-2xl font-bold text-yellow-400 mb-2 text-center">{teamName}</h3>
             {team.map(p => (
                 <div key={p.id} className="bg-gray-900/70 p-4 rounded-lg">
-                    <p className="font-bold text-lg text-center mb-3">{p.name}</p>
+                    <p className="font-bold text-lg text-center mb-3 text-white">{p.name}</p>
                     <div className="flex justify-center gap-2 flex-wrap">
                         <StatButton Icon={LucideGoal} label="Gol" count={playerStats[p.id]?.goals || 0} onClick={() => handleStat(p.id, 'goals', scoreKey)} colorClass="bg-green-600/80 hover:bg-green-500" />
                         <StatButton Icon={LucideHandshake} label="Assistência" count={playerStats[p.id]?.assists || 0} onClick={() => handleStat(p.id, 'assists')} colorClass="bg-blue-600/80 hover:bg-blue-500" />
@@ -112,24 +127,35 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
             ))}
         </div>
     );
-
+    
     return (
         <>
             <ConfirmationModal isOpen={showConfirm} title="Confirmar Acréscimo" message="Deseja adicionar 1 minuto ao cronômetro?" onConfirm={confirmAddMinute} onClose={() => setShowConfirm(false)} />
             <div className="space-y-6">
                 <div className="text-center bg-black/30 p-4 rounded-xl space-y-4">
                     <div>
-                        <h2 className="text-4xl sm:text-6xl font-mono tracking-tighter text-white">{formatTime(timeLeft)}</h2>
+                        <h2 className="text-6xl font-mono tracking-tighter text-white">{formatTime(timeLeft)}</h2>
                         <div className="flex justify-center items-center gap-2 sm:gap-4 mt-2">
                             <button onClick={togglePause} className="p-2 sm:p-3 bg-gray-700/80 rounded-full hover:bg-yellow-500 transition-colors">{isPaused ? <LucidePlay className="w-5 h-5 sm:w-6 sm:h-6" /> : <LucidePause className="w-5 h-5 sm:w-6 sm:h-6" />}</button>
                             <button onClick={() => setShowConfirm(true)} className="py-2 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs sm:text-sm font-semibold flex items-center gap-2"><LucidePlus className="w-4 h-4 sm:w-5 sm:h-5" /> Acréscimo</button>
                             <button onClick={handleUndo} disabled={history.length === 0} className="py-2 px-4 rounded-lg bg-gray-600 hover:bg-gray-500 text-xs sm:text-sm font-semibold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"><LucideUndo className="w-4 h-4 sm:w-5 sm:h-5" /> Desfazer</button>
                         </div>
                     </div>
-                    <h2 className="text-4xl sm:text-5xl font-black tracking-tighter"><span className="text-white">{score.teamA}</span><span className="text-yellow-400 mx-2 sm:mx-4">VS</span><span className="text-white">{score.teamB}</span></h2>
+                    <h2 className="text-5xl font-black tracking-tighter">
+                        <span className="text-white">{score.teamA}</span>
+                        <span className="text-yellow-400 mx-4">VS</span>
+                        <span className="text-white">{score.teamB}</span>
+                    </h2>
                 </div>
-                <div className="flex flex-col md:flex-row gap-6">{renderTeam(teams.teamA, 'Time A', 'teamA')}{renderTeam(teams.teamB, 'Time B', 'teamB')}</div>
-                <div className="text-center mt-6"><button onClick={handleEndMatchClick} className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-8 rounded-lg text-lg">Encerrar Partida</button></div>
+                <div className="flex flex-col md:flex-row gap-6">
+                    {renderTeam(teams.teamA, 'Time A', 'teamA')}
+                    {renderTeam(teams.teamB, 'Time B', 'teamB')}
+                </div>
+                <div className="text-center mt-6">
+                    <button onClick={handleEndMatchClick} className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-8 rounded-lg text-lg">
+                        Encerrar Partida
+                    </button>
+                </div>
             </div>
         </>
     );
