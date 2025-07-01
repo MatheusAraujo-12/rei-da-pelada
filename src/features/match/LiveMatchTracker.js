@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import * as Tone from 'tone';
 import { LucidePlay, LucidePause, LucidePlus, LucideUndo, LucideGoal, LucideHandshake, LucideShield, LucideHand, LucideFrown } from 'lucide-react';
 import ConfirmationModal from '../../components/ConfirmationModal';
+// ✅ ESTA É A LINHA CORRIGIDA E MAIS IMPORTANTE
 import StatButton from '../../components/StatButton';
 
 const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
@@ -11,7 +12,11 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
     const [history, setHistory] = useState([]);
     const initialStats = useMemo(() => {
         const s = {};
-        [...teams.teamA, ...teams.teamB].forEach(p => { s[p.id] = { goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 }; });
+        if (teams && teams.teamA && teams.teamB) {
+            [...teams.teamA, ...teams.teamB].forEach(p => { 
+                s[p.id] = { goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 }; 
+            });
+        }
         return s;
     }, [teams]);
     const [score, setScore] = useState({ teamA: 0, teamB: 0 });
@@ -23,7 +28,6 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
     useEffect(() => {
         synth.current = new Tone.Synth().toDestination();
         
-        // Criar o worker apenas uma vez
         const worker = new Worker('/timer.worker.js');
         workerRef.current = worker;
 
@@ -37,7 +41,11 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
                 setTimeLeft(0);
                 if (synth.current) {
                     synth.current.triggerAttackRelease("C5", "0.5");
-                    setTimeout(() => synth.current.triggerAttackRelease("C5", "1"), 600);
+                    setTimeout(() => {
+                        if (synth.current) {
+                            synth.current.triggerAttackRelease("C5", "1");
+                        }
+                    }, 600);
                 }
             }
         };
@@ -94,11 +102,11 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
                 <div key={p.id} className="bg-gray-900/70 p-4 rounded-lg">
                     <p className="font-bold text-lg text-center mb-3">{p.name}</p>
                     <div className="flex justify-center gap-2 flex-wrap">
-                        <StatButton Icon={LucideGoal} label="Gol" count={playerStats[p.id].goals} onClick={() => handleStat(p.id, 'goals', scoreKey)} colorClass="bg-green-600/80 hover:bg-green-500" />
-                        <StatButton Icon={LucideHandshake} label="Assistência" count={playerStats[p.id].assists} onClick={() => handleStat(p.id, 'assists')} colorClass="bg-blue-600/80 hover:bg-blue-500" />
-                        <StatButton Icon={LucideShield} label="Desarme" count={playerStats[p.id].tackles} onClick={() => handleStat(p.id, 'tackles')} colorClass="bg-orange-600/80 hover:bg-orange-500" />
-                        {p.position === 'Goleiro' && <StatButton Icon={LucideHand} label="Defesa Difícil" count={playerStats[p.id].saves} onClick={() => handleStat(p.id, 'saves')} colorClass="bg-purple-600/80 hover:bg-purple-500" />}
-                        <StatButton Icon={LucideFrown} label="Falha" count={playerStats[p.id].failures} onClick={() => handleStat(p.id, 'failures')} colorClass="bg-red-800/80 hover:bg-red-700" />
+                        <StatButton Icon={LucideGoal} label="Gol" count={playerStats[p.id]?.goals || 0} onClick={() => handleStat(p.id, 'goals', scoreKey)} colorClass="bg-green-600/80 hover:bg-green-500" />
+                        <StatButton Icon={LucideHandshake} label="Assistência" count={playerStats[p.id]?.assists || 0} onClick={() => handleStat(p.id, 'assists')} colorClass="bg-blue-600/80 hover:bg-blue-500" />
+                        <StatButton Icon={LucideShield} label="Desarme" count={playerStats[p.id]?.tackles || 0} onClick={() => handleStat(p.id, 'tackles')} colorClass="bg-orange-600/80 hover:bg-orange-500" />
+                        {p.position === 'Goleiro' && <StatButton Icon={LucideHand} label="Defesa Difícil" count={playerStats[p.id]?.saves || 0} onClick={() => handleStat(p.id, 'saves')} colorClass="bg-purple-600/80 hover:bg-purple-500" />}
+                        <StatButton Icon={LucideFrown} label="Falha" count={playerStats[p.id]?.failures || 0} onClick={() => handleStat(p.id, 'failures')} colorClass="bg-red-800/80 hover:bg-red-700" />
                     </div>
                 </div>
             ))}
