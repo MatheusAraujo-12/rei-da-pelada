@@ -1,0 +1,12 @@
+import React from 'react';
+
+const StatButton = ({ Icon, count, onClick, colorClass, label }) => (
+    <button title={label} onClick={onClick} className={`relative w-10 h-10 flex items-center justify-center rounded-lg ${colorClass} transition-transform transform active:scale-90`}>
+        <Icon className="w-5 h-5" />
+        <div className="absolute -top-2 -right-2 bg-white text-black text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center border-2 border-gray-800">
+            {count}
+        </div>
+    </button>
+);
+
+export default StatButton;

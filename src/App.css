@@ -1,4 +1,8 @@
-<<<<<<< HEAD
+body {
+    background-color: #0c1116; /* Cor de fundo escura da segunda versão */
+    color: white; /* Adicionado para melhor legibilidade no fundo escuro */
+}
+
 .App {
   text-align: center;
 }
@@ -36,11 +40,9 @@
   to {
     transform: rotate(360deg);
   }
-=======
-body {
-    background-color: #0c1116;
 }
 
+/* Estilos da segunda versão que foram mantidos */
 .perspective {
     perspective: 1000px;
 }
@@ -66,5 +68,4 @@ body {
 
 .range-slider::-moz-range-thumb {
     background: #f59e0b;
->>>>>>> 86e1db19299aa327a5f72405923ad41f886590aa
 }
