@@ -22,6 +22,8 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
 
     useEffect(() => {
         synth.current = new Tone.Synth().toDestination();
+        
+        // Criar o worker apenas uma vez
         const worker = new Worker('/timer.worker.js');
         workerRef.current = worker;
 
@@ -33,8 +35,10 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
                 setTimeLeft(workerTimeLeft);
             } else if (type === 'done') {
                 setTimeLeft(0);
-                synth.current.triggerAttackRelease("C5", "0.5");
-                setTimeout(() => synth.current.triggerAttackRelease("C5", "1"), 600);
+                if (synth.current) {
+                    synth.current.triggerAttackRelease("C5", "0.5");
+                    setTimeout(() => synth.current.triggerAttackRelease("C5", "1"), 600);
+                }
             }
         };
 
