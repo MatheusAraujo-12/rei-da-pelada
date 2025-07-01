@@ -22,8 +22,6 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
     const [tieBreakerRule, setTieBreakerRule] = useState('winnerStays');
     const [winnerStreak, setWinnerStreak] = useState({ teamId: null, count: 0 });
 
-
-    // ✅ EFEITO PARA CARREGAR DADOS SALVOS QUANDO O COMPONENTE MONTA
     useEffect(() => {
         try {
             const savedConfig = localStorage.getItem(localStorageKey);
@@ -40,13 +38,11 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
         }
     }, [localStorageKey]);
 
-    // ✅ EFEITO PARA SALVAR DADOS AUTOMATICAMENTE QUANDO ALGO MUDA
     useEffect(() => {
-        // Salva apenas na etapa de configuração para não interferir com o jogo
         if (step === 'config') {
             try {
                 const configToSave = {
-                    selectedPlayerIds: Array.from(selectedPlayerIds), // Converte Set para Array para salvar
+                    selectedPlayerIds: Array.from(selectedPlayerIds),
                     numberOfTeams,
                     drawType,
                     streakLimit,

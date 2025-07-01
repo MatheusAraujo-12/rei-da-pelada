@@ -1,51 +1,35 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter, useNavigate } from 'react-router-dom';
-import * as Tone from 'tone';
-import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, getDoc, setDoc, runTransaction, serverTimestamp, orderBy } from 'firebase/firestore';
+
+// Importações de Serviços e Utilitários
+import { auth, db, appId } from './services/firebase';
+
+// Importações de Componentes de Features e UI
+import AuthScreen from './features/auth/AuthScreen';
+import ConfirmationModal from './components/ConfirmationModal';
+import PlayerModal from './features/players/PlayerModal';
+import PlayerCard from './features/players/PlayerCard';
+import PeerReviewModal from './features/players/PeerReviewModal';
+import CreatePlayerProfile from './features/players/CreatePlayerProfile';
+import EditMatchModal from './features/history/EditMatchModal';
+import HallOfFame from './features/history/HallOfFame';
+import GroupDashboard from './features/group/GroupDashboard';
+import GroupGate from './features/group/GroupGate';
+import SessionReportDetail from './features/history/SessionReportDetail';
+import SessionHistoryList from './features/history/SessionHistoryList';
+import MatchHistory from './features/history/MatchHistory';
+import MatchFlow from './features/match/MatchFlow';
+
+// Importações de Funções do Firebase
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, getDoc, setDoc, runTransaction, serverTimestamp, orderBy } from 'firebase/firestore';
+
+// Importações de Ícones
 import { 
-    LucideUser, LucideUserPlus, LucideX, LucideShield, LucideGoal, LucideHand, 
-    LucideEdit, LucideTrash2, LucideUsers, LucideSwords, LucideUndo, LucideTrophy, 
-    LucideAward, LucideHandshake, LucideShieldCheck, LucideFrown, LucidePlay, 
-    LucidePause, LucidePlus, LucideClipboard, LucideLogIn, LucidePlusCircle, 
-    LucideHistory, LucideLogOut
+    LucideUserPlus, LucideUsers, LucideSwords, 
+    LucideHistory, LucideTrophy, LucideLogOut 
 } from 'lucide-react';
 
-
-// ✅ AS IMPORTAÇÕES PROBLEMÁTICAS FORAM REMOVIDAS DAQUI
-
-// --- Configurações Iniciais ---
-const firebaseConfig = {
-    apiKey: "AIzaSyAoqy2Tnwmp_sfU903bvG_EcyJ9QXXu9a4",
-    authDomain: "sample-firebase-ai-app-198c0.firebaseapp.com",
-    projectId: "sample-firebase-ai-app-198c0",
-    storageBucket: "sample-firebase-ai-app-198c0.firebasestorage.app",
-    messagingSenderId: "838973313914",
-    appId: "1:838973313914:web:c4a1c229ebaefdeb023cc3"
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = 'default-fut-app';
-
-// ✅ A DEFINIÇÃO DESTAS FUNÇÕES ESTÁ DE VOLTA AQUI, ONDE DEVERIA ESTAR POR ENQUANTO
-const calculateOverall = (skills) => {
-    if (!skills) return 0;
-    const skillValues = Object.values(skills).map(Number).filter(v => !isNaN(v));
-    if (skillValues.length === 0) return 0;
-    return Math.round(skillValues.reduce((acc, val) => acc + val, 0) / skillValues.length);
-};
-
-const StatButton = ({ Icon, count, onClick, colorClass, label }) => (
-    <button title={label} onClick={onClick} className={`relative w-10 h-10 flex items-center justify-center rounded-lg ${colorClass} transition-transform transform active:scale-90`}>
-        <Icon className="w-5 h-5" />
-        <div className="absolute -top-2 -right-2 bg-white text-black text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center border-2 border-gray-800">
-            {count}
-        </div>
-    </button>
-);
 // --- COMPONENTE PRINCIPAL ---
 
 export default function AppWrapper() {
@@ -81,7 +65,6 @@ function App() {
     const { groupId, isAdmin } = userData;
 
     useEffect(() => {
-        console.log('App.js useEffect: Tentando usar o objeto auth:', auth);
         const unsubscribe = onAuthStateChanged(auth, async (u) => {
             if (u) {
                 setUser(u);
