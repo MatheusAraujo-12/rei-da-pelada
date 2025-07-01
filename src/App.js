@@ -22,7 +22,7 @@ import MatchFlow from './features/match/MatchFlow';
 
 // Importações de Funções do Firebase
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, getDoc, setDoc, runTransaction, serverTimestamp, orderBy } from 'firebase/firestore';
+import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, getDoc, runTransaction, orderBy } from 'firebase/firestore';
 
 // Importações de Ícones
 import { 

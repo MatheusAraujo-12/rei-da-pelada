@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LucideEdit, LucideShieldCheck, LucideUndo, LucideX } from 'lucide-react';
 import { calculateOverall } from '../../utils/helpers';
 import LiveMatchTracker from './LiveMatchTracker';
@@ -8,7 +8,6 @@ import { db, appId } from '../../services/firebase';
 
 const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
     const localStorageKey = `reiDaPeladaConfig-${groupId}`;
-
     // --- Estados ---
     const [step, setStep] = useState('config');
     const [selectedPlayerIds, setSelectedPlayerIds] = useState(new Set());
