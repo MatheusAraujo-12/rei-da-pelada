@@ -69,7 +69,7 @@ function App() {
             }
         });
         return () => unsubscribe();
-    },  [navigate, activeGroupId]);
+    },  [navigate, user]);
 
     useEffect(() => {
         if (!user) {
