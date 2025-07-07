@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, useNavigate } from 'react-router-dom';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { collection, onSnapshot, doc, getDoc, query, orderBy, getDocs, where, setDoc, updateDoc, deleteDoc, runTransaction, addDoc, arrayRemove, writeBatch, serverTimestamp } from 'firebase/firestore';
 
-// Importações de Serviços e Utilitários
-import { auth, db, appId } from './services/firebase';
-
-// Importações de Componentes de Features e UI
+// Importações de todos os componentes e serviços
+import { auth, db } from './services/firebase';
 import AuthScreen from './features/auth/AuthScreen';
 import ConfirmationModal from './components/ConfirmationModal';
 import PlayerModal from './features/players/PlayerModal';
@@ -19,18 +19,9 @@ import SessionReportDetail from './features/history/SessionReportDetail';
 import SessionHistoryList from './features/history/SessionHistoryList';
 import MatchHistory from './features/history/MatchHistory';
 import MatchFlow from './features/match/MatchFlow';
+import UserDashboard from './features/dashboard/UserDashboard'; 
 
-// Importações de Funções do Firebase
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, query, getDoc, runTransaction, orderBy } from 'firebase/firestore';
-
-// Importações de Ícones
-import { 
-    LucideUserPlus, LucideUsers, LucideSwords, 
-    LucideHistory, LucideTrophy, LucideLogOut 
-} from 'lucide-react';
-
-// --- COMPONENTE PRINCIPAL ---
+import { LucideArrowLeft, LucideUserPlus, LucideUsers, LucideSwords, LucideHistory, LucideTrophy, LucideLogOut } from 'lucide-react';
 
 export default function AppWrapper() {
     return (
@@ -45,115 +36,139 @@ export default function AppWrapper() {
 
 function App() {
     const [user, setUser] = useState(null);
-    const [userData, setUserData] = useState({ groupId: null, isAdmin: false });
+    const [isLoading, setIsLoading] = useState(true);
+    const [currentView, setCurrentView] = useState('dashboard');
+    const [previousView, setPreviousView] = useState('dashboard');
+    const [playerProfile, setPlayerProfile] = useState(null);
+    const [userGroups, setUserGroups] = useState([]);
+    const [activeGroupId, setActiveGroupId] = useState(null);
+    const [isAdminOfActiveGroup, setIsAdminOfActiveGroup] = useState(false);
     const [players, setPlayers] = useState([]);
     const [matches, setMatches] = useState([]);
-    const [playerProfile, setPlayerProfile] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [currentView, setCurrentView] = useState('players');
+    const [savedSessions, setSavedSessions] = useState([]);
     const [isPlayerModalOpen, setIsPlayerModalOpen] = useState(false);
     const [editingPlayer, setEditingPlayer] = useState(null);
     const [playerToDelete, setPlayerToDelete] = useState(null);
     const [peerReviewPlayer, setPeerReviewPlayer] = useState(null);
     const [matchToDelete, setMatchToDelete] = useState(null);
-    const [savedSessions, setSavedSessions] = useState([]);
-    const [viewingSession, setViewingSession] = useState(null);
     const [editingMatch, setEditingMatch] = useState(null);
+    const [viewingSession, setViewingSession] = useState(null);
+    const [groupToLeave, setGroupToLeave] = useState(null);
     const [sessionToDelete, setSessionToDelete] = useState(null);
     
     const navigate = useNavigate();
-    const { groupId, isAdmin } = userData;
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (u) => {
+        const unsubscribe = onAuthStateChanged(auth, (u) => {
             if (u) {
-                setUser(u);
-                const userDocRef = doc(db, `artifacts/${appId}/users/${u.uid}`);
-                const userDocSnap = await getDoc(userDocRef);
-                if (userDocSnap.exists() && userDocSnap.data().groupId) {
-                    setUserData(prev => ({ ...prev, groupId: userDocSnap.data().groupId }));
-                } else {
-                    setUserData({ groupId: null, isAdmin: false });
-                    setIsLoading(false);
-                }
+                if (!user) setUser(u);
             } else {
-                setUser(null); setUserData({ groupId: null, isAdmin: false }); setIsLoading(false);
+                setUser(null); setPlayerProfile(null); setUserGroups([]); setActiveGroupId(null);
                 navigate('/login');
             }
         });
-       return () => unsubscribe();
-    }, [navigate]);
+        return () => unsubscribe();
+    }, [user, navigate]);
 
     useEffect(() => {
-        if (!user || !groupId) {
-            setPlayers([]);
-            setMatches([]);
-            setSavedSessions([]);
-            if (user) setIsLoading(false);
+        if (!user) {
+            setIsLoading(false);
             return;
         }
 
         setIsLoading(true);
-        let unsubGroup, unsubPlayers, mSub, sessionsSub;
-
-        const groupDocRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}`);
-        unsubGroup = onSnapshot(groupDocRef, (docSnap) => {
-            setUserData(prev => ({ ...prev, isAdmin: docSnap.exists() && docSnap.data().createdBy === user.uid }));
+        const playerDocRef = doc(db, 'players', user.uid);
+        const unsubPlayer = onSnapshot(playerDocRef, (docSnap) => {
+            setPlayerProfile(docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null);
         });
 
-        const playersColRef = collection(db, `artifacts/${appId}/public/data/groups/${groupId}/players`);
-        unsubPlayers = onSnapshot(query(playersColRef), (snapshot) => {
-            const allPlayers = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-            setPlayers(allPlayers);
-            setPlayerProfile(allPlayers.find(p => p.createdBy === user.uid) || null);
-            setIsLoading(false);
-        });
-        
-        const matchesColRef = collection(db, `artifacts/${appId}/public/data/groups/${groupId}/matches`);
-        mSub = onSnapshot(query(matchesColRef, orderBy('date', 'desc')), (s) => setMatches(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-        
-        const sessionsColRef = collection(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions`);
-        const qSessions = query(sessionsColRef, orderBy('date', 'desc'));
-        sessionsSub = onSnapshot(qSessions, (snapshot) => {
-            setSavedSessions(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-        });
-
-        return () => { 
-            if(unsubGroup) unsubGroup(); 
-            if(unsubPlayers) unsubPlayers();
-            if(mSub) mSub(); 
-            if(sessionsSub) sessionsSub();
-        };
-    }, [user, groupId]);
-    
-    const handleSavePlayer = async (playerData) => {
-        if (!groupId || !user) return;
-        const { id, ...data } = playerData;
-        try {
-            if (id) {
-                if (isAdmin) {
-                    await updateDoc(doc(db, `artifacts/${appId}/public/data/groups/${groupId}/players`, id), data);
+        const userDocRef = doc(db, 'users', user.uid);
+        const unsubUser = onSnapshot(userDocRef, async (userDocSnap) => {
+            const groupIds = userDocSnap.exists() ? userDocSnap.data().groupIds || [] : [];
+            if (groupIds.length > 0) {
+                const groupPromises = groupIds.map(id => getDoc(doc(db, "groups", id)));
+                const groupDocs = await Promise.all(groupPromises);
+                const groupsData = groupDocs.filter(d => d.exists()).map(d => ({ id: d.id, ...d.data() }));
+                setUserGroups(groupsData);
+                if (!activeGroupId || !groupIds.includes(activeGroupId)) {
+                    setActiveGroupId(groupsData[0]?.id || null);
                 }
             } else {
-                await addDoc(collection(db, `artifacts/${appId}/public/data/groups/${groupId}/players`), { ...data, createdBy: user.uid });
+                setUserGroups([]);
+                setActiveGroupId(null);
             }
-        } catch (e) { console.error("Erro ao salvar jogador:", e); }
-        finally {
-            setIsPlayerModalOpen(false);
+            setIsLoading(false);
+        });
+
+        return () => {
+            unsubPlayer();
+            unsubUser();
+        };
+    }, [user]);
+
+    useEffect(() => {
+        if (!user || !activeGroupId) {
+            setPlayers([]); setMatches([]); setSavedSessions([]); setIsAdminOfActiveGroup(false);
+            return;
         }
+        const groupDocRef = doc(db, 'groups', activeGroupId);
+        const unsubGroup = onSnapshot(groupDocRef, (docSnap) => {
+            setIsAdminOfActiveGroup(docSnap.exists() && docSnap.data().createdBy === user.uid);
+        });
+        const playersColRef = collection(db, `groups/${activeGroupId}/players`);
+        const unsubPlayers = onSnapshot(query(playersColRef), s => setPlayers(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+        const matchesColRef = collection(db, `groups/${activeGroupId}/matches`);
+        const mSub = onSnapshot(query(matchesColRef, orderBy('date', 'desc')), s => setMatches(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+        const sessionsColRef = collection(db, `groups/${activeGroupId}/sessions`);
+        const qSessions = query(sessionsColRef, orderBy('date', 'desc'));
+        const sSub = onSnapshot(qSessions, s => setSavedSessions(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+        return () => { unsubGroup(); unsubPlayers(); mSub(); sSub(); };
+    }, [user, activeGroupId]);
+    
+    const handleProfileCreated = (newProfile) => {
+        setPlayerProfile({ id: user.uid, ...newProfile });
+    };
+    
+    const handleGroupAssociated = async (newGroupIds) => {
+        const newActiveId = newGroupIds[newGroupIds.length - 1];
+        setActiveGroupId(newActiveId);
+        navigateToView('dashboard');
     };
 
+    const handleSavePlayer = async (playerData) => {
+        if (playerData.id) {
+            if (!activeGroupId || !isAdminOfActiveGroup) return;
+            const { id, ...data } = playerData;
+            try {
+                await updateDoc(doc(db, `groups/${activeGroupId}/players`, id), data);
+            } catch (e) { console.error("Erro ao ATUALIZAR jogador:", e); }
+            finally { setIsPlayerModalOpen(false); }
+        } else {
+            if (playerProfile && isAdminOfActiveGroup && activeGroupId) {
+                try {
+                    await addDoc(collection(db, `groups/${activeGroupId}/players`), playerData);
+                } catch (e) { console.error("Erro ao ADICIONAR novo jogador ao grupo:", e); }
+                finally { setIsPlayerModalOpen(false); }
+            } else if (!playerProfile && user) {
+                try {
+                    await setDoc(doc(db, 'players', user.uid), playerData);
+                    handleProfileCreated(playerData);
+                } catch (e) { console.error("Erro ao CRIAR perfil global:", e); }
+            }
+        }
+    };
+    
     const confirmDeletePlayer = async () => {
-        if (!groupId || !playerToDelete || !isAdmin) return;
+        if (!activeGroupId || !playerToDelete || !isAdminOfActiveGroup) return;
         try {
-            await deleteDoc(doc(db, `artifacts/${appId}/public/data/groups/${groupId}/players`, playerToDelete.id));
+            await deleteDoc(doc(db, `groups/${activeGroupId}/players`, playerToDelete.id));
         } catch (e) { console.error("Erro ao apagar jogador:", e); } finally { setPlayerToDelete(null); }
     };
 
     const confirmDeleteMatch = async () => {
-        if(!groupId || !matchToDelete || !isAdmin) return;
+        if(!activeGroupId || !matchToDelete || !isAdminOfActiveGroup) return;
         try {
-            await deleteDoc(doc(db, `artifacts/${appId}/public/data/groups/${groupId}/matches`, matchToDelete.id));
+            await deleteDoc(doc(db, `groups/${activeGroupId}/matches`, matchToDelete.id));
         } catch(e) {
             console.error("Erro ao apagar partida:", e);
         } finally {
@@ -162,70 +177,66 @@ function App() {
     };
 
     const confirmDeleteSession = async () => {
-        if (!groupId || !sessionToDelete || !isAdmin) return;
+        if (!sessionToDelete || !isAdminOfActiveGroup) return;
         try {
-            await deleteDoc(doc(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions`, sessionToDelete.id));
-        } catch (e) {
-            console.error("Erro ao apagar sessão:", e);
-        } finally {
-            setSessionToDelete(null);
-        }
+            await deleteDoc(doc(db, `groups/${activeGroupId}/sessions`, sessionToDelete.id));
+        } catch (e) { console.error("Erro ao apagar sessão:", e); } 
+        finally { setSessionToDelete(null); }
     };
 
-    const handleUpdateMatch = async (matchId, newStats) => {
-        if (!groupId) return;
+    const handleLeaveGroup = async () => {
+        if (!user || !groupToLeave) return;
+        const batch = writeBatch(db);
+        const userDocRef = doc(db, 'users', user.uid);
+        const groupDocRef = doc(db, 'groups', groupToLeave.id);
         try {
-            await updateDoc(doc(db, `artifacts/${appId}/public/data/groups/${groupId}/matches`, matchId), { playerStats: newStats });
+            batch.update(userDocRef, { groupIds: arrayRemove(groupToLeave.id) });
+            batch.update(groupDocRef, { members: arrayRemove(user.uid) });
+            await batch.commit();
+        } catch (error) {
+            console.error("Erro ao sair do grupo:", error);
+            alert("Não foi possível sair do grupo.");
+        } finally {
+            setGroupToLeave(null);
+        }
+    };
+    
+    const handleUpdateMatch = async (matchId, newStats) => {
+        if (!activeGroupId) return;
+        try {
+            await updateDoc(doc(db, `groups/${activeGroupId}/matches`, matchId), { playerStats: newStats });
             setEditingMatch(null);
         } catch (e) { console.error("Erro ao atualizar a partida: ", e); }
     };
     
     const handleSavePeerReview = async (playerToReview, newSkills) => {
-        if (!groupId || !user) return;
-        const playerRef = doc(db, `artifacts/${appId}/public/data/groups/${groupId}/players`, playerToReview.id);
-        
+        if (!activeGroupId || !user) return;
+        const playerRef = doc(db, `groups/${activeGroupId}/players`, playerToReview.id);
         try {
             await runTransaction(db, async (transaction) => {
                 const playerDoc = await transaction.get(playerRef);
                 if (!playerDoc.exists()) { throw new Error("Documento não existe!"); }
-                
                 const currentData = playerDoc.data();
                 const currentPeerOverall = currentData.peerOverall || { ratingsCount: 0, skillsSum: {} };
-                
                 const newRatingsCount = currentPeerOverall.ratingsCount + 1;
                 const newSkillsSum = { ...currentPeerOverall.skillsSum };
-
-                Object.keys(newSkills).forEach(skill => {
-                    newSkillsSum[skill] = (newSkillsSum[skill] || 0) + newSkills[skill];
-                });
-
+                Object.keys(newSkills).forEach(skill => { newSkillsSum[skill] = (newSkillsSum[skill] || 0) + newSkills[skill]; });
                 const newAvgSkills = {};
-                Object.keys(newSkillsSum).forEach(skill => {
-                    newAvgSkills[skill] = Math.round(newSkillsSum[skill] / newRatingsCount);
-                });
-                
-                transaction.update(playerRef, { 
-                    peerOverall: {
-                        ratingsCount: newRatingsCount,
-                        skillsSum: newSkillsSum,
-                        avgSkills: newAvgSkills
-                    }
-                });
+                Object.keys(newSkillsSum).forEach(skill => { newAvgSkills[skill] = Math.round(newSkillsSum[skill] / newRatingsCount); });
+                transaction.update(playerRef, { peerOverall: { ratingsCount: newRatingsCount, skillsSum: newSkillsSum, avgSkills: newAvgSkills }});
             });
             alert("Avaliação salva com sucesso!");
         } catch (e) {
             console.error("Erro ao salvar avaliação:", e);
             alert("Falha ao salvar avaliação.");
         }
-        finally {
-            setPeerReviewPlayer(null);
-        }
+        finally { setPeerReviewPlayer(null); }
     };
 
     const handleMatchEnd = async (matchData) => {
-        if (!groupId) return null;
+        if (!activeGroupId) return null;
         try {
-            const matchDocRef = await addDoc(collection(db, `artifacts/${appId}/public/data/groups/${groupId}/matches`), matchData);
+            const matchDocRef = await addDoc(collection(db, `groups/${activeGroupId}/matches`), { ...matchData, date: serverTimestamp() });
             return { id: matchDocRef.id, ...matchData };
         } catch (e) { 
             console.error("Erro ao salvar a partida:", e);
@@ -233,64 +244,124 @@ function App() {
         }
     };
 
-    const handleSessionEnd = () => {
-        setCurrentView('sessions');
-        setViewingSession(null);
+    const handleSessionEnd = async (sessionData) => {
+        if (!activeGroupId) {
+            alert("Nenhum grupo ativo para salvar a sessão.");
+            return;
+        }
+        try {
+            const finalSessionData = {
+                ...sessionData,
+                date: serverTimestamp(),
+            };
+            const sessionsColRef = collection(db, `groups/${activeGroupId}/sessions`);
+            await addDoc(sessionsColRef, finalSessionData);
+            navigateToView('sessions');
+        } catch (error) {
+            console.error("ERRO DETALHADO AO SALVAR:", error);
+            alert(`ERRO AO SALVAR NO FIRESTORE: ${error.message}`);
+        }
     };
     
     const openEditModal = (p) => { setEditingPlayer(p); setIsPlayerModalOpen(true); };
     const openAddModal = () => { setEditingPlayer(null); setIsPlayerModalOpen(true); };
     const handleLogout = () => signOut(auth);
+    
+    const navigateToView = (view) => {
+        if (view !== currentView) {
+            setPreviousView(currentView);
+            setCurrentView(view);
+        }
+    };
+    
+    const handleEnterGroup = (groupId) => {
+        setActiveGroupId(groupId);
+        navigateToView('players'); 
+    };
 
     const renderContent = () => {
-        if (isLoading) return <div className="text-center p-10 text-white">Carregando...</div>;
+        if (isLoading) return <div className="text-center p-10 text-white">A carregar...</div>;
         if (!user) return <AuthScreen />;
-        if (!groupId) return <GroupGate user={user} onGroupAssociated={(id) => setUserData(prev => ({ ...prev, groupId: id }))} />;
         if (!playerProfile) return <CreatePlayerProfile user={user} onSave={handleSavePlayer} />;
+        
+        let mainComponent;
+        const showNavBar = currentView !== 'dashboard' && currentView !== 'groupGate';
 
-        if (currentView === 'sessions' && viewingSession) {
-            return <SessionReportDetail session={viewingSession} onBack={() => setViewingSession(null)} />;
+        switch(currentView) {
+            case 'groupGate':
+                mainComponent = <GroupGate 
+                    user={user} 
+                    onGroupAssociated={handleGroupAssociated} 
+                    onBackToDashboard={userGroups.length > 0 ? () => navigateToView('dashboard') : null}
+                />;
+                break;
+            case 'players':
+                mainComponent = <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">{isAdminOfActiveGroup && <div onClick={openAddModal} className="cursor-pointer w-full max-w-[280px] mx-auto h-[400px] border-4 border-dashed border-gray-700 rounded-2xl flex items-center justify-center text-gray-500 hover:border-yellow-400 hover:text-yellow-400 transition-colors duration-300"><LucideUserPlus className="w-20 h-20" /></div>}{players.map(p => <PlayerCard key={p.id} player={p} onEdit={openEditModal} onDelete={setPlayerToDelete} onOpenPeerReview={setPeerReviewPlayer} isAdmin={isAdminOfActiveGroup}/>)}</div>;
+                break;
+            case 'match':
+                mainComponent = isAdminOfActiveGroup ? <MatchFlow players={players} groupId={activeGroupId} onMatchEnd={handleMatchEnd} onSessionEnd={handleSessionEnd} /> : <div>Apenas administradores podem iniciar uma partida.</div>;
+                break;
+            case 'sessions':
+                mainComponent = viewingSession 
+                    ? <SessionReportDetail session={viewingSession} onBack={() => setViewingSession(null)} />
+                    : <SessionHistoryList sessions={savedSessions} onSelectSession={setViewingSession} onDeleteSession={setSessionToDelete} isAdmin={isAdminOfActiveGroup} />;
+                break;
+            case 'history':
+                mainComponent = isAdminOfActiveGroup ? <MatchHistory matches={matches} onEditMatch={setEditingMatch} onDeleteMatch={setMatchToDelete}/> : null;
+                break;
+            case 'hall_of_fame':
+                mainComponent = <HallOfFame players={players} matches={matches} />;
+                break;
+            case 'group':
+                mainComponent = <GroupDashboard groupId={activeGroupId} />;
+                break;
+            case 'dashboard':
+            default:
+                mainComponent = <UserDashboard 
+                    playerProfile={playerProfile} 
+                    groups={userGroups} 
+                    activeGroupId={activeGroupId}
+                    onEnterGroup={handleEnterGroup}
+                    onNavigate={navigateToView}
+                    onGoToGroupGate={() => navigateToView('groupGate')}
+                    onLogout={handleLogout}
+                    onLeaveGroup={setGroupToLeave}
+                />;
+                break;
         }
 
         return (
             <>
-                <nav className="flex justify-center border-b border-gray-700 mb-8 flex-wrap">
-                    <button onClick={() => setCurrentView('players')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'players' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideUsers className="inline-block mr-1 sm:mr-2" /> Jogadores</button>
-                    {isAdmin && <button onClick={() => setCurrentView('match')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'match' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideSwords className="inline-block mr-1 sm:mr-2" /> Partida</button>}
-                    <button onClick={() => { setCurrentView('sessions'); setViewingSession(null); }} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'sessions' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideHistory className="inline-block mr-1 sm:mr-2" /> Sessões</button>
-                    {isAdmin && <button onClick={() => setCurrentView('history')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'history' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideHistory className="inline-block mr-1 sm:mr-2" /> Partidas</button>}
-                    <button onClick={() => setCurrentView('hall_of_fame')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'hall_of_fame' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideTrophy className="inline-block mr-1 sm:mr-2" /> Hall da Fama</button>
-                    <button onClick={() => setCurrentView('group')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'group' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideUsers className="inline-block mr-1 sm:mr-2" /> Meu Grupo</button>
-                    <button onClick={handleLogout} className="py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg text-red-500 hover:text-red-400 transition-colors duration-200"><LucideLogOut className="inline-block mr-1 sm:mr-2" /> Sair</button>
-                </nav>
-
-                <main>
-                    {currentView === 'players' && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-                            {isAdmin && <div onClick={openAddModal} className="cursor-pointer w-full max-w-[280px] mx-auto h-[400px] border-4 border-dashed border-gray-700 rounded-2xl flex items-center justify-center text-gray-500 hover:border-yellow-400 hover:text-yellow-400 transition-colors duration-300"><LucideUserPlus className="w-20 h-20" /></div>}
-                            {players.map(p => <PlayerCard key={p.id} player={p} onEdit={openEditModal} onDelete={setPlayerToDelete} onOpenPeerReview={setPeerReviewPlayer} isAdmin={isAdmin}/>)}
+                {showNavBar && (
+                    <nav className="flex justify-between items-center border-b border-gray-700 mb-8 flex-wrap">
+                        <div>
+                            <button onClick={() => setCurrentView(previousView)} className="py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg text-gray-400 hover:text-yellow-500 flex items-center gap-2">
+                                <LucideArrowLeft /> Voltar
+                            </button>
                         </div>
-                    )}
-                    
-                    {currentView === 'match' && isAdmin && <MatchFlow players={players} groupId={groupId} onMatchEnd={handleMatchEnd} onSessionEnd={handleSessionEnd} />}
-                    
-                    {currentView === 'sessions' && !viewingSession && (
-                        <SessionHistoryList sessions={savedSessions} onSelectSession={setViewingSession} onDeleteSession={setSessionToDelete} isAdmin={isAdmin} />
-                    )}
-
-                    {currentView === 'history' && isAdmin && (
-                       <MatchHistory matches={matches} onEditMatch={setEditingMatch} onDeleteMatch={setMatchToDelete}/>
-                    )}
-                    
-                    {currentView === 'hall_of_fame' && <HallOfFame players={players} matches={matches} />}
-                    {currentView === 'group' && <GroupDashboard user={user} groupId={groupId} />}
-
-                </main>
-
-                <PlayerModal isOpen={isPlayerModalOpen} onClose={() => setIsPlayerModalOpen(false)} onSave={handleSavePlayer} player={editingPlayer} isAdmin={isAdmin} />
+                        <div className="flex items-center justify-center flex-grow">
+                            <button onClick={() => navigateToView('players')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'players' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideUsers className="inline-block mr-1 sm:mr-2" /> Jogadores</button>
+                            {isAdminOfActiveGroup && <button onClick={() => navigateToView('match')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'match' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideSwords className="inline-block mr-1 sm:mr-2" /> Partida</button>}
+                            <button onClick={() => { navigateToView('sessions'); setViewingSession(null); }} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'sessions' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideHistory className="inline-block mr-1 sm:mr-2" /> Sessões</button>
+                            
+                            {/* ✅ BOTÃO 'PARTIDAS' RESTAURADO AQUI */}
+                            {isAdminOfActiveGroup && <button onClick={() => navigateToView('history')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'history' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideHistory className="inline-block mr-1 sm:mr-2" /> Partidas</button>}
+                            
+                            <button onClick={() => navigateToView('hall_of_fame')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'hall_of_fame' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideTrophy className="inline-block mr-1 sm:mr-2" /> Hall da Fama</button>
+                            <button onClick={() => navigateToView('group')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'group' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideUsers className="inline-block mr-1 sm:mr-2" /> Meu Grupo</button>
+                        </div>
+                        <div>
+                             <button onClick={() => navigateToView('dashboard')} className="py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg text-gray-400 hover:text-yellow-500">Lobby</button>
+                        </div>
+                    </nav>
+                )}
+                <main>{mainComponent}</main>
+                
+                <PlayerModal isOpen={isPlayerModalOpen} onClose={() => setIsPlayerModalOpen(false)} onSave={handleSavePlayer} player={editingPlayer} isAdmin={isAdminOfActiveGroup} />
                 <ConfirmationModal isOpen={!!playerToDelete} title="Confirmar Exclusão" message={`Tem certeza que deseja apagar o jogador ${playerToDelete?.name}?`} onConfirm={confirmDeletePlayer} onClose={() => setPlayerToDelete(null)} />
-                <ConfirmationModal isOpen={!!matchToDelete} title="Confirmar Exclusão" message={`Tem certeza que deseja apagar esta partida? Esta ação não pode ser desfeita.`} onConfirm={confirmDeleteMatch} onClose={() => setMatchToDelete(null)} />
-                <ConfirmationModal isOpen={!!sessionToDelete} title="Confirmar Exclusão" message={`Tem certeza que deseja apagar esta sessão permanentemente? Todas as estatísticas dela serão perdidas.`} onConfirm={confirmDeleteSession} onClose={() => setSessionToDelete(null)} />
+                <ConfirmationModal isOpen={!!matchToDelete} title="Confirmar Exclusão" message="Tem certeza que deseja apagar esta partida?" onConfirm={confirmDeleteMatch} onClose={() => setMatchToDelete(null)} />
+                <ConfirmationModal isOpen={!!sessionToDelete} title="Confirmar Exclusão" message="Tem certeza que deseja apagar esta sessão?" onConfirm={confirmDeleteSession} onClose={() => setSessionToDelete(null)} />
+                <ConfirmationModal isOpen={!!groupToLeave} title="Sair do Grupo" message={`Tem certeza que deseja sair do grupo "${groupToLeave?.name}"?`} onConfirm={handleLeaveGroup} onClose={() => setGroupToLeave(null)} />
                 <PeerReviewModal isOpen={!!peerReviewPlayer} player={peerReviewPlayer} onClose={() => setPeerReviewPlayer(null)} onSave={handleSavePeerReview}/>
                 <EditMatchModal isOpen={!!editingMatch} match={editingMatch} players={players} onClose={() => setEditingMatch(null)} onSave={handleUpdateMatch} />
             </>

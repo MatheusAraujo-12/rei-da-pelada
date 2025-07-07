@@ -1,14 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { LucideEdit, LucideShieldCheck, LucideUndo, LucideX } from 'lucide-react';
 import { calculateOverall } from '../../utils/helpers';
 import LiveMatchTracker from './LiveMatchTracker';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db, appId } from '../../services/firebase';
-
 
 const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
     const localStorageKey = `reiDaPeladaConfig-${groupId}`;
-    // --- Estados ---
+
     const [step, setStep] = useState('config');
     const [selectedPlayerIds, setSelectedPlayerIds] = useState(new Set());
     const [allTeams, setAllTeams] = useState([]);
@@ -68,7 +65,6 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
         setIsEditModeActive(false);
         setWinnerStreak({ teamId: null, count: 0 });
         localStorage.removeItem(localStorageKey);
-
         const availablePlayers = players.filter(p => selectedPlayerIds.has(p.id)).map(p => {
             let overall;
             if (drawType === 'admin' && p.adminOverall) overall = calculateOverall(p.adminOverall);
@@ -142,9 +138,11 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
             });
         };
 
+        // Lógica de Empate
         if (matchResult.score.teamA === matchResult.score.teamB) {
             updatePlayerRecords(teamA, 'draws');
             updatePlayerRecords(teamB, 'draws');
+            
             if (tieBreakerRule === 'bothExit') {
                 const nextTeams = remainingTeams.splice(0, 2);
                 const newQueue = [...remainingTeams, teamA, teamB];
@@ -153,8 +151,21 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                 setStep('post_game');
                 return;
             }
+            
+            if (tieBreakerRule === 'challengerStaysOnDraw') {
+                const challenger = teamB;
+                const previousWinner = teamA;
+                const nextChallenger = remainingTeams.shift();
+                const newQueue = [...remainingTeams, previousWinner];
+
+                setAllTeams([challenger, ...(nextChallenger ? [nextChallenger] : []), ...newQueue].filter(Boolean));
+                setWinnerStreak({ teamId: null, count: 0 });
+                setStep('post_game');
+                return;
+            }
         }
         
+        // Lógica de Vitória/Derrota
         const winnerTeam = matchResult.score.teamA >= matchResult.score.teamB ? teamA : teamB;
         const loserTeam = winnerTeam === teamA ? teamB : teamA;
         updatePlayerRecords(winnerTeam, 'wins');
@@ -229,25 +240,13 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
         });
     };
 
-    const handleForceEndSession = async () => {
-        if (!groupId) {
-            alert("Erro: ID do grupo não encontrado para salvar a sessão.");
-            return;
-        }
-        try {
-            const sessionData = {
-                date: serverTimestamp(),
-                players: Object.keys(sessionPlayerStats),
-                finalStats: sessionPlayerStats,
-            };
-            const sessionsColRef = collection(db, `artifacts/${appId}/public/data/groups/${groupId}/sessions`);
-            await addDoc(sessionsColRef, sessionData);
-            onSessionEnd();
-            setStep('session_report');
-        } catch (error) {
-            console.error("Erro ao salvar a sessão:", error);
-            alert("Ocorreu um erro ao salvar a sessão. Verifique o console.");
-        }
+    const handleForceEndSession = () => {
+        const sessionData = {
+            players: Object.keys(sessionPlayerStats),
+            finalStats: sessionPlayerStats,
+            matchHistory: matchHistory
+        };
+        onSessionEnd(sessionData);
     };
     
     const renderTeamCard = (team, teamIndex) => {
@@ -448,6 +447,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                         >
                             <option value="winnerStays">Vencedor anterior fica</option>
                             <option value="bothExit">Ambos os times saem</option>
+                            <option value="challengerStaysOnDraw">Desafiante fica no empate</option>
                         </select>
                     </div>
                 </div>
