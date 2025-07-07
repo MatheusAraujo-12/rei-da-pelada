@@ -100,7 +100,7 @@ function App() {
             }
         });
         return () => unsubscribe();
-    }, [navigate]);
+    }, [navigate, activeGroupId]);
 
     useEffect(() => {
         if (!user || !activeGroupId) {
