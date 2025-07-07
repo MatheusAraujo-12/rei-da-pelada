@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, useNavigate } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, onSnapshot, doc, getDoc, query, orderBy, setDoc, updateDoc, deleteDoc, runTransaction, addDoc, arrayRemove, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, doc, getDoc, query, orderBy, getDocs, where, setDoc, updateDoc, deleteDoc, runTransaction, addDoc, arrayRemove, writeBatch, serverTimestamp } from 'firebase/firestore';
 
-// Importações de todos os componentes e serviços
+// Importações
 import { auth, db } from './services/firebase';
 import AuthScreen from './features/auth/AuthScreen';
 import ConfirmationModal from './components/ConfirmationModal';
@@ -21,8 +21,7 @@ import MatchHistory from './features/history/MatchHistory';
 import MatchFlow from './features/match/MatchFlow';
 import UserDashboard from './features/dashboard/UserDashboard'; 
 
-// CORRIGIDO
-import { LucideArrowLeft, LucideUserPlus, LucideUsers, LucideSwords, LucideHistory, LucideTrophy } from 'lucide-react';
+import { LucideArrowLeft, LucideUserPlus, LucideUsers, LucideSwords, LucideHistory, LucideTrophy, LucideLogOut } from 'lucide-react';
 
 export default function AppWrapper() {
     return (
@@ -52,60 +51,55 @@ function App() {
     const [playerToDelete, setPlayerToDelete] = useState(null);
     const [peerReviewPlayer, setPeerReviewPlayer] = useState(null);
     const [matchToDelete, setMatchToDelete] = useState(null);
+    const [sessionToDelete, setSessionToDelete] = useState(null);
     const [editingMatch, setEditingMatch] = useState(null);
     const [viewingSession, setViewingSession] = useState(null);
     const [groupToLeave, setGroupToLeave] = useState(null);
-    const [sessionToDelete, setSessionToDelete] = useState(null);
-
+    
     const navigate = useNavigate();
 
     useEffect(() => {
+        setIsLoading(true);
         const unsubscribe = onAuthStateChanged(auth, (u) => {
             if (u) {
-                if (!user) setUser(u);
+                setUser(u);
+                const playerDocRef = doc(db, 'players', u.uid);
+                const unsubPlayer = onSnapshot(playerDocRef, (docSnap) => {
+                    setPlayerProfile(docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null);
+                });
+
+                const userDocRef = doc(db, 'users', u.uid);
+                const unsubUser = onSnapshot(userDocRef, async (userDocSnap) => {
+                    const groupIds = userDocSnap.exists() ? userDocSnap.data().groupIds || [] : [];
+                    if (groupIds.length > 0) {
+                        const groupPromises = groupIds.map(id => getDoc(doc(db, "groups", id)));
+                        const groupDocs = await Promise.all(groupPromises);
+                        const groupsData = groupDocs.filter(d => d.exists()).map(d => ({ id: d.id, ...d.data() }));
+                        setUserGroups(groupsData);
+                        if (!activeGroupId || !groupIds.includes(activeGroupId)) {
+                            setActiveGroupId(groupsData[0]?.id || null);
+                        }
+                    } else {
+                        setUserGroups([]);
+                        setActiveGroupId(null);
+                    }
+                    setIsLoading(false);
+                });
+
+                return () => {
+                    unsubPlayer();
+                    unsubUser();
+                };
+
             } else {
                 setUser(null); setPlayerProfile(null); setUserGroups([]); setActiveGroupId(null);
+                setIsLoading(false);
                 navigate('/login');
             }
         });
         return () => unsubscribe();
-    },  [navigate, user]);
-
-    useEffect(() => {
-        if (!user) {
-            setIsLoading(false);
-            return;
-        }
-
-        setIsLoading(true);
-        const playerDocRef = doc(db, 'players', user.uid);
-        const unsubPlayer = onSnapshot(playerDocRef, (docSnap) => {
-            setPlayerProfile(docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null);
-        });
-
-        const userDocRef = doc(db, 'users', user.uid);
-        const unsubUser = onSnapshot(userDocRef, async (userDocSnap) => {
-            const groupIds = userDocSnap.exists() ? userDocSnap.data().groupIds || [] : [];
-            if (groupIds.length > 0) {
-                const groupPromises = groupIds.map(id => getDoc(doc(db, "groups", id)));
-                const groupDocs = await Promise.all(groupPromises);
-                const groupsData = groupDocs.filter(d => d.exists()).map(d => ({ id: d.id, ...d.data() }));
-                setUserGroups(groupsData);
-                if (!activeGroupId || !groupIds.includes(activeGroupId)) {
-                    setActiveGroupId(groupsData[0]?.id || null);
-                }
-            } else {
-                setUserGroups([]);
-                setActiveGroupId(null);
-            }
-            setIsLoading(false);
-        });
-
-        return () => {
-            unsubPlayer();
-            unsubUser();
-        };
-    }, [user]);
+    // ✅ CORREÇÃO FINAL: Adicionada a dependência 'activeGroupId' para este hook
+    }, [navigate, activeGroupId]);
 
     useEffect(() => {
         if (!user || !activeGroupId) {
@@ -116,10 +110,13 @@ function App() {
         const unsubGroup = onSnapshot(groupDocRef, (docSnap) => {
             setIsAdminOfActiveGroup(docSnap.exists() && docSnap.data().createdBy === user.uid);
         });
+        
         const playersColRef = collection(db, `groups/${activeGroupId}/players`);
         const unsubPlayers = onSnapshot(query(playersColRef), s => setPlayers(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+
         const matchesColRef = collection(db, `groups/${activeGroupId}/matches`);
         const mSub = onSnapshot(query(matchesColRef, orderBy('date', 'desc')), s => setMatches(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+        
         const sessionsColRef = collection(db, `groups/${activeGroupId}/sessions`);
         const qSessions = query(sessionsColRef, orderBy('date', 'desc'));
         const sSub = onSnapshot(qSessions, s => setSavedSessions(s.docs.map(d => ({ id: d.id, ...d.data() }))));
