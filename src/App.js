@@ -22,7 +22,8 @@ import MatchHistory from './features/history/MatchHistory';
 import MatchFlow from './features/match/MatchFlow';
 import UserDashboard from './features/dashboard/UserDashboard'; 
 
-import { LucideArrowLeft, LucideUserPlus, LucideUsers, LucideSwords, LucideHistory, LucideTrophy, LucideLogOut } from 'lucide-react';
+// CORRIGIDO
+import { LucideArrowLeft, LucideUserPlus, LucideUsers, LucideSwords, LucideHistory, LucideTrophy } from 'lucide-react';
 
 
 export default function AppWrapper() {
