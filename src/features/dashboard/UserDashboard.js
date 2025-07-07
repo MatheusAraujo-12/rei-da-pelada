@@ -1,5 +1,5 @@
 import React from 'react';
-import { LucideUser, LucideArrowRight, LucideTrophy, LucideHistory, LucideCheckCircle, LucidePlusCircle, LucideLogOut, LucideDoorOpen } from 'lucide-react';
+import { LucideUser, LucideArrowRight, LucidePlusCircle, LucideLogOut, LucideDoorOpen } from 'lucide-react';
 
 const UserDashboard = ({ playerProfile, groups = [], activeGroupId, onEnterGroup, onNavigate, onGoToGroupGate, onLogout, onLeaveGroup }) => {
     return (

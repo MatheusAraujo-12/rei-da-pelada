@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, useNavigate } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, onSnapshot, doc, getDoc, query, orderBy, getDocs, where, setDoc, updateDoc, deleteDoc, runTransaction, addDoc, arrayRemove, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, doc, getDoc, query, orderBy, setDoc, updateDoc, deleteDoc, runTransaction, addDoc, arrayRemove, writeBatch, serverTimestamp } from 'firebase/firestore';
 
 // Importações de todos os componentes e serviços
 import { auth, db } from './services/firebase';
@@ -21,7 +21,8 @@ import MatchHistory from './features/history/MatchHistory';
 import MatchFlow from './features/match/MatchFlow';
 import UserDashboard from './features/dashboard/UserDashboard'; 
 
-import { LucideArrowLeft, LucideUserPlus, LucideUsers, LucideSwords, LucideHistory, LucideTrophy, LucideLogOut } from 'lucide-react';
+// CORRIGIDO
+import { LucideArrowLeft, LucideUserPlus, LucideUsers, LucideSwords, LucideHistory, LucideTrophy } from 'lucide-react';
 
 export default function AppWrapper() {
     return (
@@ -55,7 +56,7 @@ function App() {
     const [viewingSession, setViewingSession] = useState(null);
     const [groupToLeave, setGroupToLeave] = useState(null);
     const [sessionToDelete, setSessionToDelete] = useState(null);
-    
+
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -68,7 +69,7 @@ function App() {
             }
         });
         return () => unsubscribe();
-    }, [user, navigate]);
+    },  [navigate, activeGroupId]);
 
     useEffect(() => {
         if (!user) {
