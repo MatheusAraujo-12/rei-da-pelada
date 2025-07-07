@@ -21,7 +21,7 @@ import MatchHistory from './features/history/MatchHistory';
 import MatchFlow from './features/match/MatchFlow';
 import UserDashboard from './features/dashboard/UserDashboard'; 
 
-import { LucideArrowLeft, LucideUserPlus, LucideUsers, LucideSwords, LucideHistory, LucideTrophy, LucideLogOut } from 'lucide-react';
+import { LucideArrowLeft, LucideUserPlus, LucideUsers, LucideSwords, LucideHistory, LucideTrophy } from 'lucide-react';
 
 export default function AppWrapper() {
     return (
@@ -60,7 +60,7 @@ function App() {
 
     useEffect(() => {
         setIsLoading(true);
-        const unsubscribe = onAuthStateChanged(auth, (u) => {
+        const unsubscribe = onAuthStateChanged(auth, async (u) => {
             if (u) {
                 setUser(u);
                 const playerDocRef = doc(db, 'players', u.uid);
@@ -98,7 +98,6 @@ function App() {
             }
         });
         return () => unsubscribe();
-    // ✅ CORREÇÃO FINAL: Adicionada a dependência 'activeGroupId' para este hook
     }, [navigate, activeGroupId]);
 
     useEffect(() => {
@@ -132,7 +131,7 @@ function App() {
         setActiveGroupId(newActiveId);
         navigateToView('dashboard');
     };
-
+    
     const handleSavePlayer = async (playerData) => {
         if (playerData.id) {
             if (!activeGroupId || !isAdminOfActiveGroup) return;
@@ -277,91 +276,84 @@ function App() {
         navigateToView('players'); 
     };
 
-    const renderContent = () => {
-        if (isLoading) return <div className="text-center p-10 text-white">A carregar...</div>;
+    const renderMainContent = () => {
+        if (!activeGroupId && userGroups.length > 0) {
+            // Se tem grupos mas nenhum está ativo, força a seleção do primeiro e re-renderiza
+            setActiveGroupId(userGroups[0].id);
+            return <div className="text-center p-10 text-white">A carregar grupo...</div>;
+        }
+
+        switch(currentView) {
+            case 'players':
+                return <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">{isAdminOfActiveGroup && <div onClick={openAddModal} className="cursor-pointer w-full max-w-[280px] mx-auto h-[400px] border-4 border-dashed border-gray-700 rounded-2xl flex items-center justify-center text-gray-500 hover:border-yellow-400 hover:text-yellow-400 transition-colors duration-300"><LucideUserPlus className="w-20 h-20" /></div>}{players.map(p => <PlayerCard key={p.id} player={p} onEdit={openEditModal} onDelete={setPlayerToDelete} onOpenPeerReview={setPeerReviewPlayer} isAdmin={isAdminOfActiveGroup}/>)}</div>;
+            case 'match':
+                return isAdminOfActiveGroup ? <MatchFlow players={players} groupId={activeGroupId} onMatchEnd={handleMatchEnd} onSessionEnd={handleSessionEnd} /> : <div>Apenas administradores podem iniciar uma partida.</div>;
+            case 'sessions':
+                return viewingSession 
+                    ? <SessionReportDetail session={viewingSession} onBack={() => setViewingSession(null)} />
+                    : <SessionHistoryList sessions={savedSessions} onSelectSession={setViewingSession} onDeleteSession={setSessionToDelete} isAdmin={isAdminOfActiveGroup} />;
+            case 'history':
+                return isAdminOfActiveGroup ? <MatchHistory matches={matches} onEditMatch={setEditingMatch} onDeleteMatch={setMatchToDelete}/> : null;
+            case 'hall_of_fame':
+                return <HallOfFame players={players} matches={matches} />;
+            case 'group':
+                return <GroupDashboard groupId={activeGroupId} />;
+            default:
+                // Se nenhuma outra view de grupo for correspondida, não renderiza nada aqui.
+                // A navegação principal será escondida e o `renderScreen` mostrará a Dashboard.
+                return null;
+        }
+    };
+
+    const renderScreen = () => {
+        if (isLoading) return <div className="text-center p-10 text-white">Carregando...</div>;
         if (!user) return <AuthScreen />;
         if (!playerProfile) return <CreatePlayerProfile user={user} onSave={handleSavePlayer} />;
         
-        let mainComponent;
-        const showNavBar = currentView !== 'dashboard' && currentView !== 'groupGate';
+        const showDashboard = currentView === 'dashboard' || userGroups.length === 0;
+        const showGroupGate = currentView === 'groupGate';
 
-        switch(currentView) {
-            case 'groupGate':
-                mainComponent = <GroupGate 
-                    user={user} 
-                    onGroupAssociated={handleGroupAssociated} 
-                    onBackToDashboard={userGroups.length > 0 ? () => navigateToView('dashboard') : null}
-                />;
-                break;
-            case 'players':
-                mainComponent = <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">{isAdminOfActiveGroup && <div onClick={openAddModal} className="cursor-pointer w-full max-w-[280px] mx-auto h-[400px] border-4 border-dashed border-gray-700 rounded-2xl flex items-center justify-center text-gray-500 hover:border-yellow-400 hover:text-yellow-400 transition-colors duration-300"><LucideUserPlus className="w-20 h-20" /></div>}{players.map(p => <PlayerCard key={p.id} player={p} onEdit={openEditModal} onDelete={setPlayerToDelete} onOpenPeerReview={setPeerReviewPlayer} isAdmin={isAdminOfActiveGroup}/>)}</div>;
-                break;
-            case 'match':
-                mainComponent = isAdminOfActiveGroup ? <MatchFlow players={players} groupId={activeGroupId} onMatchEnd={handleMatchEnd} onSessionEnd={handleSessionEnd} /> : <div>Apenas administradores podem iniciar uma partida.</div>;
-                break;
-            case 'sessions':
-                mainComponent = viewingSession 
-                    ? <SessionReportDetail session={viewingSession} onBack={() => setViewingSession(null)} />
-                    : <SessionHistoryList sessions={savedSessions} onSelectSession={setViewingSession} onDeleteSession={setSessionToDelete} isAdmin={isAdminOfActiveGroup} />;
-                break;
-            case 'history':
-                mainComponent = isAdminOfActiveGroup ? <MatchHistory matches={matches} onEditMatch={setEditingMatch} onDeleteMatch={setMatchToDelete}/> : null;
-                break;
-            case 'hall_of_fame':
-                mainComponent = <HallOfFame players={players} matches={matches} />;
-                break;
-            case 'group':
-                mainComponent = <GroupDashboard groupId={activeGroupId} />;
-                break;
-            case 'dashboard':
-            default:
-                mainComponent = <UserDashboard 
-                    playerProfile={playerProfile} 
-                    groups={userGroups} 
-                    activeGroupId={activeGroupId}
-                    onEnterGroup={handleEnterGroup}
-                    onNavigate={navigateToView}
-                    onGoToGroupGate={() => navigateToView('groupGate')}
-                    onLogout={handleLogout}
-                    onLeaveGroup={setGroupToLeave}
-                />;
-                break;
+        if (showDashboard) {
+             return <UserDashboard 
+                playerProfile={playerProfile} 
+                groups={userGroups} 
+                activeGroupId={activeGroupId}
+                onEnterGroup={handleEnterGroup}
+                onNavigate={navigateToView}
+                onGoToGroupGate={() => navigateToView('groupGate')}
+                onLogout={handleLogout}
+                onLeaveGroup={setGroupToLeave}
+            />;
+        }
+
+        if (showGroupGate) {
+            return <GroupGate 
+                user={user} 
+                onGroupAssociated={handleGroupAssociated} 
+                onBackToDashboard={() => navigateToView('dashboard')}
+            />;
         }
 
         return (
             <>
-                {showNavBar && (
-                    <nav className="flex justify-between items-center border-b border-gray-700 mb-8 flex-wrap">
-                        <div>
-                            <button onClick={() => setCurrentView(previousView)} className="py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg text-gray-400 hover:text-yellow-500 flex items-center gap-2">
-                                <LucideArrowLeft /> Voltar
-                            </button>
-                        </div>
-                        <div className="flex items-center justify-center flex-grow">
-                            <button onClick={() => navigateToView('players')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'players' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideUsers className="inline-block mr-1 sm:mr-2" /> Jogadores</button>
-                            {isAdminOfActiveGroup && <button onClick={() => navigateToView('match')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'match' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideSwords className="inline-block mr-1 sm:mr-2" /> Partida</button>}
-                            <button onClick={() => { navigateToView('sessions'); setViewingSession(null); }} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'sessions' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideHistory className="inline-block mr-1 sm:mr-2" /> Sessões</button>
-                            
-                            {/* ✅ BOTÃO 'PARTIDAS' RESTAURADO AQUI */}
-                            {isAdminOfActiveGroup && <button onClick={() => navigateToView('history')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'history' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideHistory className="inline-block mr-1 sm:mr-2" /> Partidas</button>}
-                            
-                            <button onClick={() => navigateToView('hall_of_fame')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'hall_of_fame' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideTrophy className="inline-block mr-1 sm:mr-2" /> Hall da Fama</button>
-                            <button onClick={() => navigateToView('group')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'group' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideUsers className="inline-block mr-1 sm:mr-2" /> Meu Grupo</button>
-                        </div>
-                        <div>
-                             <button onClick={() => navigateToView('dashboard')} className="py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg text-gray-400 hover:text-yellow-500">Lobby</button>
-                        </div>
-                    </nav>
-                )}
-                <main>{mainComponent}</main>
-                
-                <PlayerModal isOpen={isPlayerModalOpen} onClose={() => setIsPlayerModalOpen(false)} onSave={handleSavePlayer} player={editingPlayer} isAdmin={isAdminOfActiveGroup} />
-                <ConfirmationModal isOpen={!!playerToDelete} title="Confirmar Exclusão" message={`Tem certeza que deseja apagar o jogador ${playerToDelete?.name}?`} onConfirm={confirmDeletePlayer} onClose={() => setPlayerToDelete(null)} />
-                <ConfirmationModal isOpen={!!matchToDelete} title="Confirmar Exclusão" message="Tem certeza que deseja apagar esta partida?" onConfirm={confirmDeleteMatch} onClose={() => setMatchToDelete(null)} />
-                <ConfirmationModal isOpen={!!sessionToDelete} title="Confirmar Exclusão" message="Tem certeza que deseja apagar esta sessão?" onConfirm={confirmDeleteSession} onClose={() => setSessionToDelete(null)} />
-                <ConfirmationModal isOpen={!!groupToLeave} title="Sair do Grupo" message={`Tem certeza que deseja sair do grupo "${groupToLeave?.name}"?`} onConfirm={handleLeaveGroup} onClose={() => setGroupToLeave(null)} />
-                <PeerReviewModal isOpen={!!peerReviewPlayer} player={peerReviewPlayer} onClose={() => setPeerReviewPlayer(null)} onSave={handleSavePeerReview}/>
-                <EditMatchModal isOpen={!!editingMatch} match={editingMatch} players={players} onClose={() => setEditingMatch(null)} onSave={handleUpdateMatch} />
+                <nav className="flex justify-between items-center border-b border-gray-700 mb-8 flex-wrap">
+                    <div>
+                        <button onClick={() => setCurrentView(previousView)} className="py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg text-gray-400 hover:text-yellow-500 flex items-center gap-2">
+                            <LucideArrowLeft /> Voltar
+                        </button>
+                    </div>
+                    <div className="flex items-center justify-center flex-grow">
+                        <button onClick={() => navigateToView('players')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'players' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideUsers className="inline-block mr-1 sm:mr-2" /> Jogadores</button>
+                        {isAdminOfActiveGroup && <button onClick={() => navigateToView('match')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'match' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideSwords className="inline-block mr-1 sm:mr-2" /> Partida</button>}
+                        <button onClick={() => { navigateToView('sessions'); setViewingSession(null); }} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'sessions' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideHistory className="inline-block mr-1 sm:mr-2" /> Sessões</button>
+                        <button onClick={() => navigateToView('hall_of_fame')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'hall_of_fame' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideTrophy className="inline-block mr-1 sm:mr-2" /> Hall da Fama</button>
+                        <button onClick={() => navigateToView('group')} className={`py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg transition-colors duration-200 ${currentView === 'group' ? 'text-yellow-400 border-b-2 border-yellow-400' : 'text-gray-400 hover:text-yellow-500'}`}><LucideUsers className="inline-block mr-1 sm:mr-2" /> Meu Grupo</button>
+                    </div>
+                    <div>
+                         <button onClick={() => navigateToView('dashboard')} className="py-2 px-3 sm:py-4 sm:px-6 font-bold text-sm sm:text-lg text-gray-400 hover:text-yellow-500">Lobby</button>
+                    </div>
+                </nav>
+                <main>{renderMainContent()}</main>
             </>
         );
     };
@@ -373,7 +365,14 @@ function App() {
                 <p className="text-center text-gray-400 mt-2">Gerencie, compita e domine o campo.</p>
             </header>
             <div className="p-4 sm:p-6 lg:p-8">
-                {renderContent()}
+                {renderScreen()}
+                <PlayerModal isOpen={isPlayerModalOpen} onClose={() => setIsPlayerModalOpen(false)} onSave={handleSavePlayer} player={editingPlayer} isAdmin={isAdminOfActiveGroup} />
+                <ConfirmationModal isOpen={!!playerToDelete} title="Confirmar Exclusão" message={`Tem certeza que deseja apagar o jogador ${playerToDelete?.name}?`} onConfirm={confirmDeletePlayer} onClose={() => setPlayerToDelete(null)} />
+                <ConfirmationModal isOpen={!!matchToDelete} title="Confirmar Exclusão" message="Tem certeza que deseja apagar esta partida?" onConfirm={confirmDeleteMatch} onClose={() => setMatchToDelete(null)} />
+                <ConfirmationModal isOpen={!!sessionToDelete} title="Confirmar Exclusão" message="Tem certeza que deseja apagar esta sessão?" onConfirm={confirmDeleteSession} onClose={() => setSessionToDelete(null)} />
+                <ConfirmationModal isOpen={!!groupToLeave} title="Sair do Grupo" message={`Tem certeza que deseja sair do grupo "${groupToLeave?.name}"?`} onConfirm={handleLeaveGroup} onClose={() => setGroupToLeave(null)} />
+                <PeerReviewModal isOpen={!!peerReviewPlayer} player={peerReviewPlayer} onClose={() => setPeerReviewPlayer(null)} onSave={handleSavePeerReview}/>
+                <EditMatchModal isOpen={!!editingMatch} match={editingMatch} players={players} onClose={() => setEditingMatch(null)} onSave={handleUpdateMatch} />
             </div>
         </div>
     );
