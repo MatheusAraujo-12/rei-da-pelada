@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, useNavigate } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-// ✅ 'getDocs' e 'where' removidos
-import { collection, onSnapshot, doc, getDoc, query, orderBy, setDoc, updateDoc, deleteDoc, runTransaction, addDoc, arrayRemove, writeBatch, serverTimestamp } from 'firebase/firestore';
+// ✅ 'getDoc' removido
+import { collection, onSnapshot, doc, query, orderBy, getDocs, where, setDoc, updateDoc, deleteDoc, runTransaction, addDoc, arrayRemove, writeBatch, serverTimestamp } from 'firebase/firestore';
 
-// Importações de Serviços e Componentes
+// Importações
 import { auth, db } from './services/firebase';
 import AuthScreen from './features/auth/AuthScreen';
 import ConfirmationModal from './components/ConfirmationModal';
@@ -22,7 +22,6 @@ import MatchHistory from './features/history/MatchHistory';
 import MatchFlow from './features/match/MatchFlow';
 import UserDashboard from './features/dashboard/UserDashboard'; 
 
-// ✅ 'LucideLogOut' removido
 import { LucideArrowLeft, LucideUserPlus, LucideUsers, LucideSwords, LucideHistory, LucideTrophy } from 'lucide-react';
 
 export default function AppWrapper() {
@@ -63,14 +62,14 @@ function App() {
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, (u) => {
             if (u) {
-                setUser(u);
+                if (!user) setUser(u);
             } else {
                 setUser(null); setPlayerProfile(null); setUserGroups([]); setActiveGroupId(null);
                 navigate('/login');
             }
         });
         return () => unsubscribe();
-    }, [navigate]);
+    }, [user, navigate]);
 
     useEffect(() => {
         if (!user) {
@@ -88,7 +87,6 @@ function App() {
         const unsubUser = onSnapshot(userDocRef, async (userDocSnap) => {
             const groupIds = userDocSnap.exists() ? userDocSnap.data().groupIds || [] : [];
             if (groupIds.length > 0) {
-                const { getDocs, where } = await import('firebase/firestore');
                 const groupsQuery = query(collection(db, "groups"), where('__name__', 'in', groupIds));
                 const groupsSnapshot = await getDocs(groupsQuery);
                 const groupsData = groupsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -107,7 +105,6 @@ function App() {
             unsubPlayer();
             unsubUser();
         };
-    // ✅ CORREÇÃO: Adicionada a dependência que estava em falta
     }, [user, activeGroupId]);
 
     useEffect(() => {
