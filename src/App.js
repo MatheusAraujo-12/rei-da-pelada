@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, useNavigate } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, onSnapshot, doc, getDoc, query, orderBy, getDocs, where, setDoc, updateDoc, deleteDoc, runTransaction, addDoc, arrayRemove, writeBatch, serverTimestamp } from 'firebase/firestore';
+// ✅ 'getDocs' e 'where' removidos
+import { collection, onSnapshot, doc, getDoc, query, orderBy, setDoc, updateDoc, deleteDoc, runTransaction, addDoc, arrayRemove, writeBatch, serverTimestamp } from 'firebase/firestore';
 
-// Importações de todos os seus componentes e serviços
+// Importações de Serviços e Componentes
 import { auth, db } from './services/firebase';
 import AuthScreen from './features/auth/AuthScreen';
 import ConfirmationModal from './components/ConfirmationModal';
@@ -21,7 +22,8 @@ import MatchHistory from './features/history/MatchHistory';
 import MatchFlow from './features/match/MatchFlow';
 import UserDashboard from './features/dashboard/UserDashboard'; 
 
-import { LucideArrowLeft, LucideUserPlus, LucideUsers, LucideSwords, LucideHistory, LucideTrophy, LucideLogOut } from 'lucide-react';
+// ✅ 'LucideLogOut' removido
+import { LucideArrowLeft, LucideUserPlus, LucideUsers, LucideSwords, LucideHistory, LucideTrophy } from 'lucide-react';
 
 export default function AppWrapper() {
     return (
@@ -59,16 +61,11 @@ function App() {
     const navigate = useNavigate();
 
     useEffect(() => {
-        setIsLoading(true);
         const unsubscribe = onAuthStateChanged(auth, (u) => {
             if (u) {
                 setUser(u);
             } else {
-                setUser(null);
-                setPlayerProfile(null);
-                setUserGroups([]);
-                setActiveGroupId(null);
-                setIsLoading(false);
+                setUser(null); setPlayerProfile(null); setUserGroups([]); setActiveGroupId(null);
                 navigate('/login');
             }
         });
@@ -81,23 +78,24 @@ function App() {
             return;
         }
 
+        setIsLoading(true);
         const playerDocRef = doc(db, 'players', user.uid);
         const unsubPlayer = onSnapshot(playerDocRef, (docSnap) => {
             setPlayerProfile(docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null);
         });
 
         const userDocRef = doc(db, 'users', user.uid);
-        const unsubUser = onSnapshot(userDocRef, (userDocSnap) => {
+        const unsubUser = onSnapshot(userDocRef, async (userDocSnap) => {
             const groupIds = userDocSnap.exists() ? userDocSnap.data().groupIds || [] : [];
             if (groupIds.length > 0) {
-                const groupPromises = groupIds.map(id => getDoc(doc(db, "groups", id)));
-                Promise.all(groupPromises).then(groupDocs => {
-                    const groupsData = groupDocs.filter(d => d.exists()).map(d => ({ id: d.id, ...d.data() }));
-                    setUserGroups(groupsData);
-                    if (!activeGroupId || !groupIds.includes(activeGroupId)) {
-                        setActiveGroupId(groupsData[0]?.id || null);
-                    }
-                });
+                const { getDocs, where } = await import('firebase/firestore');
+                const groupsQuery = query(collection(db, "groups"), where('__name__', 'in', groupIds));
+                const groupsSnapshot = await getDocs(groupsQuery);
+                const groupsData = groupsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                setUserGroups(groupsData);
+                if (!activeGroupId || !groupIds.includes(activeGroupId)) {
+                    setActiveGroupId(groupsData[0]?.id || null);
+                }
             } else {
                 setUserGroups([]);
                 setActiveGroupId(null);
@@ -109,20 +107,16 @@ function App() {
             unsubPlayer();
             unsubUser();
         };
-    }, [user]);
+    // ✅ CORREÇÃO: Adicionada a dependência que estava em falta
+    }, [user, activeGroupId]);
 
     useEffect(() => {
         if (!user || !activeGroupId) {
-            setPlayers([]);
-            setMatches([]);
-            setSavedSessions([]);
-            setIsAdminOfActiveGroup(false);
+            setPlayers([]); setMatches([]); setSavedSessions([]); setIsAdminOfActiveGroup(false);
             return;
         }
         const groupDocRef = doc(db, 'groups', activeGroupId);
-        const unsubGroup = onSnapshot(groupDocRef, (docSnap) => {
-            setIsAdminOfActiveGroup(docSnap.exists() && docSnap.data().createdBy === user.uid);
-        });
+        const unsubGroup = onSnapshot(groupDocRef, (docSnap) => setIsAdminOfActiveGroup(docSnap.exists() && docSnap.data().createdBy === user.uid));
         
         const playersColRef = collection(db, `groups/${activeGroupId}/players`);
         const unsubPlayers = onSnapshot(query(playersColRef), s => setPlayers(s.docs.map(d => ({ id: d.id, ...d.data() }))));
