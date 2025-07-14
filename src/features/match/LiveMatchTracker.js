@@ -1,22 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import * as Tone from 'tone';
-import { LucidePlay, LucidePause, LucidePlus, LucideUndo, LucideGoal, LucideHandshake, LucideShield, LucideHand, LucideFrown } from 'lucide-react';
+import { LucidePlay, LucidePause, LucidePlus, LucideUndo } from 'lucide-react';
 import ConfirmationModal from '../../components/ConfirmationModal';
+import PlayerActionModal from './PlayerActionModal';
+import AssistSelectorModal from './AssistSelectorModal';
 
-// A importação do StatButton foi REMOVIDA daqui.
-
-// ✅ A DEFINIÇÃO do StatButton foi MOVIDA PARA AQUI DENTRO
-const StatButton = ({ Icon, count, onClick, colorClass, label }) => (
-    <button title={label} onClick={onClick} className={`relative w-10 h-10 flex items-center justify-center rounded-lg ${colorClass} transition-transform transform active:scale-90`}>
-        <Icon className="w-5 h-5" />
-        <div className="absolute -top-2 -right-2 bg-white text-black text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center border-2 border-gray-800">
-            {count}
-        </div>
-    </button>
-);
-
-
-const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
+const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes, onInitiateSubstitution }) => {
     const [timeLeft, setTimeLeft] = useState(durationInMinutes * 60);
     const [isPaused, setIsPaused] = useState(false);
     const [showConfirm, setShowConfirm] = useState(false);
@@ -26,37 +15,36 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
         const s = {};
         if (teams && teams.teamA && teams.teamB) {
             [...teams.teamA, ...teams.teamB].forEach(p => { 
-                s[p.id] = { goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 }; 
+                if (p) s[p.id] = { goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 }; 
             });
         }
         return s;
     }, [teams]);
     const [playerStats, setPlayerStats] = useState(initialStats);
     
+    const [playerForAction, setPlayerForAction] = useState(null);
+    const [isAssistModalOpen, setIsAssistModalOpen] = useState(false);
+    const [goalScorerInfo, setGoalScorerInfo] = useState(null);
+
     const workerRef = useRef(null);
     const synth = useRef(null);
 
     useEffect(() => {
         synth.current = new Tone.Synth().toDestination();
-        
         const worker = new Worker('/timer.worker.js');
         workerRef.current = worker;
-
         worker.postMessage({ command: 'start', value: durationInMinutes * 60 });
-
         worker.onmessage = (e) => {
             const { type, timeLeft: workerTimeLeft } = e.data;
-            if (type === 'tick') {
-                setTimeLeft(workerTimeLeft);
-            } else if (type === 'done') {
+            if (type === 'tick') setTimeLeft(workerTimeLeft);
+            else if (type === 'done') {
                 setTimeLeft(0);
                 if (synth.current) {
                     synth.current.triggerAttackRelease("C5", "0.5");
-                    setTimeout(() => { if (synth.current) { synth.current.triggerAttackRelease("C5", "1"); } }, 600);
+                    setTimeout(() => { if (synth.current) synth.current.triggerAttackRelease("C5", "1"); }, 600);
                 }
             }
         };
-
         return () => {
             worker.postMessage({ command: 'stop' });
             worker.terminate();
@@ -65,11 +53,8 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
 
     const togglePause = () => {
         if (workerRef.current) {
-            if (isPaused) {
-                workerRef.current.postMessage({ command: 'start', value: timeLeft });
-            } else {
-                workerRef.current.postMessage({ command: 'pause' });
-            }
+            if (isPaused) workerRef.current.postMessage({ command: 'start', value: timeLeft });
+            else workerRef.current.postMessage({ command: 'pause' });
             setIsPaused(!isPaused);
         }
     };
@@ -77,9 +62,7 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
     const confirmAddMinute = () => {
         const newTime = timeLeft + 60;
         setTimeLeft(newTime);
-        if (workerRef.current) {
-            workerRef.current.postMessage({ command: 'start', value: newTime });
-        }
+        if (workerRef.current) workerRef.current.postMessage({ command: 'start', value: newTime });
         setShowConfirm(false);
         if(isPaused) setIsPaused(false);
     };
@@ -89,17 +72,31 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
         return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
     };
 
-    const handleStat = (playerId, stat, team) => {
+    const addStat = (playerId, stat, teamKey) => {
         setHistory(prev => [...prev, { score: { ...score }, playerStats: JSON.parse(JSON.stringify(playerStats)) }]);
-        setPlayerStats(prev => ({ 
-            ...prev, 
-            [playerId]: { ...prev[playerId], [stat]: (prev[playerId]?.[stat] || 0) + 1 } 
-        }));
-        if (stat === 'goals') { 
-            setScore(prev => ({ ...prev, [team]: prev[team] + 1 })); 
-        }
+        setPlayerStats(prev => {
+            const currentStats = prev[playerId] || { goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 };
+            return { ...prev, [playerId]: { ...currentStats, [stat]: (currentStats[stat] || 0) + 1 } };
+        });
+        if (stat === 'goals' && teamKey) setScore(prev => ({ ...prev, [teamKey]: prev[teamKey] + 1 }));
+    };
+    
+    const handleGoal = () => {
+        if (!playerForAction) return;
+        setGoalScorerInfo(playerForAction);
+        setIsAssistModalOpen(true);
+        setPlayerForAction(null);
     };
 
+    const handleSelectAssister = (assisterId) => {
+        if (!goalScorerInfo) return;
+        const { player, teamKey } = goalScorerInfo;
+        addStat(player.id, 'goals', teamKey);
+        if (assisterId) addStat(assisterId, 'assists', teamKey);
+        setIsAssistModalOpen(false);
+        setGoalScorerInfo(null);
+    };
+    
     const handleUndo = () => {
         if (history.length === 0) return;
         const lastState = history[history.length - 1];
@@ -108,37 +105,70 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
         setHistory(prev => prev.slice(0, -1));
     };
 
-    const handleEndMatchClick = () => onEndMatch({ teams, score, playerStats, date: new Date().toISOString() });
+    const handleEndMatchClick = () => {
+        onEndMatch({ teams, score, playerStats });
+    };
 
-    const renderTeam = (team, teamName, scoreKey) => (
+    const renderTeam = (team, teamName, teamKey) => (
         <div className="w-full bg-gray-800/50 rounded-xl p-4 space-y-4">
             <h3 className="text-2xl font-bold text-yellow-400 mb-2 text-center">{teamName}</h3>
-            {team.map(p => (
-                <div key={p.id} className="bg-gray-900/70 p-4 rounded-lg">
-                    <p className="font-bold text-lg text-center mb-3 text-white">{p.name}</p>
-                    <div className="flex justify-center gap-2 flex-wrap">
-                        <StatButton Icon={LucideGoal} label="Gol" count={playerStats[p.id]?.goals || 0} onClick={() => handleStat(p.id, 'goals', scoreKey)} colorClass="bg-green-600/80 hover:bg-green-500" />
-                        <StatButton Icon={LucideHandshake} label="Assistência" count={playerStats[p.id]?.assists || 0} onClick={() => handleStat(p.id, 'assists')} colorClass="bg-blue-600/80 hover:bg-blue-500" />
-                        <StatButton Icon={LucideShield} label="Desarme" count={playerStats[p.id]?.tackles || 0} onClick={() => handleStat(p.id, 'tackles')} colorClass="bg-orange-600/80 hover:bg-orange-500" />
-                        {p.position === 'Goleiro' && <StatButton Icon={LucideHand} label="Defesa Difícil" count={playerStats[p.id]?.saves || 0} onClick={() => handleStat(p.id, 'saves')} colorClass="bg-purple-600/80 hover:bg-purple-500" />}
-                        <StatButton Icon={LucideFrown} label="Falha" count={playerStats[p.id]?.failures || 0} onClick={() => handleStat(p.id, 'failures')} colorClass="bg-red-800/80 hover:bg-red-700" />
+            {team.filter(p => p).map(p => (
+                <button 
+                    key={p.id} 
+                    onClick={() => setPlayerForAction({ player: p, teamKey: teamKey })}
+                    className="w-full bg-gray-900/70 p-3 rounded-lg text-left hover:bg-gray-700 transition-colors"
+                >
+                    <p className="font-bold text-lg text-center text-white">{p.name}</p>
+                    <div className="flex justify-around text-xs text-gray-400 mt-2">
+                        <span>G: {playerStats[p.id]?.goals || 0}</span>
+                        <span>A: {playerStats[p.id]?.assists || 0}</span>
+                        <span>D: {playerStats[p.id]?.tackles || 0}</span>
                     </div>
-                </div>
+                </button>
             ))}
         </div>
     );
     
+    const teammates = useMemo(() => {
+        if (!goalScorerInfo) return [];
+        const teamList = goalScorerInfo.teamKey === 'teamA' ? teams.teamA : teams.teamB;
+        return teamList.filter(p => p && p.id !== goalScorerInfo.player.id);
+    }, [goalScorerInfo, teams]);
+    
     return (
         <>
+            <PlayerActionModal 
+                isOpen={!!playerForAction}
+                onClose={() => setPlayerForAction(null)}
+                player={playerForAction?.player}
+                onStat={(stat) => {
+                    addStat(playerForAction.player.id, stat, playerForAction.teamKey);
+                    setPlayerForAction(null);
+                }}
+                onGoal={handleGoal}
+                onSubstitute={() => {
+                    onInitiateSubstitution(playerForAction.player);
+                    setPlayerForAction(null);
+                }}
+            />
+            
+            <AssistSelectorModal 
+                isOpen={isAssistModalOpen}
+                onClose={() => setIsAssistModalOpen(false)}
+                teammates={teammates}
+                onSelectAssister={handleSelectAssister}
+            />
+        
             <ConfirmationModal isOpen={showConfirm} title="Confirmar Acréscimo" message="Deseja adicionar 1 minuto ao cronômetro?" onConfirm={confirmAddMinute} onClose={() => setShowConfirm(false)} />
+            
             <div className="space-y-6">
                 <div className="text-center bg-black/30 p-4 rounded-xl space-y-4">
                     <div>
                         <h2 className="text-6xl font-mono tracking-tighter text-white">{formatTime(timeLeft)}</h2>
                         <div className="flex justify-center items-center gap-2 sm:gap-4 mt-2">
-                            <button onClick={togglePause} className="p-2 sm:p-3 bg-gray-700/80 rounded-full hover:bg-yellow-500 transition-colors">{isPaused ? <LucidePlay className="w-5 h-5 sm:w-6 sm:h-6" /> : <LucidePause className="w-5 h-5 sm:w-6 sm:h-6" />}</button>
-                            <button onClick={() => setShowConfirm(true)} className="py-2 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs sm:text-sm font-semibold flex items-center gap-2"><LucidePlus className="w-4 h-4 sm:w-5 sm:h-5" /> Acréscimo</button>
-                            <button onClick={handleUndo} disabled={history.length === 0} className="py-2 px-4 rounded-lg bg-gray-600 hover:bg-gray-500 text-xs sm:text-sm font-semibold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"><LucideUndo className="w-4 h-4 sm:w-5 sm:h-5" /> Desfazer</button>
+                            <button onClick={togglePause} className="p-2 sm:p-3 bg-gray-700/80 rounded-full hover:bg-yellow-500 transition-colors">{isPaused ? <LucidePlay /> : <LucidePause />}</button>
+                            <button onClick={() => setShowConfirm(true)} className="py-2 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs sm:text-sm font-semibold flex items-center gap-2"><LucidePlus /> Acréscimo</button>
+                            <button onClick={handleUndo} disabled={history.length === 0} className="py-2 px-4 rounded-lg bg-gray-600 hover:bg-gray-500 text-xs sm:text-sm font-semibold flex items-center gap-2 disabled:opacity-50"><LucideUndo /> Desfazer</button>
                         </div>
                     </div>
                     <h2 className="text-5xl font-black tracking-tighter">
@@ -148,8 +178,8 @@ const LiveMatchTracker = ({ teams, onEndMatch, durationInMinutes }) => {
                     </h2>
                 </div>
                 <div className="flex flex-col md:flex-row gap-6">
-                    {renderTeam(teams.teamA, 'Time A', 'teamA')}
-                    {renderTeam(teams.teamB, 'Time B', 'teamB')}
+                    {teams.teamA && renderTeam(teams.teamA, 'Time A', 'teamA')}
+                    {teams.teamB && renderTeam(teams.teamB, 'Time B', 'teamB')}
                 </div>
                 <div className="text-center mt-6">
                     <button onClick={handleEndMatchClick} className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-8 rounded-lg text-lg">

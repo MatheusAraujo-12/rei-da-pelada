@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react'
-import { LucideEdit, LucideShieldCheck, LucideUndo, LucideX } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { LucideEdit, LucideShieldCheck, LucideUndo, LucideX, LucideUsers, LucideShuffle, LucidePlus } from 'lucide-react';
 import { calculateOverall } from '../../utils/helpers';
 import LiveMatchTracker from './LiveMatchTracker';
+import SubstitutionModal from './SubstitutionModal';
 
 const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
     const localStorageKey = `reiDaPeladaConfig-${groupId}`;
 
+    // Estados
     const [step, setStep] = useState('config');
     const [selectedPlayerIds, setSelectedPlayerIds] = useState(new Set());
     const [allTeams, setAllTeams] = useState([]);
@@ -17,6 +19,10 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
     const [streakLimit, setStreakLimit] = useState(2);
     const [tieBreakerRule, setTieBreakerRule] = useState('winnerStays');
     const [winnerStreak, setWinnerStreak] = useState({ teamId: null, count: 0 });
+    const [setupMode, setSetupMode] = useState('auto');
+    const [availablePlayersForSetup, setAvailablePlayersForSetup] = useState([]);
+    const [isSubModalOpen, setIsSubModalOpen] = useState(false);
+    const [playerToSubstitute, setPlayerToSubstitute] = useState(null);
 
     useEffect(() => {
         try {
@@ -28,6 +34,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                 setDrawType(config.drawType || 'self');
                 setStreakLimit(config.streakLimit ?? 2);
                 setTieBreakerRule(config.tieBreakerRule || 'winnerStays');
+                setSetupMode(config.setupMode || 'auto');
             }
         } catch (error) {
             console.error("Erro ao carregar configuração do localStorage:", error);
@@ -42,14 +49,15 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                     numberOfTeams,
                     drawType,
                     streakLimit,
-                    tieBreakerRule
+                    tieBreakerRule,
+                    setupMode
                 };
                 localStorage.setItem(localStorageKey, JSON.stringify(configToSave));
             } catch (error) {
                 console.error("Erro ao salvar configuração no localStorage:", error);
             }
         }
-    }, [selectedPlayerIds, numberOfTeams, drawType, streakLimit, tieBreakerRule, localStorageKey, step]);
+    }, [selectedPlayerIds, numberOfTeams, drawType, streakLimit, tieBreakerRule, setupMode, localStorageKey, step]);
 
 
     const handlePlayerToggle = (playerId) => {
@@ -61,37 +69,78 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
         });
     };
 
-    const handleStartSession = () => {
-        setIsEditModeActive(false);
-        setWinnerStreak({ teamId: null, count: 0 });
-        localStorage.removeItem(localStorageKey);
-        const availablePlayers = players.filter(p => selectedPlayerIds.has(p.id)).map(p => {
+    const handleProceedToSetup = () => {
+        const available = players.filter(p => selectedPlayerIds.has(p.id));
+        if (available.length < numberOfTeams) {
+            alert(`Você precisa de pelo menos ${numberOfTeams} jogadores para montar ${numberOfTeams} times.`);
+            return;
+        }
+
+        if (setupMode === 'auto') {
+            handleAutoDrawTeams(available);
+        } else {
+            setAvailablePlayersForSetup([...available].sort((a,b) => a.name.localeCompare(b.name)));
+            setAllTeams(Array.from({ length: numberOfTeams }, () => []));
+            setStep('manual_setup');
+        }
+    };
+
+    const handleAutoDrawTeams = (availablePlayers) => {
+        const playersWithOverall = availablePlayers.map(p => {
             let overall;
             if (drawType === 'admin' && p.adminOverall) overall = calculateOverall(p.adminOverall);
             else if (drawType === 'peer' && p.peerOverall) overall = calculateOverall(p.peerOverall.avgSkills);
             else overall = calculateOverall(p.selfOverall);
             return { ...p, overall };
         });
-        const playersPerTeamDynamic = Math.floor(availablePlayers.length / numberOfTeams);
-        if (availablePlayers.length < 2 || playersPerTeamDynamic === 0) {
-            alert("Jogadores insuficientes para formar pelo menos 2 times.");
-            return;
-        }
+
         const posOrder = { 'Goleiro': 1, 'Defensor': 2, 'Volante': 3, 'Meio-Campo': 4, 'Ponta': 5, 'Atacante': 6 };
-        availablePlayers.sort((a, b) => (posOrder[a.detailedPosition] || 99) - (posOrder[b.detailedPosition] || 99) || b.overall - a.overall);
+        playersWithOverall.sort((a, b) => (posOrder[a.detailedPosition] || 99) - (posOrder[b.detailedPosition] || 99) || b.overall - a.overall);
         
         let teams = Array.from({ length: numberOfTeams }, () => ({ players: [], totalOverall: 0 }));
-        
-        availablePlayers.forEach(player => {
+        playersWithOverall.forEach(player => {
             teams.sort((a, b) => a.totalOverall - b.totalOverall);
-            const targetTeam = teams[0];
-            if (targetTeam) {
-                targetTeam.players.push(player);
-                targetTeam.totalOverall += player.overall;
-            }
+            teams[0].players.push(player);
+            teams[0].totalOverall += player.overall;
         });
 
-        const finalTeams = teams.filter(t => t.players.length > 0);
+        const finalTeams = teams.filter(t => t.players.length > 0).map(t => t.players);
+        finishSessionSetup(finalTeams, availablePlayers);
+    };
+
+    const handleAssignPlayer = (playerToAssign, teamIndex) => {
+        setAllTeams(prevTeams => {
+            const newTeams = prevTeams.map(team => team.filter(p => p.id !== playerToAssign.id));
+            newTeams[teamIndex].push(playerToAssign);
+            return newTeams;
+        });
+        setAvailablePlayersForSetup(prev => prev.filter(p => p.id !== playerToAssign.id));
+    };
+
+    const handleUnassignPlayer = (playerToUnassign, fromTeamIndex) => {
+        setAllTeams(prevTeams => {
+            const newTeams = [...prevTeams];
+            newTeams[fromTeamIndex] = newTeams[fromTeamIndex].filter(p => p.id !== playerToUnassign.id);
+            return newTeams;
+        });
+        setAvailablePlayersForSetup(prev => {
+            if (prev.find(p => p.id === playerToUnassign.id)) {
+                return prev; 
+            }
+            return [...prev, playerToUnassign].sort((a, b) => a.name.localeCompare(b.name));
+        });
+    };
+
+    const handleConfirmManualTeams = () => {
+        if (allTeams.some(team => team.length === 0)) {
+            alert("Todos os times precisam ter pelo menos um jogador.");
+            return;
+        }
+        const available = players.filter(p => selectedPlayerIds.has(p.id));
+        finishSessionSetup(allTeams, available);
+    };
+
+    const finishSessionSetup = (finalTeams, availablePlayers) => {
         if (finalTeams.length < 2) {
             alert("Não foi possível formar pelo menos 2 times completos.");
             return;
@@ -101,7 +150,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
             initialStats[p.id] = { name: p.name, wins: 0, draws: 0, losses: 0, goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 };
         });
         setSessionPlayerStats(initialStats);
-        setAllTeams(finalTeams.map(t => t.players));
+        setAllTeams(finalTeams);
         setMatchHistory([]);
         setStep('pre_game');
     };
@@ -129,20 +178,20 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
         const updatePlayerRecords = (team, result) => {
             setSessionPlayerStats(prevStats => {
                 const newStats = JSON.parse(JSON.stringify(prevStats));
-                team.forEach(player => {
-                    if (newStats[player.id]) {
-                        newStats[player.id][result]++;
-                    }
-                });
+                if (Array.isArray(team)) {
+                    team.forEach(player => {
+                        if (player && newStats[player.id]) {
+                            newStats[player.id][result]++;
+                        }
+                    });
+                }
                 return newStats;
             });
         };
 
-        // Lógica de Empate
         if (matchResult.score.teamA === matchResult.score.teamB) {
             updatePlayerRecords(teamA, 'draws');
             updatePlayerRecords(teamB, 'draws');
-            
             if (tieBreakerRule === 'bothExit') {
                 const nextTeams = remainingTeams.splice(0, 2);
                 const newQueue = [...remainingTeams, teamA, teamB];
@@ -151,13 +200,11 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                 setStep('post_game');
                 return;
             }
-            
             if (tieBreakerRule === 'challengerStaysOnDraw') {
                 const challenger = teamB;
                 const previousWinner = teamA;
                 const nextChallenger = remainingTeams.shift();
                 const newQueue = [...remainingTeams, previousWinner];
-
                 setAllTeams([challenger, ...(nextChallenger ? [nextChallenger] : []), ...newQueue].filter(Boolean));
                 setWinnerStreak({ teamId: null, count: 0 });
                 setStep('post_game');
@@ -165,13 +212,12 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
             }
         }
         
-        // Lógica de Vitória/Derrota
         const winnerTeam = matchResult.score.teamA >= matchResult.score.teamB ? teamA : teamB;
         const loserTeam = winnerTeam === teamA ? teamB : teamA;
         updatePlayerRecords(winnerTeam, 'wins');
         updatePlayerRecords(loserTeam, 'losses');
 
-        const getTeamId = (team) => team.map(p => p.id).sort().join('-');
+        const getTeamId = (team) => team.map(p => p?.id).sort().join('-');
         const winnerId = getTeamId(winnerTeam);
         let currentStreak = (winnerId === winnerStreak.teamId) ? winnerStreak.count + 1 : 1;
         
@@ -249,6 +295,36 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
         onSessionEnd(sessionData);
     };
     
+    const handleInitiateSubstitution = (player) => {
+        setPlayerToSubstitute(player);
+        setIsSubModalOpen(true);
+    };
+
+    const handleConfirmSubstitution = (playerOut, playerIn) => {
+        setAllTeams(currentTeams => {
+            const newTeams = JSON.parse(JSON.stringify(currentTeams));
+            let posOut, posIn;
+            newTeams.forEach((team, tIndex) => {
+                if (Array.isArray(team)) {
+                    team.forEach((player, pIndex) => {
+                        if (player?.id === playerOut.id) posOut = { tIndex, pIndex };
+                        if (player?.id === playerIn.id) posIn = { tIndex, pIndex };
+                    });
+                }
+            });
+            if (posOut && posIn) {
+                const temp = newTeams[posOut.tIndex][posOut.pIndex];
+                newTeams[posOut.tIndex][posOut.pIndex] = newTeams[posIn.tIndex][posIn.pIndex];
+                newTeams[posIn.tIndex][posIn.pIndex] = temp;
+            } else {
+                console.error("Erro na substituição: jogador não encontrado.");
+            }
+            return newTeams;
+        });
+        setIsSubModalOpen(false);
+        setPlayerToSubstitute(null);
+    };
+    
     const renderTeamCard = (team, teamIndex) => {
         const teamLetter = String.fromCharCode(65 + teamIndex);
         let teamLabel = `Time ${teamLetter}`;
@@ -264,7 +340,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
             <div className="bg-gray-800 p-4 rounded-lg w-full min-w-[280px]">
                 <h3 className="text-yellow-400 font-bold text-xl mb-3">{teamLabel}</h3>
                 <ul className="space-y-2">
-                    {team.map(p => (
+                    {team.filter(p => p).map(p => (
                         <li key={p.id} className="bg-gray-900 p-2 rounded flex justify-between items-center text-white">
                             <span>{p.name}</span>
                             {isEditModeActive && (
@@ -299,7 +375,23 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
     };
 
     if (step === 'in_game') {
-        return <LiveMatchTracker teams={{ teamA: allTeams[0], teamB: allTeams[1] }} onEndMatch={handleSingleMatchEnd} durationInMinutes={10} />;
+        return (
+            <>
+                <SubstitutionModal
+                    isOpen={isSubModalOpen}
+                    onClose={() => setIsSubModalOpen(false)}
+                    playerOut={playerToSubstitute}
+                    availableSubs={allTeams.slice(2).flat().filter(p => p)}
+                    onConfirm={handleConfirmSubstitution}
+                />
+                <LiveMatchTracker 
+                    teams={{ teamA: allTeams[0], teamB: allTeams[1] }} 
+                    onEndMatch={handleSingleMatchEnd} 
+                    durationInMinutes={10}
+                    onInitiateSubstitution={handleInitiateSubstitution}
+                />
+            </>
+        );
     }
 
     if (step === 'session_report') {
@@ -321,15 +413,15 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                             </tr>
                         </thead>
                         <tbody className="bg-gray-800/50">
-                            {sortedStats.map(player => (
-                                <tr key={player.name} className="border-b border-gray-700">
-                                    <td className="p-3 font-semibold">{player.name}</td>
-                                    <td className="p-3 text-center text-green-400 font-bold">{player.wins}</td>
-                                    <td className="p-3 text-center text-gray-400 font-bold">{player.draws}</td>
-                                    <td className="p-3 text-center text-red-400 font-bold">{player.losses}</td>
-                                    <td className="p-3 text-center">{player.goals}</td>
-                                    <td className="p-3 text-center">{player.assists}</td>
-                                    <td className="p-3 text-center">{player.tackles}</td>
+                            {Object.values(sortedStats).map((player, index) => (
+                                <tr key={player?.id || index} className="border-b border-gray-700">
+                                    <td className="p-3 font-semibold">{player?.name}</td>
+                                    <td className="p-3 text-center text-green-400 font-bold">{player?.wins}</td>
+                                    <td className="p-3 text-center text-gray-400 font-bold">{player?.draws}</td>
+                                    <td className="p-3 text-center text-red-400 font-bold">{player?.losses}</td>
+                                    <td className="p-3 text-center">{player?.goals}</td>
+                                    <td className="p-3 text-center">{player?.assists}</td>
+                                    <td className="p-3 text-center">{player?.tackles}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -419,10 +511,90 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
             </div>
         );
     }
+
+    if (step === 'manual_setup') {
+        return (
+            <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-6 border border-gray-700">
+                <h2 className="text-2xl font-bold text-yellow-400 mb-4">Montagem Manual dos Times</h2>
+                <div className="flex flex-col md:flex-row gap-6">
+                    <div className="w-full md:w-1/3 border border-gray-700 rounded-lg p-4 bg-gray-800/20">
+                        <h3 className="font-semibold text-white mb-3">Jogadores Disponíveis ({availablePlayersForSetup.length})</h3>
+                        <div className="space-y-2 max-h-96 overflow-y-auto">
+                            {availablePlayersForSetup.map(p => (
+                                <div key={p.id} className="text-white p-2 bg-gray-800 rounded">{p.name}</div>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="w-full md:w-2/3 space-y-4">
+                        {allTeams.map((team, teamIndex) => (
+                            <div key={teamIndex} className="border border-gray-700 rounded-lg p-4 min-h-[150px]">
+                                <h3 className="font-semibold text-yellow-400 mb-3">Time {String.fromCharCode(65 + teamIndex)}</h3>
+                                <div className="space-y-2 mb-3">
+                                    {team.map(p => (
+                                        <button key={p.id} onClick={() => handleUnassignPlayer(p, teamIndex)} className="w-full text-left p-2 bg-blue-900/50 rounded text-white flex items-center gap-2 hover:bg-red-800" title="Remover do time">
+                                            <LucideX size={14}/> {p.name}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="border-t border-gray-700 pt-3">
+                                    <p className="text-xs text-gray-400 mb-2">Adicionar a este time:</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {availablePlayersForSetup.map(p => (
+                                            <button key={p.id} onClick={() => handleAssignPlayer(p, teamIndex)} className="text-xs p-1 px-2 bg-gray-700 rounded-full hover:bg-green-600 text-white">
+                                                <LucidePlus size={12} className="inline-block"/> {p.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                <div className="text-center mt-6">
+                    <button onClick={handleConfirmManualTeams} className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg text-lg">Confirmar Times e Iniciar</button>
+                </div>
+            </div>
+        );
+    }
     
     return (
         <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-6 border border-gray-700">
             <h2 className="text-2xl font-bold text-yellow-400 mb-4">Configurar Noite de Futebol</h2>
+            <fieldset className="border border-gray-700 p-4 rounded-lg mb-6">
+                <legend className="px-2 text-yellow-400 font-semibold">Modo de Montagem</legend>
+                <div className="flex gap-4">
+                    <button onClick={() => setSetupMode('auto')} className={`flex-1 p-4 rounded-lg flex items-center justify-center gap-2 transition-colors ${setupMode === 'auto' ? 'bg-yellow-500 text-black' : 'bg-gray-800 text-white hover:bg-gray-700'}`}> <LucideShuffle/> Sorteio Automático </button>
+                    <button onClick={() => setSetupMode('manual')} className={`flex-1 p-4 rounded-lg flex items-center justify-center gap-2 transition-colors ${setupMode === 'manual' ? 'bg-yellow-500 text-black' : 'bg-gray-800 text-white hover:bg-gray-700'}`}> <LucideUsers/> Montagem Manual </button>
+                </div>
+            </fieldset>
+            {setupMode === 'auto' && (
+                <fieldset className="border border-gray-700 p-4 rounded-lg mb-6">
+                    <legend className="px-2 text-yellow-400 font-semibold">Configuração do Sorteio</legend>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block font-semibold mb-2 text-white">Nº de times para sortear:</label>
+                            <input type="number" min="2" value={numberOfTeams} onChange={e => setNumberOfTeams(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white" />
+                        </div>
+                        <div>
+                            <label className="block font-semibold mb-2 text-white">Sorteio baseado em:</label>
+                            <select value={drawType} onChange={(e) => setDrawType(e.target.value)} className="w-full bg-gray-800 p-2 rounded text-white">
+                               <option value="self">Overall Próprio</option>
+                               <option value="peer">Overall da Galera</option>
+                               <option value="admin">Overall do Admin</option>
+                            </select>
+                        </div>
+                    </div>
+                </fieldset>
+            )}
+            {setupMode === 'manual' && (
+                <fieldset className="border border-gray-700 p-4 rounded-lg mb-6">
+                    <legend className="px-2 text-yellow-400 font-semibold">Configuração Manual</legend>
+                    <div>
+                        <label className="block font-semibold mb-2 text-white">Nº de times a montar:</label>
+                        <input type="number" min="2" value={numberOfTeams} onChange={e => setNumberOfTeams(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white" />
+                    </div>
+                </fieldset>
+            )}
             <fieldset className="border border-gray-700 p-4 rounded-lg mb-6">
                 <legend className="px-2 text-yellow-400 font-semibold">Regras da Partida</legend>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -452,32 +624,12 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                     </div>
                 </div>
             </fieldset>
-
-            <fieldset className="border border-gray-700 p-4 rounded-lg mb-6">
-                 <legend className="px-2 text-yellow-400 font-semibold">Configuração dos Times</legend>
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <label className="block font-semibold mb-2 text-white">Nº de times para sortear:</label>
-                        <input type="number" min="2" value={numberOfTeams} onChange={e => setNumberOfTeams(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white" />
-                    </div>
-                    <div>
-                        <label className="block font-semibold mb-2 text-white">Sorteio baseado em:</label>
-                        <select value={drawType} onChange={(e) => setDrawType(e.target.value)} className="w-full bg-gray-800 p-2 rounded text-white">
-                           <option value="self">Overall Próprio</option>
-                           <option value="peer">Overall da Galera</option>
-                           <option value="admin">Overall do Admin</option>
-                        </select>
-                    </div>
-                </div>
-            </fieldset>
-
             <h3 className="text-xl font-bold text-yellow-400 mb-4">Selecione os Jogadores Presentes</h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
                 {players.map(p => (<button key={p.id} onClick={() => handlePlayerToggle(p.id)} className={`p-3 rounded-lg text-center transition ${selectedPlayerIds.has(p.id) ? 'bg-yellow-500 text-black' : 'bg-gray-800 text-white hover:bg-gray-700'}`}>{p.name}</button>))}
             </div>
             <div className="text-center">
-                <button onClick={handleStartSession} disabled={selectedPlayerIds.size < numberOfTeams} className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-500 disabled:cursor-not-allowed">Sortear Times e Iniciar</button>
-                {selectedPlayerIds.size < numberOfTeams && <p className="text-red-500 text-sm mt-2">Selecione pelo menos {numberOfTeams} jogadores.</p>}
+                <button onClick={handleProceedToSetup} disabled={selectedPlayerIds.size < numberOfTeams} className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-500">Continuar</button>
             </div>
         </div>
     );
