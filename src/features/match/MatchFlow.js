@@ -40,7 +40,6 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
         }
     }, [localStorageKey]);
 
-    // ✅ CORREÇÃO: Adicionadas as dependências que estavam em falta no array
     useEffect(() => {
         if (step === 'config') {
             try {
@@ -151,7 +150,6 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
         setStep('pre_game');
     };
     
-    
     const handleSingleMatchEnd = async (matchResult) => {
         setIsEditModeActive(false);
         const savedMatch = await onMatchEnd(matchResult);
@@ -227,15 +225,61 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
         setStep('post_game');
     };
 
-    const handleMovePlayer = (playerToMove, fromTeamIndex, toTeamIndex) => { /* ... */ };
-    const handleRemovePlayer = (playerToRemove, fromTeamIndex) => { /* ... */ };
-    const handleSetPlayingTeam = (teamRole, indexToSet) => { /* ... */ };
-    const handleReorderQueue = (indexInWaitingQueue, direction) => { /* ... */ };
+    const handleMovePlayer = (playerToMove, fromTeamIndex, toTeamIndex) => {
+        setAllTeams(currentTeams => {
+            const newTeams = JSON.parse(JSON.stringify(currentTeams.map(t => t || [])));
+            const fromTeam = newTeams[fromTeamIndex];
+            const toTeam = newTeams[toTeamIndex];
+            if (!fromTeam) return currentTeams;
+            const playerIndex = fromTeam.findIndex(p => p.id === playerToMove.id);
+            if (playerIndex === -1) return currentTeams;
+            const [player] = fromTeam.splice(playerIndex, 1);
+            if (toTeam) {
+                toTeam.push(player);
+            } else {
+                newTeams[toTeamIndex] = [player];
+            }
+            return newTeams.filter(team => team.length > 0);
+        });
+    };
+
+    const handleRemovePlayer = (playerToRemove, fromTeamIndex) => {
+        setAllTeams(currentTeams => {
+            let newTeams = JSON.parse(JSON.stringify(currentTeams));
+            const fromTeam = newTeams[fromTeamIndex];
+            if (!fromTeam) return currentTeams;
+            const updatedTeam = fromTeam.filter(p => p.id !== playerToRemove.id);
+            newTeams[fromTeamIndex] = updatedTeam;
+            return newTeams.filter(team => team.length > 0);
+        });
+    };
+
+    const handleSetPlayingTeam = (teamRole, indexToSet) => {
+        setAllTeams(currentTeams => {
+            const newTeams = [...currentTeams];
+            const targetIndex = teamRole === 'A' ? 0 : 1;
+            [newTeams[targetIndex], newTeams[indexToSet]] = [newTeams[indexToSet], newTeams[targetIndex]];
+            return newTeams;
+        });
+    };
+
+    const handleReorderQueue = (indexInWaitingQueue, direction) => {
+        setAllTeams(currentTeams => {
+            const waitingTeams = currentTeams.slice(2);
+            const actualIndex = indexInWaitingQueue;
+            if (direction === 'up' && actualIndex > 0) {
+                [waitingTeams[actualIndex], waitingTeams[actualIndex - 1]] = [waitingTeams[actualIndex - 1], waitingTeams[actualIndex]];
+            } else if (direction === 'down' && actualIndex < waitingTeams.length - 1) {
+                [waitingTeams[actualIndex], waitingTeams[actualIndex + 1]] = [waitingTeams[actualIndex + 1], waitingTeams[actualIndex]];
+            }
+            return [currentTeams[0], currentTeams[1], ...waitingTeams];
+        });
+    };
 
     const handleForceEndSession = () => {
         const sessionData = {
             players: Object.keys(sessionPlayerStats),
-            matchIds: matchHistory.map(match => match.id) // ✅ Salva apenas os IDs
+            matchIds: matchHistory.map(match => match.id)
         };
         onSessionEnd(sessionData);
     };
@@ -351,9 +395,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                     </table>
                 </div>
                 <div className="text-center mt-8">
-                    <button onClick={() => { setStep('config'); setAllTeams([]); }} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg">
-                        Nova Sessão de Jogos
-                    </button>
+                    <button onClick={() => { setStep('config'); setAllTeams([]); }} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg">Nova Sessão de Jogos</button>
                 </div>
             </div>
         );
@@ -386,8 +428,8 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                                     {renderTeamCard(team, index + 2)}
                                     {!isEditModeActive && (
                                         <div className="flex gap-2 mt-2">
-                                            <button onClick={() => handleReorderQueue(index, 'up')} disabled={index === 0} className="..."><LucideUndo className="..."/></button>
-                                            <button onClick={() => handleReorderQueue(index, 'down')} disabled={index === waitingTeams.length - 1} className="..."><LucideUndo className="..."/></button>
+                                            <button onClick={() => handleReorderQueue(index, 'up')} disabled={index === 0} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1 px-3 text-sm rounded-lg disabled:opacity-50"><LucideUndo className="w-4 h-4 transform rotate-90"/></button>
+                                            <button onClick={() => handleReorderQueue(index, 'down')} disabled={index === waitingTeams.length - 1} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1 px-3 text-sm rounded-lg disabled:opacity-50"><LucideUndo className="w-4 h-4 transform -rotate-90"/></button>
                                         </div>
                                     )}
                                 </div>
@@ -397,8 +439,8 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                 )}
                 {!isEditModeActive && (
                     <div className="flex flex-col sm:flex-row justify-center gap-4 mt-8 border-t border-gray-700 pt-6">
-                        <button onClick={() => setStep('in_game')} disabled={!teamB} className="...">Começar Próxima Partida</button>
-                        <button onClick={handleForceEndSession} className="...">Encerrar Pelada</button>
+                        <button onClick={() => setStep('in_game')} disabled={!teamB} className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-500 disabled:cursor-not-allowed">Começar Próxima Partida</button>
+                        <button onClick={handleForceEndSession} className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg text-lg">Encerrar Pelada</button>
                     </div>
                 )}
             </div>
