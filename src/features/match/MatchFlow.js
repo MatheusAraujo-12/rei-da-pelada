@@ -180,6 +180,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                 return newStats;
             });
         };
+
         if (matchResult.score.teamA === matchResult.score.teamB) {
             updatePlayerRecords(teamA, 'draws');
             updatePlayerRecords(teamB, 'draws');
@@ -202,6 +203,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                 return;
             }
         }
+        
         const winnerTeam = matchResult.score.teamA >= matchResult.score.teamB ? teamA : teamB;
         const loserTeam = winnerTeam === teamA ? teamB : teamA;
         updatePlayerRecords(winnerTeam, 'wins');
@@ -496,16 +498,44 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
             <fieldset className="border border-gray-700 p-4 rounded-lg mb-6">
                 <legend className="px-2 text-yellow-400 font-semibold">Modo de Montagem</legend>
                 <div className="flex gap-4">
-                    <button onClick={() => setSetupMode('auto')} className={`flex-1 p-4 rounded-lg ...`}> <LucideShuffle/> Sorteio Automático </button>
-                    <button onClick={() => setSetupMode('manual')} className={`flex-1 p-4 rounded-lg ...`}> <LucideUsers/> Montagem Manual </button>
+                    <button onClick={() => setSetupMode('auto')} className={`...`}> <LucideShuffle/> Sorteio Automático </button>
+                    <button onClick={() => setSetupMode('manual')} className={`...`}> <LucideUsers/> Montagem Manual </button>
                 </div>
             </fieldset>
+            {setupMode === 'auto' && (
+                <fieldset className="border border-gray-700 p-4 rounded-lg mb-6">
+                    <legend className="px-2 text-yellow-400 font-semibold">Configuração do Sorteio</legend>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block font-semibold mb-2 text-white">Nº de times para sortear:</label>
+                            <input type="number" min="2" value={numberOfTeams} onChange={e => setNumberOfTeams(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white" />
+                        </div>
+                        <div>
+                            <label className="block font-semibold mb-2 text-white">Sorteio baseado em:</label>
+                            <select value={drawType} onChange={(e) => setDrawType(e.target.value)} className="w-full bg-gray-800 p-2 rounded text-white">
+                               <option value="self">Overall Próprio</option>
+                               <option value="peer">Overall da Galera</option>
+                               <option value="admin">Overall do Admin</option>
+                            </select>
+                        </div>
+                    </div>
+                </fieldset>
+            )}
+            {setupMode === 'manual' && (
+                <fieldset className="border border-gray-700 p-4 rounded-lg mb-6">
+                    <legend className="px-2 text-yellow-400 font-semibold">Configuração Manual</legend>
+                    <div>
+                        <label className="block font-semibold mb-2 text-white">Nº de times a montar:</label>
+                        <input type="number" min="2" value={numberOfTeams} onChange={e => setNumberOfTeams(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white" />
+                    </div>
+                </fieldset>
+            )}
             <fieldset className="border border-gray-700 p-4 rounded-lg mb-6">
                 <legend className="px-2 text-yellow-400 font-semibold">Regras da Partida</legend>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                         <label className="block font-semibold mb-2 text-white">Limite de vitórias seguidas:</label>
-                        <input type="number" min="0" value={streakLimit} onChange={e => setStreakLimit(Number(e.target.value))} className="w-full ..."/>
+                        <input type="number" min="0" value={streakLimit} onChange={e => setStreakLimit(Number(e.target.value))} className="w-full ..." />
                         <p className="text-xs text-gray-500 mt-1">O time sai após X vitórias. (0 = desativado)</p>
                     </div>
                     <div>
