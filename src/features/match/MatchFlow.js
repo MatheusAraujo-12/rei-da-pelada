@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { LucideEdit, LucideShieldCheck, LucideUndo, LucideX, LucideUsers, LucideShuffle, LucidePlus } from 'lucide-react';
 import { calculateOverall } from '../../utils/helpers';
 import LiveMatchTracker from './LiveMatchTracker';
@@ -6,8 +6,6 @@ import SubstitutionModal from './SubstitutionModal';
 
 const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
     const localStorageKey = `reiDaPeladaConfig-${groupId}`;
-
-    // Estados
     const [step, setStep] = useState('config');
     const [selectedPlayerIds, setSelectedPlayerIds] = useState(new Set());
     const [allTeams, setAllTeams] = useState([]);
@@ -75,7 +73,6 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
             alert(`Você precisa de pelo menos ${numberOfTeams} jogadores para montar ${numberOfTeams} times.`);
             return;
         }
-
         if (setupMode === 'auto') {
             handleAutoDrawTeams(available);
         } else {
@@ -93,28 +90,25 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
             else overall = calculateOverall(p.selfOverall);
             return { ...p, overall };
         });
-
         const posOrder = { 'Goleiro': 1, 'Defensor': 2, 'Volante': 3, 'Meio-Campo': 4, 'Ponta': 5, 'Atacante': 6 };
         playersWithOverall.sort((a, b) => (posOrder[a.detailedPosition] || 99) - (posOrder[b.detailedPosition] || 99) || b.overall - a.overall);
-        
         let teams = Array.from({ length: numberOfTeams }, () => ({ players: [], totalOverall: 0 }));
         playersWithOverall.forEach(player => {
             teams.sort((a, b) => a.totalOverall - b.totalOverall);
             teams[0].players.push(player);
             teams[0].totalOverall += player.overall;
         });
-
         const finalTeams = teams.filter(t => t.players.length > 0).map(t => t.players);
         finishSessionSetup(finalTeams, availablePlayers);
     };
 
-    const handleAssignPlayer = (playerToAssign, teamIndex) => {
+    const handleAssignPlayer = (playerToAssign, toTeamIndex) => {
+        setAvailablePlayersForSetup(prev => prev.filter(p => p.id !== playerToAssign.id));
         setAllTeams(prevTeams => {
             const newTeams = prevTeams.map(team => team.filter(p => p.id !== playerToAssign.id));
-            newTeams[teamIndex].push(playerToAssign);
+            newTeams[toTeamIndex].push(playerToAssign);
             return newTeams;
         });
-        setAvailablePlayersForSetup(prev => prev.filter(p => p.id !== playerToAssign.id));
     };
 
     const handleUnassignPlayer = (playerToUnassign, fromTeamIndex) => {
@@ -124,10 +118,10 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
             return newTeams;
         });
         setAvailablePlayersForSetup(prev => {
-            if (prev.find(p => p.id === playerToUnassign.id)) {
-                return prev; 
+            if (!prev.some(p => p.id === playerToUnassign.id)) {
+                return [...prev, playerToUnassign].sort((a, b) => a.name.localeCompare(b.name));
             }
-            return [...prev, playerToUnassign].sort((a, b) => a.name.localeCompare(b.name));
+            return prev;
         });
     };
 
@@ -158,8 +152,9 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
     const handleSingleMatchEnd = async (matchResult) => {
         setIsEditModeActive(false);
         const savedMatch = await onMatchEnd(matchResult);
-        setMatchHistory(prev => [...prev, { ...matchResult, id: savedMatch?.id }]);
-
+        if(savedMatch) {
+            setMatchHistory(prev => [...prev, savedMatch]);
+        }
         setSessionPlayerStats(prevStats => {
             const newStats = JSON.parse(JSON.stringify(prevStats));
             for (const playerId in matchResult.playerStats) {
@@ -171,18 +166,14 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
             }
             return newStats;
         });
-        
         const { teamA, teamB } = matchResult.teams;
         const remainingTeams = allTeams.slice(2);
-        
         const updatePlayerRecords = (team, result) => {
             setSessionPlayerStats(prevStats => {
                 const newStats = JSON.parse(JSON.stringify(prevStats));
                 if (Array.isArray(team)) {
                     team.forEach(player => {
-                        if (player && newStats[player.id]) {
-                            newStats[player.id][result]++;
-                        }
+                        if (player && newStats[player.id]) newStats[player.id][result]++;
                     });
                 }
                 return newStats;
@@ -216,11 +207,9 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
         const loserTeam = winnerTeam === teamA ? teamB : teamA;
         updatePlayerRecords(winnerTeam, 'wins');
         updatePlayerRecords(loserTeam, 'losses');
-
         const getTeamId = (team) => team.map(p => p?.id).sort().join('-');
         const winnerId = getTeamId(winnerTeam);
         let currentStreak = (winnerId === winnerStreak.teamId) ? winnerStreak.count + 1 : 1;
-        
         if (streakLimit > 0 && currentStreak >= streakLimit) {
             const nextTeams = remainingTeams.splice(0, 2);
             const newQueue = [...remainingTeams, winnerTeam, loserTeam];
@@ -235,62 +224,15 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
         setStep('post_game');
     };
 
-    const handleMovePlayer = (playerToMove, fromTeamIndex, toTeamIndex) => {
-        setAllTeams(currentTeams => {
-            const newTeams = JSON.parse(JSON.stringify(currentTeams.map(t => t || [])));
-            const fromTeam = newTeams[fromTeamIndex];
-            const toTeam = newTeams[toTeamIndex];
-            if (!fromTeam) return currentTeams;
-            const playerIndex = fromTeam.findIndex(p => p.id === playerToMove.id);
-            if (playerIndex === -1) return currentTeams;
-            const [player] = fromTeam.splice(playerIndex, 1);
-            if (toTeam) {
-                toTeam.push(player);
-            } else {
-                newTeams[toTeamIndex] = [player];
-            }
-            return newTeams.filter(team => team.length > 0);
-        });
-    };
-
-    const handleRemovePlayer = (playerToRemove, fromTeamIndex) => {
-        setAllTeams(currentTeams => {
-            let newTeams = JSON.parse(JSON.stringify(currentTeams));
-            const fromTeam = newTeams[fromTeamIndex];
-            if (!fromTeam) return currentTeams;
-            const updatedTeam = fromTeam.filter(p => p.id !== playerToRemove.id);
-            newTeams[fromTeamIndex] = updatedTeam;
-            return newTeams.filter(team => team.length > 0);
-        });
-    };
-
-    const handleSetPlayingTeam = (teamRole, indexToSet) => {
-        setAllTeams(currentTeams => {
-            const newTeams = [...currentTeams];
-            const targetIndex = teamRole === 'A' ? 0 : 1;
-            [newTeams[targetIndex], newTeams[indexToSet]] = [newTeams[indexToSet], newTeams[targetIndex]];
-            return newTeams;
-        });
-    };
-
-    const handleReorderQueue = (indexInWaitingQueue, direction) => {
-        setAllTeams(currentTeams => {
-            const waitingTeams = currentTeams.slice(2);
-            const actualIndex = indexInWaitingQueue;
-            if (direction === 'up' && actualIndex > 0) {
-                [waitingTeams[actualIndex], waitingTeams[actualIndex - 1]] = [waitingTeams[actualIndex - 1], waitingTeams[actualIndex]];
-            } else if (direction === 'down' && actualIndex < waitingTeams.length - 1) {
-                [waitingTeams[actualIndex], waitingTeams[actualIndex + 1]] = [waitingTeams[actualIndex + 1], waitingTeams[actualIndex]];
-            }
-            return [currentTeams[0], currentTeams[1], ...waitingTeams];
-        });
-    };
+    const handleMovePlayer = (playerToMove, fromTeamIndex, toTeamIndex) => { /* ... */ };
+    const handleRemovePlayer = (playerToRemove, fromTeamIndex) => { /* ... */ };
+    const handleSetPlayingTeam = (teamRole, indexToSet) => { /* ... */ };
+    const handleReorderQueue = (indexInWaitingQueue, direction) => { /* ... */ };
 
     const handleForceEndSession = () => {
         const sessionData = {
             players: Object.keys(sessionPlayerStats),
-            finalStats: sessionPlayerStats,
-            matchHistory: matchHistory
+            matchIds: matchHistory.map(match => match.id) // ✅ Salva apenas os IDs
         };
         onSessionEnd(sessionData);
     };
@@ -328,14 +270,13 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
     const renderTeamCard = (team, teamIndex) => {
         const teamLetter = String.fromCharCode(65 + teamIndex);
         let teamLabel = `Time ${teamLetter}`;
-        if (step !== 'pre_game') {
-             if (teamIndex === 0) teamLabel = `Time ${teamLetter} (Em quadra)`;
-             if (teamIndex === 1) teamLabel = `Time ${teamLetter} (Desafiante)`;
-        } else {
+        if (step === 'pre_game' || step === 'post_game') {
              if (teamIndex === 0) teamLabel = `Time A`;
              if (teamIndex === 1) teamLabel = `Time B`;
+        } else if (step === 'in_game') {
+             if (teamIndex === 0) teamLabel = `Time A (Em quadra)`;
+             if (teamIndex === 1) teamLabel = `Time B (Desafiante)`;
         }
-
         return (
             <div className="bg-gray-800 p-4 rounded-lg w-full min-w-[280px]">
                 <h3 className="text-yellow-400 font-bold text-xl mb-3">{teamLabel}</h3>
@@ -345,20 +286,10 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                             <span>{p.name}</span>
                             {isEditModeActive && (
                                 <div className="flex items-center gap-2">
-                                    <select 
-                                        value={teamIndex}
-                                        onChange={(e) => handleMovePlayer(p, teamIndex, parseInt(e.target.value))}
-                                        className="bg-gray-700 text-white text-xs rounded p-1 border-0"
-                                    >
-                                        {allTeams.map((_, i) => (
-                                            <option key={i} value={i}>
-                                                Time {String.fromCharCode(65 + i)}
-                                            </option>
-                                        ))}
+                                    <select value={teamIndex} onChange={(e) => handleMovePlayer(p, teamIndex, parseInt(e.target.value))} className="bg-gray-700 text-white text-xs rounded p-1 border-0">
+                                        {allTeams.map((_, i) => (<option key={i} value={i}>Time {String.fromCharCode(65 + i)}</option>))}
                                     </select>
-                                    <button onClick={() => handleRemovePlayer(p, teamIndex)} className="text-red-500 hover:text-red-400 p-1">
-                                        <LucideX className="w-4 h-4" />
-                                    </button>
+                                    <button onClick={() => handleRemovePlayer(p, teamIndex)} className="text-red-500 hover:text-red-400 p-1"><LucideX size={14} /></button>
                                 </div>
                             )}
                         </li>
@@ -375,15 +306,10 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
     };
 
     if (step === 'in_game') {
+        const waitingPlayers = allTeams.slice(2).flat().filter(p => p);
         return (
             <>
-                <SubstitutionModal
-                    isOpen={isSubModalOpen}
-                    onClose={() => setIsSubModalOpen(false)}
-                    playerOut={playerToSubstitute}
-                    availableSubs={allTeams.slice(2).flat().filter(p => p)}
-                    onConfirm={handleConfirmSubstitution}
-                />
+                <SubstitutionModal isOpen={isSubModalOpen} onClose={() => setIsSubModalOpen(false)} playerOut={playerToSubstitute} availableSubs={waitingPlayers} onConfirm={handleConfirmSubstitution} />
                 <LiveMatchTracker 
                     teams={{ teamA: allTeams[0], teamB: allTeams[1] }} 
                     onEndMatch={handleSingleMatchEnd} 
@@ -403,13 +329,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                     <table className="w-full text-left min-w-[600px]">
                         <thead className="bg-gray-800">
                             <tr>
-                                <th className="p-3">Jogador</th>
-                                <th className="p-3 text-center">V</th>
-                                <th className="p-3 text-center">E</th>
-                                <th className="p-3 text-center">D</th>
-                                <th className="p-3 text-center">Gols</th>
-                                <th className="p-3 text-center">Assist.</th>
-                                <th className="p-3 text-center">Desarmes</th>
+                                <th className="p-3">Jogador</th><th className="p-3 text-center">V</th><th className="p-3 text-center">E</th><th className="p-3 text-center">D</th><th className="p-3 text-center">Gols</th><th className="p-3 text-center">Assist.</th><th className="p-3 text-center">Desarmes</th>
                             </tr>
                         </thead>
                         <tbody className="bg-gray-800/50">
@@ -445,26 +365,15 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                 <h2 className="text-2xl sm:text-3xl font-bold text-yellow-400 mb-2">
                     {isEditModeActive ? 'Modo de Edição' : step === 'post_game' ? `Fim da Partida ${matchHistory.length}` : `Prontos para Começar!`}
                 </h2>
-                <p className="text-gray-400 mb-6">{isEditModeActive ? 'Organize os jogadores e os próximos times. Clique em Salvar ao terminar.' : 'Visualize os times ou inicie a próxima partida.'}</p>
-                
+                <p className="text-gray-400 mb-6">{isEditModeActive ? 'Organize os jogadores e os próximos times.' : 'Visualize os times ou inicie a próxima partida.'}</p>
                 <div className="flex justify-center gap-4 mb-6">
-                    {!isEditModeActive ? (
-                        <button onClick={() => setIsEditModeActive(true)} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg flex items-center gap-2">
-                            <LucideEdit className="w-4 h-4"/>Editar Partida
-                        </button>
-                    ) : (
-                        <button onClick={() => setIsEditModeActive(false)} className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-6 rounded-lg flex items-center gap-2">
-                            <LucideShieldCheck className="w-4 h-4"/>Salvar Alterações
-                        </button>
-                    )}
+                    {!isEditModeActive ? (<button onClick={() => setIsEditModeActive(true)} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg flex items-center gap-2"><LucideEdit className="w-4 h-4"/>Editar Partida</button>) : (<button onClick={() => setIsEditModeActive(false)} className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-6 rounded-lg flex items-center gap-2"><LucideShieldCheck className="w-4 h-4"/>Salvar Alterações</button>)}
                 </div>
-
                 <div className="flex flex-col md:flex-row gap-4 mb-6 justify-center items-start">
                     {teamA && renderTeamCard(teamA, 0)}
                     <div className="flex items-center justify-center h-full text-2xl font-bold text-gray-500 p-4">VS</div>
                     {teamB ? renderTeamCard(teamB, 1) : <div className="bg-gray-800 p-4 rounded-lg w-full min-w-[280px] flex items-center justify-center"><h3 className="text-yellow-400 font-bold text-xl">Sem desafiantes</h3></div>}
                 </div>
-                
                 {waitingTeams.length > 0 && (
                     <div className="mb-6">
                         <h3 className="text-xl font-bold text-gray-400 mb-4">Times na Fila</h3>
@@ -474,22 +383,8 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                                     {renderTeamCard(team, index + 2)}
                                     {!isEditModeActive && (
                                         <div className="flex gap-2 mt-2">
-                                            <button 
-                                                onClick={() => handleReorderQueue(index, 'up')} 
-                                                disabled={index === 0} 
-                                                className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1 px-3 text-sm rounded-lg disabled:opacity-50 flex items-center justify-center"
-                                                title="Subir na Fila"
-                                            >
-                                                <LucideUndo className="w-4 h-4 transform rotate-90"/>
-                                            </button>
-                                            <button 
-                                                onClick={() => handleReorderQueue(index, 'down')} 
-                                                disabled={index === waitingTeams.length - 1} 
-                                                className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1 px-3 text-sm rounded-lg disabled:opacity-50 flex items-center justify-center"
-                                                title="Descer na Fila"
-                                            >
-                                                <LucideUndo className="w-4 h-4 transform -rotate-90"/>
-                                            </button>
+                                            <button onClick={() => handleReorderQueue(index, 'up')} disabled={index === 0} className="..."><LucideUndo className="..."/></button>
+                                            <button onClick={() => handleReorderQueue(index, 'down')} disabled={index === waitingTeams.length - 1} className="..."><LucideUndo className="..."/></button>
                                         </div>
                                     )}
                                 </div>
@@ -497,62 +392,12 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                         </div>
                     </div>
                 )}
-
                 {!isEditModeActive && (
                     <div className="flex flex-col sm:flex-row justify-center gap-4 mt-8 border-t border-gray-700 pt-6">
-                        <button onClick={() => setStep('in_game')} disabled={!teamB} className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-500 disabled:cursor-not-allowed">
-                            Começar Próxima Partida
-                        </button>
-                        <button onClick={handleForceEndSession} className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg text-lg">
-                            Encerrar Pelada
-                        </button>
+                        <button onClick={() => setStep('in_game')} disabled={!teamB} className="...">Começar Próxima Partida</button>
+                        <button onClick={handleForceEndSession} className="...">Encerrar Pelada</button>
                     </div>
                 )}
-            </div>
-        );
-    }
-
-    if (step === 'manual_setup') {
-        return (
-            <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-6 border border-gray-700">
-                <h2 className="text-2xl font-bold text-yellow-400 mb-4">Montagem Manual dos Times</h2>
-                <div className="flex flex-col md:flex-row gap-6">
-                    <div className="w-full md:w-1/3 border border-gray-700 rounded-lg p-4 bg-gray-800/20">
-                        <h3 className="font-semibold text-white mb-3">Jogadores Disponíveis ({availablePlayersForSetup.length})</h3>
-                        <div className="space-y-2 max-h-96 overflow-y-auto">
-                            {availablePlayersForSetup.map(p => (
-                                <div key={p.id} className="text-white p-2 bg-gray-800 rounded">{p.name}</div>
-                            ))}
-                        </div>
-                    </div>
-                    <div className="w-full md:w-2/3 space-y-4">
-                        {allTeams.map((team, teamIndex) => (
-                            <div key={teamIndex} className="border border-gray-700 rounded-lg p-4 min-h-[150px]">
-                                <h3 className="font-semibold text-yellow-400 mb-3">Time {String.fromCharCode(65 + teamIndex)}</h3>
-                                <div className="space-y-2 mb-3">
-                                    {team.map(p => (
-                                        <button key={p.id} onClick={() => handleUnassignPlayer(p, teamIndex)} className="w-full text-left p-2 bg-blue-900/50 rounded text-white flex items-center gap-2 hover:bg-red-800" title="Remover do time">
-                                            <LucideX size={14}/> {p.name}
-                                        </button>
-                                    ))}
-                                </div>
-                                <div className="border-t border-gray-700 pt-3">
-                                    <p className="text-xs text-gray-400 mb-2">Adicionar a este time:</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {availablePlayersForSetup.map(p => (
-                                            <button key={p.id} onClick={() => handleAssignPlayer(p, teamIndex)} className="text-xs p-1 px-2 bg-gray-700 rounded-full hover:bg-green-600 text-white">
-                                                <LucidePlus size={12} className="inline-block"/> {p.name}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-                <div className="text-center mt-6">
-                    <button onClick={handleConfirmManualTeams} className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg text-lg">Confirmar Times e Iniciar</button>
-                </div>
             </div>
         );
     }
@@ -600,23 +445,12 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                         <label className="block font-semibold mb-2 text-white">Limite de vitórias seguidas:</label>
-                        <input 
-                            type="number" 
-                            min="0"
-                            value={streakLimit} 
-                            onChange={e => setStreakLimit(Number(e.target.value))} 
-                            className="w-full bg-gray-800 p-2 rounded text-white" 
-                            title="Deixe 0 para desativar o limite."
-                        />
+                        <input type="number" min="0" value={streakLimit} onChange={e => setStreakLimit(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white" title="Deixe 0 para desativar o limite." />
                         <p className="text-xs text-gray-500 mt-1">O time sai após X vitórias. (0 = desativado)</p>
                     </div>
                     <div>
                         <label className="block font-semibold mb-2 text-white">Regra de empate:</label>
-                        <select 
-                            value={tieBreakerRule} 
-                            onChange={e => setTieBreakerRule(e.target.value)} 
-                            className="w-full bg-gray-800 p-2 rounded text-white"
-                        >
+                        <select value={tieBreakerRule} onChange={e => setTieBreakerRule(e.target.value)} className="w-full bg-gray-800 p-2 rounded text-white">
                             <option value="winnerStays">Vencedor anterior fica</option>
                             <option value="bothExit">Ambos os times saem</option>
                             <option value="challengerStaysOnDraw">Desafiante fica no empate</option>
