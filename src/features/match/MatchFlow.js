@@ -180,7 +180,6 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                 return newStats;
             });
         };
-
         if (matchResult.score.teamA === matchResult.score.teamB) {
             updatePlayerRecords(teamA, 'draws');
             updatePlayerRecords(teamB, 'draws');
@@ -203,7 +202,6 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                 return;
             }
         }
-        
         const winnerTeam = matchResult.score.teamA >= matchResult.score.teamB ? teamA : teamB;
         const loserTeam = winnerTeam === teamA ? teamB : teamA;
         updatePlayerRecords(winnerTeam, 'wins');
@@ -428,8 +426,8 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                                     {renderTeamCard(team, index + 2)}
                                     {!isEditModeActive && (
                                         <div className="flex gap-2 mt-2">
-                                            <button onClick={() => handleReorderQueue(index, 'up')} disabled={index === 0} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1 px-3 text-sm rounded-lg disabled:opacity-50"><LucideUndo className="w-4 h-4 transform rotate-90"/></button>
-                                            <button onClick={() => handleReorderQueue(index, 'down')} disabled={index === waitingTeams.length - 1} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-1 px-3 text-sm rounded-lg disabled:opacity-50"><LucideUndo className="w-4 h-4 transform -rotate-90"/></button>
+                                            <button onClick={() => handleReorderQueue(index, 'up')} disabled={index === 0} className="..."><LucideUndo className="..."/></button>
+                                            <button onClick={() => handleReorderQueue(index, 'down')} disabled={index === waitingTeams.length - 1} className="..."><LucideUndo className="..."/></button>
                                         </div>
                                     )}
                                 </div>
@@ -439,10 +437,55 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                 )}
                 {!isEditModeActive && (
                     <div className="flex flex-col sm:flex-row justify-center gap-4 mt-8 border-t border-gray-700 pt-6">
-                        <button onClick={() => setStep('in_game')} disabled={!teamB} className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-500 disabled:cursor-not-allowed">Começar Próxima Partida</button>
-                        <button onClick={handleForceEndSession} className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg text-lg">Encerrar Pelada</button>
+                        <button onClick={() => setStep('in_game')} disabled={!teamB} className="...">Começar Próxima Partida</button>
+                        <button onClick={handleForceEndSession} className="...">Encerrar Pelada</button>
                     </div>
                 )}
+            </div>
+        );
+    }
+
+    if (step === 'manual_setup') {
+        return (
+            <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-6 border border-gray-700">
+                <h2 className="text-2xl font-bold text-yellow-400 mb-4">Montagem Manual dos Times</h2>
+                <div className="flex flex-col md:flex-row gap-6">
+                    <div className="w-full md:w-1/3 border border-gray-700 rounded-lg p-4 bg-gray-800/20">
+                        <h3 className="font-semibold text-white mb-3">Jogadores Disponíveis ({availablePlayersForSetup.length})</h3>
+                        <div className="space-y-2 max-h-96 overflow-y-auto">
+                            {availablePlayersForSetup.map(p => (
+                                <div key={p.id} className="text-white p-2 bg-gray-800 rounded">{p.name}</div>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="w-full md:w-2/3 space-y-4">
+                        {allTeams.map((team, teamIndex) => (
+                            <div key={teamIndex} className="border border-gray-700 rounded-lg p-4 min-h-[150px]">
+                                <h3 className="font-semibold text-yellow-400 mb-3">Time {String.fromCharCode(65 + teamIndex)}</h3>
+                                <div className="space-y-2 mb-3">
+                                    {team.map(p => (
+                                        <button key={p.id} onClick={() => handleUnassignPlayer(p, teamIndex)} className="w-full text-left p-2 bg-blue-900/50 rounded text-white flex items-center gap-2 hover:bg-red-800" title="Remover do time">
+                                            <LucideX size={14}/> {p.name}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="border-t border-gray-700 pt-3">
+                                    <p className="text-xs text-gray-400 mb-2">Adicionar a este time:</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {availablePlayersForSetup.map(p => (
+                                            <button key={p.id} onClick={() => handleAssignPlayer(p, teamIndex)} className="text-xs p-1 px-2 bg-gray-700 rounded-full hover:bg-green-600 text-white">
+                                                <LucidePlus size={12} className="inline-block"/> {p.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                <div className="text-center mt-6">
+                    <button onClick={handleConfirmManualTeams} className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg text-lg">Confirmar Times e Iniciar</button>
+                </div>
             </div>
         );
     }
@@ -453,49 +496,21 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
             <fieldset className="border border-gray-700 p-4 rounded-lg mb-6">
                 <legend className="px-2 text-yellow-400 font-semibold">Modo de Montagem</legend>
                 <div className="flex gap-4">
-                    <button onClick={() => setSetupMode('auto')} className={`flex-1 p-4 rounded-lg flex items-center justify-center gap-2 transition-colors ${setupMode === 'auto' ? 'bg-yellow-500 text-black' : 'bg-gray-800 text-white hover:bg-gray-700'}`}> <LucideShuffle/> Sorteio Automático </button>
-                    <button onClick={() => setSetupMode('manual')} className={`flex-1 p-4 rounded-lg flex items-center justify-center gap-2 transition-colors ${setupMode === 'manual' ? 'bg-yellow-500 text-black' : 'bg-gray-800 text-white hover:bg-gray-700'}`}> <LucideUsers/> Montagem Manual </button>
+                    <button onClick={() => setSetupMode('auto')} className={`flex-1 p-4 rounded-lg ...`}> <LucideShuffle/> Sorteio Automático </button>
+                    <button onClick={() => setSetupMode('manual')} className={`flex-1 p-4 rounded-lg ...`}> <LucideUsers/> Montagem Manual </button>
                 </div>
             </fieldset>
-            {setupMode === 'auto' && (
-                <fieldset className="border border-gray-700 p-4 rounded-lg mb-6">
-                    <legend className="px-2 text-yellow-400 font-semibold">Configuração do Sorteio</legend>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <label className="block font-semibold mb-2 text-white">Nº de times para sortear:</label>
-                            <input type="number" min="2" value={numberOfTeams} onChange={e => setNumberOfTeams(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white" />
-                        </div>
-                        <div>
-                            <label className="block font-semibold mb-2 text-white">Sorteio baseado em:</label>
-                            <select value={drawType} onChange={(e) => setDrawType(e.target.value)} className="w-full bg-gray-800 p-2 rounded text-white">
-                               <option value="self">Overall Próprio</option>
-                               <option value="peer">Overall da Galera</option>
-                               <option value="admin">Overall do Admin</option>
-                            </select>
-                        </div>
-                    </div>
-                </fieldset>
-            )}
-            {setupMode === 'manual' && (
-                <fieldset className="border border-gray-700 p-4 rounded-lg mb-6">
-                    <legend className="px-2 text-yellow-400 font-semibold">Configuração Manual</legend>
-                    <div>
-                        <label className="block font-semibold mb-2 text-white">Nº de times a montar:</label>
-                        <input type="number" min="2" value={numberOfTeams} onChange={e => setNumberOfTeams(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white" />
-                    </div>
-                </fieldset>
-            )}
             <fieldset className="border border-gray-700 p-4 rounded-lg mb-6">
                 <legend className="px-2 text-yellow-400 font-semibold">Regras da Partida</legend>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                         <label className="block font-semibold mb-2 text-white">Limite de vitórias seguidas:</label>
-                        <input type="number" min="0" value={streakLimit} onChange={e => setStreakLimit(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white" title="Deixe 0 para desativar o limite." />
+                        <input type="number" min="0" value={streakLimit} onChange={e => setStreakLimit(Number(e.target.value))} className="w-full ..."/>
                         <p className="text-xs text-gray-500 mt-1">O time sai após X vitórias. (0 = desativado)</p>
                     </div>
                     <div>
                         <label className="block font-semibold mb-2 text-white">Regra de empate:</label>
-                        <select value={tieBreakerRule} onChange={e => setTieBreakerRule(e.target.value)} className="w-full bg-gray-800 p-2 rounded text-white">
+                        <select value={tieBreakerRule} onChange={e => setTieBreakerRule(e.target.value)} className="w-full ...">
                             <option value="winnerStays">Vencedor anterior fica</option>
                             <option value="bothExit">Ambos os times saem</option>
                             <option value="challengerStaysOnDraw">Desafiante fica no empate</option>
@@ -505,10 +520,10 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
             </fieldset>
             <h3 className="text-xl font-bold text-yellow-400 mb-4">Selecione os Jogadores Presentes</h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
-                {players.map(p => (<button key={p.id} onClick={() => handlePlayerToggle(p.id)} className={`p-3 rounded-lg text-center transition ${selectedPlayerIds.has(p.id) ? 'bg-yellow-500 text-black' : 'bg-gray-800 text-white hover:bg-gray-700'}`}>{p.name}</button>))}
+                {players.map(p => (<button key={p.id} onClick={() => handlePlayerToggle(p.id)} className={`...`}>{p.name}</button>))}
             </div>
             <div className="text-center">
-                <button onClick={handleProceedToSetup} disabled={selectedPlayerIds.size < numberOfTeams} className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-500">Continuar</button>
+                <button onClick={handleProceedToSetup} disabled={selectedPlayerIds.size < numberOfTeams} className="...">Continuar</button>
             </div>
         </div>
     );
