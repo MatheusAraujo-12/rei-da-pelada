@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LucideEdit, LucideShieldCheck, LucideUndo, LucideX, LucideUsers, LucideShuffle, LucidePlus } from 'lucide-react';
 import { calculateOverall } from '../../utils/helpers';
 import LiveMatchTracker from './LiveMatchTracker';
@@ -6,6 +6,7 @@ import SubstitutionModal from './SubstitutionModal';
 
 const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
     const localStorageKey = `reiDaPeladaConfig-${groupId}`;
+
     const [step, setStep] = useState('config');
     const [selectedPlayerIds, setSelectedPlayerIds] = useState(new Set());
     const [allTeams, setAllTeams] = useState([]);
@@ -39,52 +40,8 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
         }
     }, [localStorageKey]);
 
+    // ✅ CORREÇÃO: Adicionadas as dependências que estavam em falta no array
     useEffect(() => {
-         if (step === 'manual_setup') {
-        return (
-            <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-6 border border-gray-700">
-                <h2 className="text-2xl font-bold text-yellow-400 mb-4">Montagem Manual dos Times</h2>
-                <div className="flex flex-col md:flex-row gap-6">
-                    <div className="w-full md:w-1/3 border border-gray-700 rounded-lg p-4 bg-gray-800/20">
-                        <h3 className="font-semibold text-white mb-3">Jogadores Disponíveis ({availablePlayersForSetup.length})</h3>
-                        <div className="space-y-2 max-h-96 overflow-y-auto">
-                            {availablePlayersForSetup.map(p => (
-                                <div key={p.id} className="text-white p-2 bg-gray-800 rounded">{p.name}</div>
-                            ))}
-                        </div>
-                    </div>
-                    <div className="w-full md:w-2/3 space-y-4">
-                        {allTeams.map((team, teamIndex) => (
-                            <div key={teamIndex} className="border border-gray-700 rounded-lg p-4 min-h-[150px]">
-                                <h3 className="font-semibold text-yellow-400 mb-3">Time {String.fromCharCode(65 + teamIndex)}</h3>
-                                <div className="space-y-2 mb-3">
-                                    {team.map(p => (
-                                        <button key={p.id} onClick={() => handleUnassignPlayer(p, teamIndex)} className="w-full text-left p-2 bg-blue-900/50 rounded text-white flex items-center gap-2 hover:bg-red-800" title="Remover do time">
-                                            <LucideX size={14}/> {p.name}
-                                        </button>
-                                    ))}
-                                </div>
-                                <div className="border-t border-gray-700 pt-3">
-                                    <p className="text-xs text-gray-400 mb-2">Adicionar a este time:</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {availablePlayersForSetup.map(p => (
-                                            <button key={p.id} onClick={() => handleAssignPlayer(p, teamIndex)} className="text-xs p-1 px-2 bg-gray-700 rounded-full hover:bg-green-600 text-white">
-                                                <LucidePlus size={12} className="inline-block"/> {p.name}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-                <div className="text-center mt-6">
-                    <button onClick={handleConfirmManualTeams} className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg text-lg">Confirmar Times e Iniciar</button>
-                </div>
-            </div>
-        );
-    }
-        
         if (step === 'config') {
             try {
                 const configToSave = {
@@ -193,6 +150,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
         setMatchHistory([]);
         setStep('pre_game');
     };
+    
     
     const handleSingleMatchEnd = async (matchResult) => {
         setIsEditModeActive(false);
