@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, useNavigate } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, onSnapshot, doc, getDoc, query, orderBy, getDocs, where, setDoc, updateDoc, deleteDoc, runTransaction, addDoc, arrayRemove, writeBatch, serverTimestamp } from 'firebase/firestore';
+// ✅ 'getDocs' e 'where' removidos
+import { collection, onSnapshot, doc, getDoc, query, orderBy, setDoc, updateDoc, deleteDoc, runTransaction, addDoc, arrayRemove, writeBatch, serverTimestamp } from 'firebase/firestore';
 
 // Importações de todos os seus componentes e serviços
 import { auth, db } from './services/firebase';
@@ -21,7 +22,9 @@ import MatchHistory from './features/history/MatchHistory';
 import MatchFlow from './features/match/MatchFlow';
 import UserDashboard from './features/dashboard/UserDashboard'; 
 
-import { LucideArrowLeft, LucideUserPlus, LucideUsers, LucideSwords, LucideHistory, LucideTrophy, LucideLogOut } from 'lucide-react';
+// ✅ 'LucideLogOut' removido
+import { LucideArrowLeft, LucideUserPlus, LucideUsers, LucideSwords, LucideHistory, LucideTrophy } from 'lucide-react';
+
 
 export default function AppWrapper() {
     return (
@@ -237,16 +240,25 @@ const handleMatchEnd = async (matchData) => {
         if (!user) return <AuthScreen />;
         if (!playerProfile) return <CreatePlayerProfile user={user} onSave={handleSavePlayer} />;
         
-        let mainComponent;
         const showNavBar = currentView !== 'dashboard' && currentView !== 'groupGate';
+        let mainComponent;
 
         if (userGroups.length === 0) {
-            return <GroupGate user={user} onGroupAssociated={handleGroupAssociated} />;
+            return <GroupGate 
+                        user={user} 
+                        playerProfile={playerProfile} // ✅ Passando o perfil
+                        onGroupAssociated={handleGroupAssociated} 
+                    />;
         }
         
         switch(currentView) {
             case 'groupGate':
-                mainComponent = <GroupGate user={user} onGroupAssociated={handleGroupAssociated} onBackToDashboard={() => navigateToView('dashboard')} />;
+                mainComponent = <GroupGate 
+                                    user={user} 
+                                    playerProfile={playerProfile} // ✅ Passando o perfil
+                                    onGroupAssociated={handleGroupAssociated} 
+                                    onBackToDashboard={() => navigateToView('dashboard')}
+                                />;
                 break;
             case 'sessions':
                 mainComponent = viewingSession 

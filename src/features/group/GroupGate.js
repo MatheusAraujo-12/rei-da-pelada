@@ -3,7 +3,7 @@ import { collection, addDoc, doc, getDoc, updateDoc, arrayUnion, setDoc } from '
 import { LucidePlusCircle, LucideLogIn, LucideArrowLeft } from 'lucide-react';
 import { db } from '../../services/firebase';
 
-const GroupGate = ({ user, onGroupAssociated, onBackToDashboard }) => {
+const GroupGate = ({ user, playerProfile, onGroupAssociated, onBackToDashboard }) => {
     const [mode, setMode] = useState('select');
     const [groupName, setGroupName] = useState('');
     const [joinId, setJoinId] = useState('');
@@ -16,26 +16,31 @@ const GroupGate = ({ user, onGroupAssociated, onBackToDashboard }) => {
         setError('');
         
         try {
+            // 1. Cria o novo grupo
             const groupCollectionRef = collection(db, 'groups');
             const newGroupDoc = await addDoc(groupCollectionRef, {
                 name: groupName,
                 createdBy: user.uid,
                 createdAt: new Date(),
                 members: [user.uid]
-                // A lista 'admins' foi removida daqui
             });
 
+            // 2. Adiciona o grupo à lista de grupos do usuário
             const userDocRef = doc(db, 'users', user.uid);
             await setDoc(userDocRef, {
                 groupIds: arrayUnion(newGroupDoc.id)
             }, { merge: true });
+
+            // ✅ 3. Adiciona o perfil do jogador à subcoleção de jogadores do novo grupo
+            const playerInGroupRef = doc(db, `groups/${newGroupDoc.id}/players`, user.uid);
+            await setDoc(playerInGroupRef, playerProfile);
 
             const userDocSnap = await getDoc(userDocRef);
             onGroupAssociated(userDocSnap.data().groupIds || [newGroupDoc.id]);
 
         } catch (e) {
             console.error("Erro ao criar grupo:", e);
-            setError("Não foi possível criar o grupo. Verifique as permissões ou tente mais tarde.");
+            setError("Não foi possível criar o grupo.");
         } finally {
             setLoading(false);
         }
@@ -52,14 +57,20 @@ const GroupGate = ({ user, onGroupAssociated, onBackToDashboard }) => {
             const groupSnap = await getDoc(groupDocRef);
 
             if (groupSnap.exists()) {
+                // 1. Adiciona o usuário à lista de membros do grupo
                 await updateDoc(groupDocRef, {
                     members: arrayUnion(user.uid)
                 });
 
+                // 2. Adiciona o grupo à lista de grupos do usuário
                 const userDocRef = doc(db, 'users', user.uid);
                 await setDoc(userDocRef, {
                     groupIds: arrayUnion(groupId)
                 }, { merge: true });
+
+                // ✅ 3. Adiciona o perfil do jogador à subcoleção de jogadores do grupo
+                const playerInGroupRef = doc(db, `groups/${groupId}/players`, user.uid);
+                await setDoc(playerInGroupRef, playerProfile);
 
                 const userDocSnap = await getDoc(userDocRef);
                 onGroupAssociated(userDocSnap.data().groupIds || [groupId]);
@@ -91,7 +102,7 @@ const GroupGate = ({ user, onGroupAssociated, onBackToDashboard }) => {
             case 'join':
                 return (
                     <>
-                        <h2 className="text-3xl font-bold text-yellow-400 mb-6">Entrar em um Grupo</h2>
+                        <h2 className="text-3xl font-bold text-yellow-400 mb-6">Entrar num Grupo</h2>
                         <input type="text" placeholder="Cole o ID do Grupo" value={joinId} onChange={(e) => setJoinId(e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 mb-4 text-white" />
                         <button onClick={handleJoinGroup} disabled={loading} className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3 px-6 rounded-lg disabled:opacity-50">
                             {loading ? 'A entrar...' : 'Entrar'}
