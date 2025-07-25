@@ -70,8 +70,8 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
 
     const handleProceedToSetup = () => {
         const available = players.filter(p => selectedPlayerIds.has(p.id));
-        if (available.length < numberOfTeams) {
-            alert(`Você precisa de pelo menos ${numberOfTeams} jogadores para montar ${numberOfTeams} times.`);
+        if (available.length < numberOfTeams * 2) {
+            alert(`Você precisa de pelo menos ${numberOfTeams * 2} jogadores para montar ${numberOfTeams} times.`);
             return;
         }
         if (setupMode === 'auto') {
@@ -180,7 +180,6 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                 return newStats;
             });
         };
-
         if (matchResult.score.teamA === matchResult.score.teamB) {
             updatePlayerRecords(teamA, 'draws');
             updatePlayerRecords(teamB, 'draws');
@@ -203,7 +202,6 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                 return;
             }
         }
-        
         const winnerTeam = matchResult.score.teamA >= matchResult.score.teamB ? teamA : teamB;
         const loserTeam = winnerTeam === teamA ? teamB : teamA;
         updatePlayerRecords(winnerTeam, 'wins');
@@ -428,8 +426,8 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                                     {renderTeamCard(team, index + 2)}
                                     {!isEditModeActive && (
                                         <div className="flex gap-2 mt-2">
-                                            <button onClick={() => handleReorderQueue(index, 'up')} disabled={index === 0} className="..."><LucideUndo className="..."/></button>
-                                            <button onClick={() => handleReorderQueue(index, 'down')} disabled={index === waitingTeams.length - 1} className="..."><LucideUndo className="..."/></button>
+                                            <button onClick={() => handleReorderQueue(index, 'up')} disabled={index === 0} className="bg-gray-700 p-2 rounded-full hover:bg-blue-600 disabled:opacity-50"><LucideUndo className="w-4 h-4 transform rotate-90"/></button>
+                                            <button onClick={() => handleReorderQueue(index, 'down')} disabled={index === waitingTeams.length - 1} className="bg-gray-700 p-2 rounded-full hover:bg-blue-600 disabled:opacity-50"><LucideUndo className="w-4 h-4 transform -rotate-90"/></button>
                                         </div>
                                     )}
                                 </div>
@@ -439,8 +437,8 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                 )}
                 {!isEditModeActive && (
                     <div className="flex flex-col sm:flex-row justify-center gap-4 mt-8 border-t border-gray-700 pt-6">
-                        <button onClick={() => setStep('in_game')} disabled={!teamB} className="...">Começar Próxima Partida</button>
-                        <button onClick={handleForceEndSession} className="...">Encerrar Pelada</button>
+                        <button onClick={() => setStep('in_game')} disabled={!teamB} className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-600 disabled:cursor-not-allowed">Começar Próxima Partida</button>
+                        <button onClick={handleForceEndSession} className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg text-lg">Encerrar Pelada</button>
                     </div>
                 )}
             </div>
@@ -498,8 +496,8 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
             <fieldset className="border border-gray-700 p-4 rounded-lg mb-6">
                 <legend className="px-2 text-yellow-400 font-semibold">Modo de Montagem</legend>
                 <div className="flex gap-4">
-                    <button onClick={() => setSetupMode('auto')} className={`...`}> <LucideShuffle/> Sorteio Automático </button>
-                    <button onClick={() => setSetupMode('manual')} className={`...`}> <LucideUsers/> Montagem Manual </button>
+                    <button onClick={() => setSetupMode('auto')} className={`flex-1 p-4 rounded-lg flex items-center justify-center gap-2 transition-colors ${setupMode === 'auto' ? 'bg-yellow-500 text-black' : 'bg-gray-800 text-white hover:bg-gray-700'}`}> <LucideShuffle/> Sorteio Automático </button>
+                    <button onClick={() => setSetupMode('manual')} className={`flex-1 p-4 rounded-lg flex items-center justify-center gap-2 transition-colors ${setupMode === 'manual' ? 'bg-yellow-500 text-black' : 'bg-gray-800 text-white hover:bg-gray-700'}`}> <LucideUsers/> Montagem Manual </button>
                 </div>
             </fieldset>
             {setupMode === 'auto' && (
@@ -534,13 +532,13 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                 <legend className="px-2 text-yellow-400 font-semibold">Regras da Partida</legend>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                        <label className="block font-semibold mb-2 text-white">Limite de vitórias seguidas:</label>
-                        <input type="number" min="0" value={streakLimit} onChange={e => setStreakLimit(Number(e.target.value))} className="w-full ..." />
+                        <label className="block font-semibold mb-2 text-gray-200">Limite de vitórias seguidas:</label>
+                        <input type="number" min="0" value={streakLimit} onChange={e => setStreakLimit(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white border border-gray-600" title="Deixe 0 para desativar o limite." />
                         <p className="text-xs text-gray-500 mt-1">O time sai após X vitórias. (0 = desativado)</p>
                     </div>
                     <div>
-                        <label className="block font-semibold mb-2 text-white">Regra de empate:</label>
-                        <select value={tieBreakerRule} onChange={e => setTieBreakerRule(e.target.value)} className="w-full ...">
+                        <label className="block font-semibold mb-2 text-gray-200">Regra de empate:</label>
+                        <select value={tieBreakerRule} onChange={e => setTieBreakerRule(e.target.value)} className="w-full bg-gray-800 p-2 rounded text-white border border-gray-600">
                             <option value="winnerStays">Vencedor anterior fica</option>
                             <option value="bothExit">Ambos os times saem</option>
                             <option value="challengerStaysOnDraw">Desafiante fica no empate</option>
@@ -550,10 +548,12 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
             </fieldset>
             <h3 className="text-xl font-bold text-yellow-400 mb-4">Selecione os Jogadores Presentes</h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
-                {players.map(p => (<button key={p.id} onClick={() => handlePlayerToggle(p.id)} className={`...`}>{p.name}</button>))}
+                {players.map(p => (<button key={p.id} onClick={() => handlePlayerToggle(p.id)} className={`p-3 rounded-lg text-center transition-all duration-200 font-semibold ${selectedPlayerIds.has(p.id) ? 'bg-yellow-500 text-black scale-105 shadow-lg shadow-yellow-500/20' : 'bg-gray-800 text-white hover:bg-gray-700'}`}>{p.name}</button>))}
             </div>
             <div className="text-center">
-                <button onClick={handleProceedToSetup} disabled={selectedPlayerIds.size < numberOfTeams} className="...">Continuar</button>
+                <button onClick={handleProceedToSetup} disabled={selectedPlayerIds.size < 2} className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-600 disabled:cursor-not-allowed">
+                    Continuar
+                </button>
             </div>
         </div>
     );
