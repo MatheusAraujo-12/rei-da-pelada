@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, useNavigate } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, onSnapshot, doc, getDoc, query, orderBy, getDocs, where, setDoc, updateDoc, deleteDoc, runTransaction, addDoc, arrayRemove, writeBatch, serverTimestamp } from 'firebase/firestore';
+// ✅ 'getDocs' e 'where' removidos
+import { collection, onSnapshot, doc, getDoc, query, orderBy, setDoc, updateDoc, deleteDoc, runTransaction, addDoc, arrayRemove, writeBatch, serverTimestamp } from 'firebase/firestore';
 
-// Importações de Serviços e Componentes
+// Importações
 import { auth, db } from './services/firebase';
 import AuthScreen from './features/auth/AuthScreen';
 import ConfirmationModal from './components/ConfirmationModal';
@@ -21,8 +22,8 @@ import MatchHistory from './features/history/MatchHistory';
 import MatchFlow from './features/match/MatchFlow';
 import UserDashboard from './features/dashboard/UserDashboard'; 
 
-// Importações de Ícones
-import { LucideArrowLeft, LucideUserPlus, LucideUsers, LucideSwords, LucideHistory, LucideTrophy, LucideLogOut } from 'lucide-react';
+// ✅ 'LucideLogOut' removido
+import { LucideArrowLeft, LucideUserPlus, LucideUsers, LucideSwords, LucideHistory, LucideTrophy } from 'lucide-react';
 
 export default function AppWrapper() {
     return (
@@ -36,26 +37,17 @@ export default function AppWrapper() {
 }
 
 function App() {
-    // Estados Globais
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
-    
-    // Estados de Navegação
     const [currentView, setCurrentView] = useState('dashboard');
     const [previousView, setPreviousView] = useState('dashboard');
-
-    // Estados de Dados do Usuário
     const [playerProfile, setPlayerProfile] = useState(null);
     const [userGroups, setUserGroups] = useState([]);
-
-    // Estados de Dados do Grupo Ativo
     const [activeGroupId, setActiveGroupId] = useState(null);
     const [isAdminOfActiveGroup, setIsAdminOfActiveGroup] = useState(false);
     const [players, setPlayers] = useState([]);
     const [matches, setMatches] = useState([]);
     const [savedSessions, setSavedSessions] = useState([]);
-    
-    // Estados para Modais e Interações de UI
     const [isPlayerModalOpen, setIsPlayerModalOpen] = useState(false);
     const [editingPlayer, setEditingPlayer] = useState(null);
     const [playerToDelete, setPlayerToDelete] = useState(null);
@@ -68,32 +60,28 @@ function App() {
     
     const navigate = useNavigate();
 
-    // Efeito para autenticação
     useEffect(() => {
-        setIsLoading(true);
         const unsubscribe = onAuthStateChanged(auth, (u) => {
             if (u) {
                 setUser(u);
             } else {
                 setUser(null);
-                setPlayerProfile(null);
-                setUserGroups([]);
-                setActiveGroupId(null);
-                setCurrentView('dashboard');
-                setIsLoading(false);
                 navigate('/login');
             }
         });
         return () => unsubscribe();
     }, [navigate]);
 
-    // Efeito para carregar dados do usuário logado
     useEffect(() => {
         if (!user) {
+            setPlayerProfile(null);
+            setUserGroups([]);
+            setActiveGroupId(null);
             setIsLoading(false);
             return;
         }
 
+        setIsLoading(true);
         const playerDocRef = doc(db, 'players', user.uid);
         const unsubPlayer = onSnapshot(playerDocRef, (docSnap) => {
             setPlayerProfile(docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null);
@@ -121,21 +109,16 @@ function App() {
             unsubPlayer();
             unsubUser();
         };
-    }, [user]);
+    // ✅ CORREÇÃO: Adicionada a dependência que estava em falta
+    }, [user, activeGroupId]);
 
-    // Efeito para carregar dados do grupo ativo
     useEffect(() => {
         if (!user || !activeGroupId) {
-            setPlayers([]);
-            setMatches([]);
-            setSavedSessions([]);
-            setIsAdminOfActiveGroup(false);
+            setPlayers([]); setMatches([]); setSavedSessions([]); setIsAdminOfActiveGroup(false);
             return;
         }
         const groupDocRef = doc(db, 'groups', activeGroupId);
-        const unsubGroup = onSnapshot(groupDocRef, (docSnap) => {
-            setIsAdminOfActiveGroup(docSnap.exists() && docSnap.data().createdBy === user.uid);
-        });
+        const unsubGroup = onSnapshot(groupDocRef, (docSnap) => setIsAdminOfActiveGroup(docSnap.exists() && docSnap.data().createdBy === user.uid));
         
         const playersColRef = collection(db, `groups/${activeGroupId}/players`);
         const unsubPlayers = onSnapshot(query(playersColRef), s => setPlayers(s.docs.map(d => ({ id: d.id, ...d.data() }))));
@@ -149,10 +132,7 @@ function App() {
         return () => { unsubGroup(); unsubPlayers(); mSub(); sSub(); };
     }, [user, activeGroupId]);
     
-    // Funções de manipulação de dados
-    const handleProfileCreated = (newProfile) => {
-        setPlayerProfile({ id: user.uid, ...newProfile });
-    };
+    const handleProfileCreated = (newProfile) => { setPlayerProfile({ id: user.uid, ...newProfile }); };
     
     const handleGroupAssociated = async (newGroupIds) => {
         const newActiveId = newGroupIds[newGroupIds.length - 1];
@@ -164,21 +144,17 @@ function App() {
         if (playerData.id) {
             if (!activeGroupId || !isAdminOfActiveGroup) return;
             const { id, ...data } = playerData;
-            try {
-                await updateDoc(doc(db, `groups/${activeGroupId}/players`, id), data);
-            } catch (e) { console.error("Erro ao ATUALIZAR jogador:", e); }
+            try { await updateDoc(doc(db, `groups/${activeGroupId}/players`, id), data); } 
+            catch (e) { console.error("Erro ao ATUALIZAR jogador:", e); } 
             finally { setIsPlayerModalOpen(false); }
         } else {
             if (playerProfile && isAdminOfActiveGroup && activeGroupId) {
-                try {
-                    await addDoc(collection(db, `groups/${activeGroupId}/players`), playerData);
-                } catch (e) { console.error("Erro ao ADICIONAR novo jogador ao grupo:", e); }
+                try { await addDoc(collection(db, `groups/${activeGroupId}/players`), playerData); } 
+                catch (e) { console.error("Erro ao ADICIONAR novo jogador:", e); } 
                 finally { setIsPlayerModalOpen(false); }
             } else if (!playerProfile && user) {
-                try {
-                    await setDoc(doc(db, 'players', user.uid), playerData);
-                    handleProfileCreated(playerData);
-                } catch (e) { console.error("Erro ao CRIAR perfil global:", e); }
+                try { await setDoc(doc(db, 'players', user.uid), playerData); handleProfileCreated(playerData); } 
+                catch (e) { console.error("Erro ao CRIAR perfil global:", e); }
             }
         }
     };
