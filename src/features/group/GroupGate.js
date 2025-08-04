@@ -11,12 +11,11 @@ const GroupGate = ({ user, playerProfile, onGroupAssociated, onBackToDashboard }
     const [loading, setLoading] = useState(false);
 
     const handleCreateGroup = async () => {
-        if (!groupName.trim() || !user || loading) return;
+        if (!groupName.trim() || !user || loading || !playerProfile) return;
         setLoading(true);
         setError('');
         
         try {
-            // 1. Cria o novo grupo
             const groupCollectionRef = collection(db, 'groups');
             const newGroupDoc = await addDoc(groupCollectionRef, {
                 name: groupName,
@@ -25,13 +24,11 @@ const GroupGate = ({ user, playerProfile, onGroupAssociated, onBackToDashboard }
                 members: [user.uid]
             });
 
-            // 2. Adiciona o grupo à lista de grupos do usuário
             const userDocRef = doc(db, 'users', user.uid);
             await setDoc(userDocRef, {
                 groupIds: arrayUnion(newGroupDoc.id)
             }, { merge: true });
 
-            // ✅ 3. Adiciona o perfil do jogador à subcoleção de jogadores do novo grupo
             const playerInGroupRef = doc(db, `groups/${newGroupDoc.id}/players`, user.uid);
             await setDoc(playerInGroupRef, playerProfile);
 
@@ -40,14 +37,14 @@ const GroupGate = ({ user, playerProfile, onGroupAssociated, onBackToDashboard }
 
         } catch (e) {
             console.error("Erro ao criar grupo:", e);
-            setError("Não foi possível criar o grupo.");
+            setError("Não foi possível criar o grupo. Verifique o console para mais detalhes.");
         } finally {
             setLoading(false);
         }
     };
 
     const handleJoinGroup = async () => {
-        if (!joinId.trim() || !user || loading) return;
+        if (!joinId.trim() || !user || loading || !playerProfile) return;
         setLoading(true);
         setError('');
 
@@ -57,30 +54,26 @@ const GroupGate = ({ user, playerProfile, onGroupAssociated, onBackToDashboard }
             const groupSnap = await getDoc(groupDocRef);
 
             if (groupSnap.exists()) {
-                // 1. Adiciona o usuário à lista de membros do grupo
                 await updateDoc(groupDocRef, {
                     members: arrayUnion(user.uid)
                 });
 
-                // 2. Adiciona o grupo à lista de grupos do usuário
                 const userDocRef = doc(db, 'users', user.uid);
                 await setDoc(userDocRef, {
                     groupIds: arrayUnion(groupId)
                 }, { merge: true });
 
-                // ✅ 3. Adiciona o perfil do jogador à subcoleção de jogadores do grupo
                 const playerInGroupRef = doc(db, `groups/${groupId}/players`, user.uid);
                 await setDoc(playerInGroupRef, playerProfile);
 
                 const userDocSnap = await getDoc(userDocRef);
                 onGroupAssociated(userDocSnap.data().groupIds || [groupId]);
-
             } else {
                 setError("Grupo não encontrado. Verifique o ID.");
             }
         } catch(e) {
             console.error("Erro ao entrar no grupo:", e);
-            setError("Ocorreu um erro ao tentar entrar no grupo.");
+            setError("Ocorreu um erro ao tentar entrar no grupo. Verifique o console.");
         } finally {
             setLoading(false);
         }
