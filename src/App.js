@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, useNavigate } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, onSnapshot, doc, getDoc, query, orderBy, setDoc, updateDoc, deleteDoc, runTransaction, addDoc, arrayRemove, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, doc, getDoc, query, orderBy, setDoc, updateDoc, deleteDoc, runTransaction, addDoc, arrayRemove, writeBatch, serverTimestamp, getDocs, where } from 'firebase/firestore';
 
 // Importações de Serviços e Componentes
 import { auth, db } from './services/firebase';
@@ -22,7 +22,7 @@ import MatchFlow from './features/match/MatchFlow';
 import UserDashboard from './features/dashboard/UserDashboard'; 
 
 // Importações de Ícones
-import { LucideArrowLeft, LucideUserPlus, LucideUsers, LucideSwords, LucideHistory, LucideTrophy, LucideLogOut } from 'lucide-react';
+import { LucideArrowLeft, LucideUserPlus, LucideUsers, LucideSwords, LucideHistory, LucideTrophy } from 'lucide-react';
 
 export default function AppWrapper() {
     return (
@@ -150,7 +150,7 @@ function App() {
         setPlayerProfile({ id: user.uid, ...newProfile });
     };
     
-    const handleGroupAssociated = async (newGroupIds) => {
+    const handleGroupAssociated = (newGroupIds) => {
         const newActiveId = newGroupIds[newGroupIds.length - 1];
         setActiveGroupId(newActiveId);
         navigateToView('dashboard');
@@ -309,8 +309,8 @@ function App() {
         if (!user) return <AuthScreen />;
         if (!playerProfile) return <CreatePlayerProfile user={user} onSave={handleSavePlayer} />;
         
-        let mainComponent;
         const showNavBar = currentView !== 'dashboard' && currentView !== 'groupGate';
+        let mainComponent;
 
         if (userGroups.length === 0) {
             return <GroupGate 
@@ -336,9 +336,7 @@ function App() {
                 mainComponent = isAdminOfActiveGroup ? <MatchFlow players={players} groupId={activeGroupId} onMatchEnd={handleMatchEnd} onSessionEnd={handleSessionEnd} /> : <div>Apenas administradores podem iniciar uma partida.</div>;
                 break;
             case 'sessions':
-                mainComponent = viewingSession 
-                    ? <SessionReportDetail session={{...viewingSession, groupId: activeGroupId}} onBack={() => setViewingSession(null)} />
-                    : <SessionHistoryList sessions={savedSessions} onSelectSession={setViewingSession} onDeleteSession={setSessionToDelete} isAdmin={isAdminOfActiveGroup} />;
+                mainComponent = viewingSession ? <SessionReportDetail session={{...viewingSession, groupId: activeGroupId}} onBack={() => setViewingSession(null)} /> : <SessionHistoryList sessions={savedSessions} onSelectSession={setViewingSession} onDeleteSession={setSessionToDelete} isAdmin={isAdminOfActiveGroup} />;
                 break;
             case 'history':
                 mainComponent = isAdminOfActiveGroup ? <MatchHistory matches={matches} onEditMatch={setEditingMatch} onDeleteMatch={setMatchToDelete}/> : null;
