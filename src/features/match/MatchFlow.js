@@ -11,6 +11,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
     const [selectedPlayerIds, setSelectedPlayerIds] = useState(new Set());
     const [allTeams, setAllTeams] = useState([]);
     const [matchHistory, setMatchHistory] = useState([]);
+    const [sessionPlayerStats, setSessionPlayerStats] = useState({});
     const [numberOfTeams, setNumberOfTeams] = useState(2);
     const [drawType, setDrawType] = useState('self');
     const [isEditModeActive, setIsEditModeActive] = useState(false);
@@ -34,7 +35,9 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                 setTieBreakerRule(config.tieBreakerRule || 'winnerStays');
                 setSetupMode(config.setupMode || 'auto');
             }
-        } catch (error) { console.error("Erro ao carregar configuração:", error); }
+        } catch (error) {
+            console.error("Erro ao carregar configuração do localStorage:", error);
+        }
     }, [localStorageKey]);
 
     useEffect(() => {
@@ -42,12 +45,19 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
             try {
                 const configToSave = {
                     selectedPlayerIds: Array.from(selectedPlayerIds),
-                    numberOfTeams, drawType, streakLimit, tieBreakerRule, setupMode
+                    numberOfTeams,
+                    drawType,
+                    streakLimit,
+                    tieBreakerRule,
+                    setupMode
                 };
                 localStorage.setItem(localStorageKey, JSON.stringify(configToSave));
-            } catch (error) { console.error("Erro ao salvar configuração:", error); }
+            } catch (error) {
+                console.error("Erro ao salvar configuração no localStorage:", error);
+            }
         }
     }, [selectedPlayerIds, numberOfTeams, drawType, streakLimit, tieBreakerRule, setupMode, localStorageKey, step]);
+
 
     const handlePlayerToggle = (playerId) => {
         setSelectedPlayerIds(prev => {
@@ -130,6 +140,11 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
             alert("Não foi possível formar pelo menos 2 times completos.");
             return;
         }
+        const initialStats = {};
+        availablePlayers.forEach(p => {
+            initialStats[p.id] = { name: p.name, wins: 0, draws: 0, losses: 0, goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 };
+        });
+        setSessionPlayerStats(initialStats);
         setAllTeams(finalTeams);
         setMatchHistory([]);
         setStep('pre_game');
@@ -141,9 +156,33 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
         if(savedMatch) {
             setMatchHistory(prev => [...prev, savedMatch]);
         }
+        setSessionPlayerStats(prevStats => {
+            const newStats = JSON.parse(JSON.stringify(prevStats));
+            for (const playerId in matchResult.playerStats) {
+                if (newStats[playerId]) {
+                    for (const stat in matchResult.playerStats[playerId]) {
+                        newStats[playerId][stat] = (newStats[playerId][stat] || 0) + matchResult.playerStats[playerId][stat];
+                    }
+                }
+            }
+            return newStats;
+        });
         const { teamA, teamB } = matchResult.teams;
         const remainingTeams = allTeams.slice(2);
+        const updatePlayerRecords = (team, result) => {
+            setSessionPlayerStats(prevStats => {
+                const newStats = JSON.parse(JSON.stringify(prevStats));
+                if (Array.isArray(team)) {
+                    team.forEach(player => {
+                        if (player && newStats[player.id]) newStats[player.id][result]++;
+                    });
+                }
+                return newStats;
+            });
+        };
         if (matchResult.score.teamA === matchResult.score.teamB) {
+            updatePlayerRecords(teamA, 'draws');
+            updatePlayerRecords(teamB, 'draws');
             if (tieBreakerRule === 'bothExit') {
                 const nextTeams = remainingTeams.splice(0, 2);
                 const newQueue = [...remainingTeams, teamA, teamB];
@@ -165,6 +204,8 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
         }
         const winnerTeam = matchResult.score.teamA >= matchResult.score.teamB ? teamA : teamB;
         const loserTeam = winnerTeam === teamA ? teamB : teamA;
+        updatePlayerRecords(winnerTeam, 'wins');
+        updatePlayerRecords(loserTeam, 'losses');
         const getTeamId = (team) => team.map(p => p?.id).sort().join('-');
         const winnerId = getTeamId(winnerTeam);
         let currentStreak = (winnerId === winnerStreak.teamId) ? winnerStreak.count + 1 : 1;
@@ -182,9 +223,60 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
         setStep('post_game');
     };
 
+    const handleMovePlayer = (playerToMove, fromTeamIndex, toTeamIndex) => {
+        setAllTeams(currentTeams => {
+            const newTeams = JSON.parse(JSON.stringify(currentTeams.map(t => t || [])));
+            const fromTeam = newTeams[fromTeamIndex];
+            const toTeam = newTeams[toTeamIndex];
+            if (!fromTeam) return currentTeams;
+            const playerIndex = fromTeam.findIndex(p => p.id === playerToMove.id);
+            if (playerIndex === -1) return currentTeams;
+            const [player] = fromTeam.splice(playerIndex, 1);
+            if (toTeam) {
+                toTeam.push(player);
+            } else {
+                newTeams[toTeamIndex] = [player];
+            }
+            return newTeams.filter(team => team.length > 0);
+        });
+    };
+
+    const handleRemovePlayer = (playerToRemove, fromTeamIndex) => {
+        setAllTeams(currentTeams => {
+            let newTeams = JSON.parse(JSON.stringify(currentTeams));
+            const fromTeam = newTeams[fromTeamIndex];
+            if (!fromTeam) return currentTeams;
+            const updatedTeam = fromTeam.filter(p => p.id !== playerToRemove.id);
+            newTeams[fromTeamIndex] = updatedTeam;
+            return newTeams.filter(team => team.length > 0);
+        });
+    };
+
+    const handleSetPlayingTeam = (teamRole, indexToSet) => {
+        setAllTeams(currentTeams => {
+            const newTeams = [...currentTeams];
+            const targetIndex = teamRole === 'A' ? 0 : 1;
+            [newTeams[targetIndex], newTeams[indexToSet]] = [newTeams[indexToSet], newTeams[targetIndex]];
+            return newTeams;
+        });
+    };
+
+    const handleReorderQueue = (indexInWaitingQueue, direction) => {
+        setAllTeams(currentTeams => {
+            const waitingTeams = currentTeams.slice(2);
+            const actualIndex = indexInWaitingQueue;
+            if (direction === 'up' && actualIndex > 0) {
+                [waitingTeams[actualIndex], waitingTeams[actualIndex - 1]] = [waitingTeams[actualIndex - 1], waitingTeams[actualIndex]];
+            } else if (direction === 'down' && actualIndex < waitingTeams.length - 1) {
+                [waitingTeams[actualIndex], waitingTeams[actualIndex + 1]] = [waitingTeams[actualIndex + 1], waitingTeams[actualIndex]];
+            }
+            return [currentTeams[0], currentTeams[1], ...waitingTeams];
+        });
+    };
+
     const handleForceEndSession = () => {
         const sessionData = {
-            players: Array.from(selectedPlayerIds), // Salva a lista de todos os participantes da sessão
+            players: Object.keys(sessionPlayerStats),
             matchIds: matchHistory.map(match => match.id)
         };
         onSessionEnd(sessionData);
@@ -211,6 +303,8 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                 const temp = newTeams[posOut.tIndex][posOut.pIndex];
                 newTeams[posOut.tIndex][posOut.pIndex] = newTeams[posIn.tIndex][posIn.pIndex];
                 newTeams[posIn.tIndex][posIn.pIndex] = temp;
+            } else {
+                console.error("Erro na substituição: jogador não encontrado.");
             }
             return newTeams;
         });
