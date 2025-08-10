@@ -3,7 +3,7 @@ import { BrowserRouter, useNavigate } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, onSnapshot, doc, getDoc, query, orderBy, getDocs, where, setDoc, updateDoc, deleteDoc, runTransaction, addDoc, arrayRemove, writeBatch, serverTimestamp } from 'firebase/firestore';
 
-// Importações de todos os seus componentes e serviços
+// Importações
 import { auth, db } from './services/firebase';
 import AuthScreen from './features/auth/AuthScreen';
 import ConfirmationModal from './components/ConfirmationModal';
@@ -35,6 +35,7 @@ export default function AppWrapper() {
 }
 
 function App() {
+    // Estados
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [currentView, setCurrentView] = useState('dashboard');
@@ -58,13 +59,18 @@ function App() {
     
     const navigate = useNavigate();
 
+    // Efeitos
     useEffect(() => {
         setIsLoading(true);
         const unsubscribe = onAuthStateChanged(auth, (u) => {
             if (u) {
                 setUser(u);
             } else {
-                setUser(null); setPlayerProfile(null); setUserGroups([]); setActiveGroupId(null);
+                setUser(null);
+                setPlayerProfile(null);
+                setUserGroups([]);
+                setActiveGroupId(null);
+                setCurrentView('dashboard');
                 setIsLoading(false);
                 navigate('/login');
             }
@@ -77,12 +83,10 @@ function App() {
             setIsLoading(false);
             return;
         }
-
         const playerDocRef = doc(db, 'players', user.uid);
         const unsubPlayer = onSnapshot(playerDocRef, (docSnap) => {
             setPlayerProfile(docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null);
         });
-
         const userDocRef = doc(db, 'users', user.uid);
         const unsubUser = onSnapshot(userDocRef, async (userDocSnap) => {
             const groupIds = userDocSnap.exists() ? userDocSnap.data().groupIds || [] : [];
@@ -100,11 +104,7 @@ function App() {
             }
             setIsLoading(false);
         });
-
-        return () => {
-            unsubPlayer();
-            unsubUser();
-        };
+        return () => { unsubPlayer(); unsubUser(); };
     }, [user, activeGroupId]);
 
     useEffect(() => {
@@ -114,20 +114,18 @@ function App() {
         }
         const groupDocRef = doc(db, 'groups', activeGroupId);
         const unsubGroup = onSnapshot(groupDocRef, (docSnap) => setIsAdminOfActiveGroup(docSnap.exists() && docSnap.data().createdBy === user.uid));
-        
         const playersColRef = collection(db, `groups/${activeGroupId}/players`);
         const unsubPlayers = onSnapshot(query(playersColRef), s => setPlayers(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-
         const matchesColRef = collection(db, `groups/${activeGroupId}/matches`);
         const mSub = onSnapshot(query(matchesColRef, orderBy('date', 'desc')), s => setMatches(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-        
         const sessionsColRef = collection(db, `groups/${activeGroupId}/sessions`);
         const qSessions = query(sessionsColRef, orderBy('date', 'desc'));
         const sSub = onSnapshot(qSessions, s => setSavedSessions(s.docs.map(d => ({ id: d.id, ...d.data() }))));
         return () => { unsubGroup(); unsubPlayers(); mSub(); sSub(); };
     }, [user, activeGroupId]);
     
-    const handleProfileCreated = (newProfile) => setPlayerProfile({ id: user.uid, ...newProfile });
+    // Funções
+    const handleProfileCreated = (newProfile) => { setPlayerProfile({ id: user.uid, ...newProfile }); };
     
     const handleGroupAssociated = (newGroupIds) => {
         const newActiveId = newGroupIds[newGroupIds.length - 1];
@@ -139,39 +137,49 @@ function App() {
         if (playerData.id) {
             if (!activeGroupId || !isAdminOfActiveGroup) return;
             const { id, ...data } = playerData;
-            try { await updateDoc(doc(db, `groups/${activeGroupId}/players`, id), data); } 
-            catch (e) { console.error("Erro ao ATUALIZAR jogador:", e); } 
+            try {
+                await updateDoc(doc(db, `groups/${activeGroupId}/players`, id), data);
+            } catch (e) { console.error("Erro ao ATUALIZAR jogador:", e); }
             finally { setIsPlayerModalOpen(false); }
         } else {
             if (playerProfile && isAdminOfActiveGroup && activeGroupId) {
-                try { await addDoc(collection(db, `groups/${activeGroupId}/players`), playerData); } 
-                catch (e) { console.error("Erro ao ADICIONAR novo jogador:", e); } 
+                try {
+                    await addDoc(collection(db, `groups/${activeGroupId}/players`), playerData);
+                } catch (e) { console.error("Erro ao ADICIONAR novo jogador ao grupo:", e); }
                 finally { setIsPlayerModalOpen(false); }
             } else if (!playerProfile && user) {
-                try { await setDoc(doc(db, 'players', user.uid), playerData); handleProfileCreated(playerData); } 
-                catch (e) { console.error("Erro ao CRIAR perfil global:", e); }
+                try {
+                    await setDoc(doc(db, 'players', user.uid), playerData);
+                    handleProfileCreated(playerData);
+                } catch (e) { console.error("Erro ao CRIAR perfil global:", e); }
             }
         }
     };
     
     const confirmDeletePlayer = async () => {
         if (!activeGroupId || !playerToDelete || !isAdminOfActiveGroup) return;
-        try { await deleteDoc(doc(db, `groups/${activeGroupId}/players`, playerToDelete.id)); } 
-        catch (e) { console.error("Erro ao apagar jogador:", e); } 
+        try {
+            await deleteDoc(doc(db, `groups/${activeGroupId}/players`, playerToDelete.id));
+        } catch (e) { console.error("Erro ao apagar jogador:", e); } 
         finally { setPlayerToDelete(null); }
     };
 
     const confirmDeleteMatch = async () => {
         if(!activeGroupId || !matchToDelete || !isAdminOfActiveGroup) return;
-        try { await deleteDoc(doc(db, `groups/${activeGroupId}/matches`, matchToDelete.id)); } 
-        catch(e) { console.error("Erro ao apagar partida:", e); } 
-        finally { setMatchToDelete(null); }
+        try {
+            await deleteDoc(doc(db, `groups/${activeGroupId}/matches`, matchToDelete.id));
+        } catch(e) {
+            console.error("Erro ao apagar partida:", e);
+        } finally {
+            setMatchToDelete(null);
+        }
     };
 
     const confirmDeleteSession = async () => {
         if (!sessionToDelete || !isAdminOfActiveGroup) return;
-        try { await deleteDoc(doc(db, `groups/${activeGroupId}/sessions`, sessionToDelete.id)); } 
-        catch (e) { console.error("Erro ao apagar sessão:", e); } 
+        try {
+            await deleteDoc(doc(db, `groups/${activeGroupId}/sessions`, sessionToDelete.id));
+        } catch (e) { console.error("Erro ao apagar sessão:", e); } 
         finally { setSessionToDelete(null); }
     };
 
@@ -184,14 +192,20 @@ function App() {
             batch.update(userDocRef, { groupIds: arrayRemove(groupToLeave.id) });
             batch.update(groupDocRef, { members: arrayRemove(user.uid) });
             await batch.commit();
-        } catch (error) { console.error("Erro ao sair do grupo:", error); alert("Não foi possível sair do grupo."); } 
-        finally { setGroupToLeave(null); }
+        } catch (error) {
+            console.error("Erro ao sair do grupo:", error);
+            alert("Não foi possível sair do grupo.");
+        } finally {
+            setGroupToLeave(null);
+        }
     };
     
     const handleUpdateMatch = async (matchId, newStats) => {
         if (!activeGroupId) return;
-        try { await updateDoc(doc(db, `groups/${activeGroupId}/matches`, matchId), { playerStats: newStats }); setEditingMatch(null); } 
-        catch (e) { console.error("Erro ao atualizar a partida: ", e); }
+        try {
+            await updateDoc(doc(db, `groups/${activeGroupId}/matches`, matchId), { playerStats: newStats });
+            setEditingMatch(null);
+        } catch (e) { console.error("Erro ao atualizar a partida: ", e); }
     };
     
     const handleSavePeerReview = async (playerToReview, newSkills) => {
@@ -215,7 +229,7 @@ function App() {
         finally { setPeerReviewPlayer(null); }
     };
 
-     const handleMatchEnd = async (matchData) => {
+    const handleMatchEnd = async (matchData) => {
         if (!activeGroupId) return null;
         try {
             const matchDocRef = await addDoc(collection(db, `groups/${activeGroupId}/matches`), { ...matchData, date: serverTimestamp() });
@@ -223,39 +237,31 @@ function App() {
         } catch (e) { console.error("Erro ao salvar a partida:", e); return null; }
     };
 
-     const handleSessionEnd = async (sessionData) => {
-        if (!activeGroupId) return;
+    const handleSessionEnd = async (sessionData) => {
+        if (!activeGroupId) { alert("Nenhum grupo ativo para salvar a sessão."); return; }
         try {
-            const timestamp = serverTimestamp();
-            const finalSessionData = { ...sessionData, date: timestamp };
+            const finalSessionData = { ...sessionData, date: serverTimestamp() };
             const sessionsColRef = collection(db, `groups/${activeGroupId}/sessions`);
-            const newSessionRef = await addDoc(sessionsColRef, finalSessionData);
-            
-            // Prepara os dados para visualização imediata
-            const sessionForViewing = {
-                id: newSessionRef.id,
-                ...sessionData,
-                date: { seconds: Math.floor(Date.now() / 1000) } // Simula o timestamp para exibição imediata
-            };
-
-            setViewingSession(sessionForViewing);
+            await addDoc(sessionsColRef, finalSessionData);
             navigateToView('sessions');
-        } catch (error) {
-            console.error("ERRO DETALHADO AO SALVAR:", error);
-            alert(`ERRO AO SALVAR NO FIRESTORE: ${error.message}`);
-        }
+        } catch (error) { console.error("ERRO DETALHADO AO SALVAR:", error); alert(`ERRO AO SALVAR NO FIRESTORE: ${error.message}`); }
     };
     
     const openEditModal = (p) => { setEditingPlayer(p); setIsPlayerModalOpen(true); };
     const openAddModal = () => { setEditingPlayer(null); setIsPlayerModalOpen(true); };
     const handleLogout = () => signOut(auth);
+    
     const navigateToView = (view) => {
         if (view !== currentView) {
             setPreviousView(currentView);
             setCurrentView(view);
         }
     };
-    const handleEnterGroup = (groupId) => { setActiveGroupId(groupId); navigateToView('players'); };
+    
+    const handleEnterGroup = (groupId) => {
+        setActiveGroupId(groupId);
+        navigateToView('players'); 
+    };
 
     const renderContent = () => {
         if (isLoading) return <div className="text-center p-10 text-white">A carregar...</div>;
@@ -273,16 +279,14 @@ function App() {
             case 'groupGate':
                 mainComponent = <GroupGate user={user} playerProfile={playerProfile} onGroupAssociated={handleGroupAssociated} onBackToDashboard={() => navigateToView('dashboard')} />;
                 break;
-            case 'sessions':
-                mainComponent = viewingSession 
-                    ? <SessionReportDetail session={{...viewingSession, groupId: activeGroupId}} onBack={() => setViewingSession(null)} />
-                    : <SessionHistoryList sessions={savedSessions} onSelectSession={setViewingSession} onDeleteSession={setSessionToDelete} isAdmin={isAdminOfActiveGroup} />;
-                break;
             case 'players':
-                mainComponent = <div className="grid grid-cols-1 ...">{/* ... */}</div>;
+                mainComponent = <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">{isAdminOfActiveGroup && <button onClick={openAddModal} className="w-full max-w-[280px] mx-auto h-[400px] bg-gray-800/20 border-4 border-dashed border-gray-700 rounded-2xl flex flex-col items-center justify-center text-gray-500 hover:border-yellow-400 hover:text-yellow-400 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-yellow-500"><LucideUserPlus className="w-20 h-20" /><span className="mt-4 text-lg font-semibold">Adicionar Jogador</span></button>}{players.map(p => <PlayerCard key={p.id} player={p} onEdit={openEditModal} onDelete={setPlayerToDelete} onOpenPeerReview={setPeerReviewPlayer} isAdmin={isAdminOfActiveGroup}/>)}</div>;
                 break;
             case 'match':
                 mainComponent = isAdminOfActiveGroup ? <MatchFlow players={players} groupId={activeGroupId} onMatchEnd={handleMatchEnd} onSessionEnd={handleSessionEnd} /> : <div>Apenas administradores podem iniciar uma partida.</div>;
+                break;
+            case 'sessions':
+                mainComponent = viewingSession ? <SessionReportDetail session={{...viewingSession, groupId: activeGroupId}} onBack={() => setViewingSession(null)} /> : <SessionHistoryList sessions={savedSessions} onSelectSession={setViewingSession} onDeleteSession={setSessionToDelete} isAdmin={isAdminOfActiveGroup} />;
                 break;
             case 'history':
                 mainComponent = isAdminOfActiveGroup ? <MatchHistory matches={matches} onEditMatch={setEditingMatch} onDeleteMatch={setMatchToDelete}/> : null;
