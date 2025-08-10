@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, useNavigate } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-// ✅ 'getDocs' e 'where' foram removidos desta linha
 import { collection, onSnapshot, doc, getDoc, query, orderBy, setDoc, updateDoc, deleteDoc, runTransaction, addDoc, arrayRemove, writeBatch, serverTimestamp } from 'firebase/firestore';
 
 // Importações de Serviços e Componentes
@@ -147,12 +146,11 @@ function App() {
         return () => { unsubGroup(); unsubPlayers(); mSub(); sSub(); };
     }, [user, activeGroupId]);
     
-    // Funções de manipulação de dados
     const handleProfileCreated = (newProfile) => {
         setPlayerProfile({ id: user.uid, ...newProfile });
     };
     
-    const handleGroupAssociated = (newGroupIds) => {
+    const handleGroupAssociated = async (newGroupIds) => {
         const newActiveId = newGroupIds[newGroupIds.length - 1];
         setActiveGroupId(newActiveId);
         navigateToView('dashboard');
@@ -276,7 +274,13 @@ function App() {
         try {
             const finalSessionData = { ...sessionData, date: serverTimestamp() };
             const sessionsColRef = collection(db, `groups/${activeGroupId}/sessions`);
-            await addDoc(sessionsColRef, finalSessionData);
+            const newSessionRef = await addDoc(sessionsColRef, finalSessionData);
+            
+            const sessionForViewing = {
+                id: newSessionRef.id,
+                ...finalSessionData,
+            };
+            setViewingSession(sessionForViewing);
             navigateToView('sessions');
         } catch (error) {
             console.error("ERRO DETALHADO AO SALVAR:", error);
@@ -305,9 +309,9 @@ function App() {
         if (!user) return <AuthScreen />;
         if (!playerProfile) return <CreatePlayerProfile user={user} onSave={handleSavePlayer} />;
         
-        const showNavBar = currentView !== 'dashboard' && currentView !== 'groupGate';
         let mainComponent;
-        
+        const showNavBar = currentView !== 'dashboard' && currentView !== 'groupGate';
+
         if (userGroups.length === 0) {
             return <GroupGate 
                 user={user} 
@@ -315,7 +319,7 @@ function App() {
                 onGroupAssociated={handleGroupAssociated} 
             />;
         }
-
+        
         switch(currentView) {
             case 'groupGate':
                 mainComponent = <GroupGate 
@@ -332,7 +336,9 @@ function App() {
                 mainComponent = isAdminOfActiveGroup ? <MatchFlow players={players} groupId={activeGroupId} onMatchEnd={handleMatchEnd} onSessionEnd={handleSessionEnd} /> : <div>Apenas administradores podem iniciar uma partida.</div>;
                 break;
             case 'sessions':
-                mainComponent = viewingSession ? <SessionReportDetail session={{...viewingSession, groupId: activeGroupId}} onBack={() => setViewingSession(null)} /> : <SessionHistoryList sessions={savedSessions} onSelectSession={setViewingSession} onDeleteSession={setSessionToDelete} isAdmin={isAdminOfActiveGroup} />;
+                mainComponent = viewingSession 
+                    ? <SessionReportDetail session={{...viewingSession, groupId: activeGroupId}} onBack={() => setViewingSession(null)} />
+                    : <SessionHistoryList sessions={savedSessions} onSelectSession={setViewingSession} onDeleteSession={setSessionToDelete} isAdmin={isAdminOfActiveGroup} />;
                 break;
             case 'history':
                 mainComponent = isAdminOfActiveGroup ? <MatchHistory matches={matches} onEditMatch={setEditingMatch} onDeleteMatch={setMatchToDelete}/> : null;
