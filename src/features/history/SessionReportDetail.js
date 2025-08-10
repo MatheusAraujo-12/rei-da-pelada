@@ -12,6 +12,7 @@ const SessionReportDetail = ({ session, onBack }) => {
                 setLoading(false);
                 return;
             }
+            
             try {
                 setLoading(true);
                 const matchPromises = session.matchIds.map(id => {
@@ -19,8 +20,12 @@ const SessionReportDetail = ({ session, onBack }) => {
                     const matchDocRef = doc(db, `groups/${session.groupId}/matches`, id);
                     return getDoc(matchDocRef);
                 }).filter(Boolean);
+                
                 const matchDocs = await Promise.all(matchPromises);
-                const matchesData = matchDocs.filter(d => d.exists()).map(d => ({ id: d.id, ...d.data() }));
+                const matchesData = matchDocs
+                    .filter(d => d.exists())
+                    .map(d => ({ id: d.id, ...d.data() }));
+
                 setMatchesDetails(matchesData);
             } catch (error) {
                 console.error("Erro ao buscar detalhes das partidas:", error);
@@ -28,37 +33,40 @@ const SessionReportDetail = ({ session, onBack }) => {
                 setLoading(false);
             }
         };
+
         fetchMatches();
     }, [session]);
 
-    // ✅ LÓGICA DE CÁLCULO EM TEMPO REAL
+    // Calcula as estatísticas em tempo real a partir dos detalhes das partidas buscados
     const calculatedStats = useMemo(() => {
         const stats = {};
-        const allPlayerIds = new Set();
-        
-        // Coleta todos os jogadores de todas as partidas
-        matchesDetails.forEach(match => {
-            match.teams.teamA.forEach(p => allPlayerIds.add(p.id));
-            match.teams.teamB.forEach(p => allPlayerIds.add(p.id));
-        });
+        if (!session.players || matchesDetails.length === 0) return [];
 
-        // Inicializa as estatísticas para todos
-        allPlayerIds.forEach(playerId => {
+        // Inicializa as estatísticas para todos os jogadores que participaram da sessão
+        session.players.forEach(playerId => {
             stats[playerId] = { name: 'Desconhecido', wins: 0, draws: 0, losses: 0, goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 };
         });
 
         // Itera sobre as partidas para calcular as estatísticas
         matchesDetails.forEach(match => {
-            const teamAPlayerIds = match.teams.teamA.map(p => p.id);
-            const teamBPlayerIds = match.teams.teamB.map(p => p.id);
+            const teamAPlayers = match.teams.teamA;
+            const teamBPlayers = match.teams.teamB;
+            const teamAPlayerIds = teamAPlayers.map(p => p.id);
+            const teamBPlayerIds = teamBPlayers.map(p => p.id);
             
-            // Recalcula o placar a partir das estatísticas salvas na partida
             let scoreA = 0;
             let scoreB = 0;
-            teamAPlayerIds.forEach(id => { scoreA += match.playerStats[id]?.goals || 0 });
-            teamBPlayerIds.forEach(id => { scoreB += match.playerStats[id]?.goals || 0 });
+            
+            // Calcula o placar a partir das estatísticas individuais de gols
+            for (const pId in match.playerStats) {
+                if (teamAPlayerIds.includes(pId)) {
+                    scoreA += match.playerStats[pId]?.goals || 0;
+                } else if (teamBPlayerIds.includes(pId)) {
+                    scoreB += match.playerStats[pId]?.goals || 0;
+                }
+            }
 
-            // Calcula V/D/E com base no placar recalculado
+            // Calcula V/D/E
             if (scoreA > scoreB) {
                 teamAPlayerIds.forEach(id => { if(stats[id]) stats[id].wins++; });
                 teamBPlayerIds.forEach(id => { if(stats[id]) stats[id].losses++; });
@@ -70,25 +78,41 @@ const SessionReportDetail = ({ session, onBack }) => {
                 teamBPlayerIds.forEach(id => { if(stats[id]) stats[id].draws++; });
             }
 
-            // Agrega as estatísticas individuais
+            // Agrega as estatísticas individuais (gols, assistências, desarmes, etc.)
             for (const playerId in match.playerStats) {
                 if (stats[playerId]) {
-                    const playerInMatch = [...match.teams.teamA, ...match.teams.teamB].find(p => p.id === playerId);
-                    if (playerInMatch) stats[playerId].name = playerInMatch.name;
+                    const playerInMatch = [...teamAPlayers, ...teamBPlayers].find(p => p.id === playerId);
+                    if (playerInMatch) {
+                        stats[playerId].name = playerInMatch.name;
+                    }
+
                     for (const stat in match.playerStats[playerId]) {
                         stats[playerId][stat] = (stats[playerId][stat] || 0) + match.playerStats[playerId][stat];
                     }
                 }
             }
         });
+
         return Object.values(stats).sort((a, b) => b.wins - a.wins || b.goals - a.goals);
-    }, [matchesDetails]);
+    }, [matchesDetails, session.players]);
+
 
     if (!session || !session.date) {
-        return ( <div className="text-center text-gray-400 p-8"><p>Nenhuma sessão selecionada.</p><button onClick={onBack} className="...">Voltar</button></div> );
+        return (
+            <div className="text-center text-gray-400 p-8">
+                <p>Nenhuma sessão selecionada ou dados inválidos.</p>
+                <div className="mt-4">
+                    <button onClick={onBack} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg">
+                        Voltar
+                    </button>
+                </div>
+            </div>
+        );
     }
     
-    const sessionDate = new Date(session.date.seconds * 1000).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+    const sessionDate = new Date(session.date.seconds * 1000).toLocaleDateString('pt-BR', {
+        day: '2-digit', month: 'long', year: 'numeric'
+    });
 
     return (
         <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-8 text-white space-y-8">
@@ -100,7 +124,13 @@ const SessionReportDetail = ({ session, onBack }) => {
                         <table className="w-full text-left min-w-[600px]">
                             <thead className="bg-gray-800">
                                 <tr>
-                                    <th className="p-3">Jogador</th><th className="p-3 text-center">V</th><th className="p-3 text-center">E</th><th className="p-3 text-center">D</th><th className="p-3 text-center">Gols</th><th className="p-3 text-center">Assist.</th><th className="p-3 text-center">Desarmes</th>
+                                    <th className="p-3">Jogador</th>
+                                    <th className="p-3 text-center">V</th>
+                                    <th className="p-3 text-center">E</th>
+                                    <th className="p-3 text-center">D</th>
+                                    <th className="p-3 text-center">Gols</th>
+                                    <th className="p-3 text-center">Assist.</th>
+                                    <th className="p-3 text-center">Desarmes</th>
                                 </tr>
                             </thead>
                             <tbody className="bg-gray-800/50">
@@ -120,6 +150,7 @@ const SessionReportDetail = ({ session, onBack }) => {
                     </div>
                 )}
             </div>
+
             {session.matchIds && session.matchIds.length > 0 && (
                  <div>
                     <h3 className="text-2xl font-bold text-yellow-400 mb-4 text-center">Resultados das Partidas</h3>
@@ -133,15 +164,22 @@ const SessionReportDetail = ({ session, onBack }) => {
                             return (
                                <div key={match.id} className="bg-gray-800 p-3 rounded-lg text-center">
                                    <p className="text-sm text-gray-400">Partida {index + 1}</p>
-                                   <p className="font-bold text-lg text-white">Time A <span className="text-xl text-yellow-400 mx-2">{scoreA}</span> vs <span className="text-xl text-yellow-400 mx-2">{scoreB}</span> Time B</p>
+                                   <p className="font-bold text-lg text-white">
+                                       Time A <span className="text-xl text-yellow-400 mx-2">{scoreA}</span> 
+                                       vs 
+                                       <span className="text-xl text-yellow-400 mx-2">{scoreB}</span> Time B
+                                   </p>
                                </div>
                             );
                         })}
                     </div>
                 </div>
             )}
+
             <div className="text-center mt-4">
-                <button onClick={onBack} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg">Voltar para o Histórico de Sessões</button>
+                <button onClick={onBack} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg">
+                    Voltar para o Histórico de Sessões
+                </button>
             </div>
         </div>
     );

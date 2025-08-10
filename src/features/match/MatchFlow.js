@@ -11,7 +11,6 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
     const [selectedPlayerIds, setSelectedPlayerIds] = useState(new Set());
     const [allTeams, setAllTeams] = useState([]);
     const [matchHistory, setMatchHistory] = useState([]);
-    const [sessionPlayerStats, setSessionPlayerStats] = useState({});
     const [numberOfTeams, setNumberOfTeams] = useState(2);
     const [drawType, setDrawType] = useState('self');
     const [isEditModeActive, setIsEditModeActive] = useState(false);
@@ -61,8 +60,8 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
 
     const handleProceedToSetup = () => {
         const available = players.filter(p => selectedPlayerIds.has(p.id));
-        if (available.length < numberOfTeams * 2) {
-            alert(`Você precisa de pelo menos ${numberOfTeams * 2} jogadores para montar ${numberOfTeams} times.`);
+        if (available.length < 2) {
+            alert(`Você precisa de pelo menos 2 jogadores selecionados.`);
             return;
         }
         if (setupMode === 'auto') {
@@ -131,55 +130,19 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
             alert("Não foi possível formar pelo menos 2 times completos.");
             return;
         }
-        const initialStats = {};
-        availablePlayers.forEach(p => {
-            initialStats[p.id] = { name: p.name, wins: 0, draws: 0, losses: 0, goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 };
-        });
-        setSessionPlayerStats(initialStats);
         setAllTeams(finalTeams);
         setMatchHistory([]);
         setStep('pre_game');
     };
     
-    // ✅ FUNÇÃO REESCRITA PARA ATUALIZAÇÃO ÚNICA E CORRETA DAS ESTATÍSTICAS
     const handleSingleMatchEnd = async (matchResult) => {
         setIsEditModeActive(false);
         const savedMatch = await onMatchEnd(matchResult);
         if(savedMatch) {
             setMatchHistory(prev => [...prev, savedMatch]);
         }
-        
         const { teamA, teamB } = matchResult.teams;
-
-        // Atualiza o estado da sessão de uma só vez para evitar inconsistências
-        setSessionPlayerStats(prevStats => {
-            const newStats = JSON.parse(JSON.stringify(prevStats));
-
-            // 1. Agrega as estatísticas individuais (gols, desarmes, etc.) da partida
-            for (const playerId in matchResult.playerStats) {
-                if (newStats[playerId]) {
-                    for (const stat in matchResult.playerStats[playerId]) {
-                        newStats[playerId][stat] = (newStats[playerId][stat] || 0) + matchResult.playerStats[playerId][stat];
-                    }
-                }
-            }
-
-            // 2. Calcula e agrega o resultado (Vitória, Empate ou Derrota)
-            if (matchResult.score.teamA === matchResult.score.teamB) {
-                teamA.forEach(p => { if(p && newStats[p.id]) newStats[p.id].draws++; });
-                teamB.forEach(p => { if(p && newStats[p.id]) newStats[p.id].draws++; });
-            } else {
-                const winnerTeam = matchResult.score.teamA > matchResult.score.teamB ? teamA : teamB;
-                const loserTeam = winnerTeam === teamA ? teamB : teamA;
-                winnerTeam.forEach(p => { if(p && newStats[p.id]) newStats[p.id].wins++; });
-                loserTeam.forEach(p => { if(p && newStats[p.id]) newStats[p.id].losses++; });
-            }
-            
-            return newStats;
-        });
-        
         const remainingTeams = allTeams.slice(2);
-        
         if (matchResult.score.teamA === matchResult.score.teamB) {
             if (tieBreakerRule === 'bothExit') {
                 const nextTeams = remainingTeams.splice(0, 2);
@@ -200,10 +163,8 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                 return;
             }
         }
-        
         const winnerTeam = matchResult.score.teamA >= matchResult.score.teamB ? teamA : teamB;
         const loserTeam = winnerTeam === teamA ? teamB : teamA;
-
         const getTeamId = (team) => team.map(p => p?.id).sort().join('-');
         const winnerId = getTeamId(winnerTeam);
         let currentStreak = (winnerId === winnerStreak.teamId) ? winnerStreak.count + 1 : 1;
@@ -223,12 +184,12 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
 
     const handleForceEndSession = () => {
         const sessionData = {
-            players: Object.keys(sessionPlayerStats),
+            players: Array.from(selectedPlayerIds), // Salva a lista de todos os participantes da sessão
             matchIds: matchHistory.map(match => match.id)
         };
         onSessionEnd(sessionData);
     };
-
+    
     const handleInitiateSubstitution = (player) => {
         setPlayerToSubstitute(player);
         setIsSubModalOpen(true);
@@ -250,8 +211,6 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                 const temp = newTeams[posOut.tIndex][posOut.pIndex];
                 newTeams[posOut.tIndex][posOut.pIndex] = newTeams[posIn.tIndex][posIn.pIndex];
                 newTeams[posIn.tIndex][posIn.pIndex] = temp;
-            } else {
-                console.error("Erro na substituição: jogador não encontrado.");
             }
             return newTeams;
         });
