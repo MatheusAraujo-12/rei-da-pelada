@@ -1,19 +1,19 @@
-﻿import React from 'react';
+import React from 'react';
 import { LucideX, LucideGoal, LucideHandshake, LucideShield, LucideReplace, LucideFrown, LucideHand } from 'lucide-react';
 
 const PlayerActionModal = ({ isOpen, onClose, player, onStat, onSubstitute, onGoal }) => {
     if (!isOpen || !player) return null;
 
     const actions = [
-        { label: "Gol", icon: LucideGoal, action: onGoal, color: 'bg-green-600 hover:bg-green-500' },
-        { label: "Assistência", icon: LucideHandshake, action: () => onStat('assists'), color: 'bg-blue-600 hover:bg-blue-500' },
-        { label: "Desarme", icon: LucideShield, action: () => onStat('tackles'), color: 'bg-orange-600 hover:bg-orange-500' },
-        { label: "Falha", icon: LucideFrown, action: () => onStat('failures'), color: 'bg-red-800 hover:bg-red-700' },
-        { label: "Substituir", icon: LucideReplace, action: onSubstitute, color: 'bg-gray-600 hover:bg-gray-500' }
+        { label: 'Gol', icon: LucideGoal, action: onGoal, color: 'bg-green-600 hover:bg-green-500' },
+        { label: 'Assistencia', icon: LucideHandshake, action: () => onStat('assists'), color: 'bg-blue-600 hover:bg-blue-500' },
+        { label: 'Desarme', icon: LucideShield, action: () => onStat('tackles'), color: 'bg-orange-600 hover:bg-orange-500' },
+        { label: 'Falha', icon: LucideFrown, action: () => onStat('failures'), color: 'bg-red-800 hover:bg-red-700' },
+        { label: 'Substituir', icon: LucideReplace, action: onSubstitute, color: 'bg-gray-600 hover:bg-gray-500' }
     ];
 
     if (player.position === 'Goleiro') {
-        actions.unshift({ label: "Defesa", icon: LucideHand, action: () => onStat('saves'), color: 'bg-purple-600 hover:bg-purple-500' });
+        actions.unshift({ label: 'Defesa', icon: LucideHand, action: () => onStat('saves'), color: 'bg-purple-600 hover:bg-purple-500' });
     }
 
     return (
@@ -29,7 +29,7 @@ const PlayerActionModal = ({ isOpen, onClose, player, onStat, onSubstitute, onGo
                             key={action.label}
                             onClick={() => {
                                 action.action();
-                                // A lÃ³gica de fechar o modal serÃ¡ tratada pelo componente pai para permitir o fluxo de multi-modais
+                                // Fechamento do modal eh tratado pelo componente pai (para fluxo de multi-modais)
                             }}
                             className={`flex flex-col items-center justify-center p-4 rounded-lg text-white font-semibold ${action.color} transition-transform transform hover:scale-105`}
                         >
@@ -44,3 +44,4 @@ const PlayerActionModal = ({ isOpen, onClose, player, onStat, onSubstitute, onGo
 };
 
 export default PlayerActionModal;
+

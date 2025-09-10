@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, useNavigate } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, onSnapshot, doc, getDoc, query, orderBy, setDoc, updateDoc, deleteDoc, runTransaction, addDoc, arrayRemove, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, doc, getDoc, query, orderBy, updateDoc, deleteDoc, runTransaction, addDoc, arrayRemove, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 // Importações de Serviços e Componentes
@@ -158,7 +158,6 @@ function App() {
     }, [user, activeGroupId]);
     
     // Funções de manipulação
-    const handleProfileCreated = (newProfile) => { setPlayerProfile({ id: user.uid, ...newProfile }); };
     
     const handleGroupAssociated = (newGroupIds) => {
         const newActiveId = newGroupIds[newGroupIds.length - 1];

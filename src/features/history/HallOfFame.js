@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { LucideTrophy, LucideHandshake, LucideShieldCheck, LucideAward, LucideFrown } from 'lucide-react';
 
 const RankingCard = ({ title, data, statKey, icon }) => (
@@ -16,7 +16,7 @@ const RankingCard = ({ title, data, statKey, icon }) => (
                     </li>
                 ))}
             </ol>
-        ) : <p className="text-gray-500">Ainda não há dados para este ranking.</p>}
+        ) : <p className="text-gray-500">Ainda nao ha dados para este ranking.</p>}
     </div>
 );
 
@@ -86,7 +86,7 @@ const HallOfFame = ({ players, matches }) => {
             <div className="flex justify-center mb-6">
                 <select onChange={(e) => setFilter(e.target.value)} value={filter} className="bg-gray-800 border border-gray-600 rounded-lg p-2 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
                     <option value="week">Esta Semana</option>
-                    <option value="month">Este Mês</option>
+                    <option value="month">Este Mes</option>
                     <option value="quarter">Este Trimestre</option>
                     <option value="semester">Este Semestre</option>
                     <option value="year">Este Ano</option>
@@ -95,9 +95,9 @@ const HallOfFame = ({ players, matches }) => {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <RankingCard title="Artilheiros" data={rankings.topScorers} statKey="goals" icon={<LucideTrophy />} />
-                <RankingCard title="Garçons" data={rankings.topAssisters} statKey="assists" icon={<LucideHandshake />} />
+                <RankingCard title="Garcons" data={rankings.topAssisters} statKey="assists" icon={<LucideHandshake />} />
                 <RankingCard title="Xerifes" data={rankings.topTacklers} statKey="tackles" icon={<LucideShieldCheck />} />
-                <RankingCard title="Paredões" data={rankings.topGoalkeepers} statKey="saves" icon={<LucideAward />} />
+                <RankingCard title="Paredoes" data={rankings.topGoalkeepers} statKey="saves" icon={<LucideAward />} />
                 <RankingCard title="Bola Murcha" data={rankings.bolaMurcha} statKey="failures" icon={<LucideFrown />} />
             </div>
         </div>
@@ -105,3 +105,4 @@ const HallOfFame = ({ players, matches }) => {
 };
 
 export default HallOfFame;
+

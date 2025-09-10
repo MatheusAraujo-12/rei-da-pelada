@@ -39,7 +39,7 @@ const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => 
     { color: '168,85,247', alpha: 0.85, speed: '3.4s', opacity: 0.85 }, // fúcsia
     { color: '6,182,212', alpha: 0.8, speed: '4.2s', opacity: 0.8 },    // ciano
   ];
-  const pick = variants[seed % variants.length];
+  const __unused = variants.length + seed; void __unused;
 
   return (
     <div className="relative w-full max-w-[280px] h-[400px] mx-auto">

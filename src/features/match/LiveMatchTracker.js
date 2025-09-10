@@ -1,10 +1,10 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { LucidePlay, LucidePause, LucidePlus, LucideUndo } from 'lucide-react';
 import ConfirmationModal from '../../components/ConfirmationModal';
 import PlayerActionModal from './PlayerActionModal';
 import AssistSelectorModal from './AssistSelectorModal';
 
-// Substituição controlada pelo componente pai (ActiveMatch)
+// Substituicao controlada pelo componente pai (ActiveMatch)
 const LiveMatchTracker = ({
     teams,
     score,
@@ -80,8 +80,8 @@ const LiveMatchTracker = ({
 
             <ConfirmationModal 
                 isOpen={showConfirm} 
-                title="Confirmar Acréscimo" 
-                message="Deseja adicionar 1 minuto ao cronômetro?" 
+                title="Confirmar Acrescimo" 
+                message="Deseja adicionar 1 minuto ao cronometro?" 
                 onConfirm={() => { onAddMinute(); setShowConfirm(false); }} 
                 onClose={() => setShowConfirm(false)} 
             />
@@ -92,7 +92,7 @@ const LiveMatchTracker = ({
                         <h2 className="text-6xl font-mono tracking-tighter text-white">{formatTime(timeLeft)}</h2>
                         <div className="flex justify-center items-center gap-2 sm:gap-4 mt-2">
                             <button onClick={onTogglePause} className="p-2 sm:p-3 bg-gray-700/80 rounded-full hover:bg-indigo-400 transition-colors">{isPaused ? <LucidePlay /> : <LucidePause />}</button>
-                            <button onClick={() => setShowConfirm(true)} className="py-2 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs sm:text-sm font-semibold flex items-center gap-2"><LucidePlus /> Acréscimo</button>
+                            <button onClick={() => setShowConfirm(true)} className="py-2 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs sm:text-sm font-semibold flex items-center gap-2"><LucidePlus /> Acrescimo</button>
                             <button onClick={onUndo} disabled={history.length === 0} className="py-2 px-4 rounded-lg bg-gray-600 hover:bg-gray-500 text-xs sm:text-sm font-semibold flex items-center gap-2 disabled:opacity-50"><LucideUndo /> Desfazer</button>
                         </div>
                     </div>
@@ -117,5 +117,4 @@ const LiveMatchTracker = ({
 };
 
 export default LiveMatchTracker;
-
 
