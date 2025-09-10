@@ -11,3 +11,52 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* Champions palette + subtle effects */
+.champions-card { isolation: isolate; }
+.champions-border {
+  position: absolute;
+  inset: 0;
+  border-radius: 1.5rem;
+  pointer-events: none;
+  z-index: 3; /* acima do conteúdo */
+  /* borda estática aplicada no próprio border */
+  border: 3px solid transparent;
+  border-image-slice: 1;
+  border-image-source: linear-gradient(135deg, #4338ca, #a855f7 50%, #06b6d4);
+}
+.champions-border::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  /* brilho correndo na própria borda usando border-image */
+  border: 3px solid transparent;
+  border-image-slice: 1;
+  border-image-source: conic-gradient(
+    from 0deg,
+    rgba(var(--sheen-color, 99,102,241), var(--sheen-alpha, 0.85)) 0deg 6deg,
+    rgba(255,255,255,0) 6deg 360deg
+  );
+  opacity: var(--sheen-opacity, 0.9);
+  animation: champions-rotate var(--sheen-speed, 3.2s) linear infinite;
+  transform-origin: 50% 50%;
+}
+
+@keyframes champions-rotate {
+  to { transform: rotate(360deg); }
+}
+
+/* Remove animação e overlay dos playercards conforme solicitado */
+.champions-border { display: none !important; }
+
+@keyframes champions-sheen {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* Make navs scrollable on mobile */
+.nav-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}

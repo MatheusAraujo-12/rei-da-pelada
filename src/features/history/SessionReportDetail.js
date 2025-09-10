@@ -8,6 +8,12 @@ const SessionReportDetail = ({ session, onBack }) => {
 
     useEffect(() => {
         const fetchMatches = async () => {
+            // Se a sessão já contém as partidas, usa-as direto
+            if (Array.isArray(session?.matches) && session.matches.length > 0) {
+                setMatchesDetails(session.matches);
+                setLoading(false);
+                return;
+            }
             if (!session?.matchIds || session.matchIds.length === 0 || !session.groupId) {
                 setLoading(false);
                 return;
@@ -117,9 +123,9 @@ const SessionReportDetail = ({ session, onBack }) => {
     return (
         <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-8 text-white space-y-8">
             <div>
-                <h2 className="text-3xl font-bold text-yellow-400 mb-2 text-center">Relatório da Sessão</h2>
+                <h2 className="text-3xl font-bold text-indigo-300 mb-2 text-center">Relatório da Sessão</h2>
                 <p className="text-center text-gray-400 mb-6">{sessionDate}</p>
-                {loading ? <div className="text-center">A carregar estatísticas...</div> : (
+                {loading ? <div className="text-center">Carregando estatísticas...</div> : (
                     <div className="overflow-x-auto">
                         <table className="w-full text-left min-w-[600px]">
                             <thead className="bg-gray-800">
@@ -153,9 +159,9 @@ const SessionReportDetail = ({ session, onBack }) => {
 
             {session.matchIds && session.matchIds.length > 0 && (
                  <div>
-                    <h3 className="text-2xl font-bold text-yellow-400 mb-4 text-center">Resultados das Partidas</h3>
+                    <h3 className="text-2xl font-bold text-indigo-300 mb-4 text-center">Resultados das Partidas</h3>
                     <div className="space-y-3 max-h-60 overflow-y-auto p-1">
-                       {loading ? <p className="text-center">A carregar partidas...</p> : matchesDetails.map((match, index) => {
+                       {loading ? <p className="text-center">Carregando partidas...</p> : matchesDetails.map((match, index) => {
                             let scoreA = 0, scoreB = 0;
                             if (match.playerStats) {
                                 match.teams.teamA.forEach(p => { scoreA += match.playerStats[p.id]?.goals || 0; });
@@ -165,9 +171,9 @@ const SessionReportDetail = ({ session, onBack }) => {
                                <div key={match.id} className="bg-gray-800 p-3 rounded-lg text-center">
                                    <p className="text-sm text-gray-400">Partida {index + 1}</p>
                                    <p className="font-bold text-lg text-white">
-                                       Time A <span className="text-xl text-yellow-400 mx-2">{scoreA}</span> 
+                                       Time A <span className="text-xl text-indigo-300 mx-2">{scoreA}</span> 
                                        vs 
-                                       <span className="text-xl text-yellow-400 mx-2">{scoreB}</span> Time B
+                                       <span className="text-xl text-indigo-300 mx-2">{scoreB}</span> Time B
                                    </p>
                                </div>
                             );
@@ -186,3 +192,4 @@ const SessionReportDetail = ({ session, onBack }) => {
 };
 
 export default SessionReportDetail;
+

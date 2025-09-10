@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { LucideX, LucideGoal, LucideHandshake, LucideShield, LucideReplace, LucideFrown, LucideHand } from 'lucide-react';
 
 const PlayerActionModal = ({ isOpen, onClose, player, onStat, onSubstitute, onGoal }) => {
@@ -29,7 +29,7 @@ const PlayerActionModal = ({ isOpen, onClose, player, onStat, onSubstitute, onGo
                             key={action.label}
                             onClick={() => {
                                 action.action();
-                                // A lógica de fechar o modal agora é tratada pelo componente pai
+                                // A lÃ³gica de fechar o modal serÃ¡ tratada pelo componente pai para permitir o fluxo de multi-modais
                             }}
                             className={`flex flex-col items-center justify-center p-4 rounded-lg text-white font-semibold ${action.color} transition-transform transform hover:scale-105`}
                         >

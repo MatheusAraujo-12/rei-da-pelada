@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { LucideEdit, LucideShieldCheck, LucideUndo, LucideX, LucideUsers, LucideShuffle, LucidePlus } from 'lucide-react';
 import { calculateOverall } from '../../utils/helpers';
 import ActiveMatch from './ActiveMatch';
@@ -20,8 +20,6 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
     const [winnerStreak, setWinnerStreak] = useState({ teamId: null, count: 0 });
     const [setupMode, setSetupMode] = useState('auto');
     const [availablePlayersForSetup, setAvailablePlayersForSetup] = useState([]);
-    const [matchDurationMin, setMatchDurationMin] = useState(10);
-    const [playersPerTeam, setPlayersPerTeam] = useState(0);
 
     useEffect(() => {
         try {
@@ -34,8 +32,6 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                 setStreakLimit(config.streakLimit ?? 2);
                 setTieBreakerRule(config.tieBreakerRule || 'winnerStays');
                 setSetupMode(config.setupMode || 'auto');
-                if (typeof config.matchDurationMin === 'number') setMatchDurationMin(config.matchDurationMin);
-                if (typeof config.playersPerTeam === 'number') setPlayersPerTeam(config.playersPerTeam);
             }
             const savedSession = localStorage.getItem(sessionStateKey);
             if (savedSession) {
@@ -69,19 +65,11 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
         if (step === 'config') {
             const configToSave = {
                 selectedPlayerIds: Array.from(selectedPlayerIds),
-                numberOfTeams, drawType, streakLimit, tieBreakerRule, setupMode,
-                matchDurationMin, playersPerTeam
+                numberOfTeams, drawType, streakLimit, tieBreakerRule, setupMode
             };
             localStorage.setItem(localStorageKey, JSON.stringify(configToSave));
         }
-    }, [step, allTeams, matchHistory, sessionPlayerStats, winnerStreak, selectedPlayerIds, numberOfTeams, drawType, streakLimit, tieBreakerRule, setupMode, matchDurationMin, playersPerTeam, localStorageKey, sessionStateKey]);
-
-    // Ao entrar no in_game, zera o estado ao vivo para iniciar partida nova
-    useEffect(() => {
-        if (step === 'in_game') {
-            try { localStorage.removeItem(`liveMatchState-${groupId}`); } catch {}
-        }
-    }, [step, groupId]);
+    }, [step, allTeams, matchHistory, sessionPlayerStats, winnerStreak, selectedPlayerIds, numberOfTeams, drawType, streakLimit, tieBreakerRule, setupMode, localStorageKey, sessionStateKey]);
 
     const handlePlayerToggle = (playerId) => {
         setSelectedPlayerIds(prev => {
@@ -95,7 +83,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
     const handleProceedToSetup = () => {
         const available = players.filter(p => selectedPlayerIds.has(p.id));
         if (available.length < 2) {
-            alert(`Você precisa de pelo menos 2 jogadores selecionados.`);
+            alert(`VocÃª precisa de pelo menos 2 jogadores selecionados.`);
             return;
         }
         if (setupMode === 'auto') {
@@ -117,44 +105,19 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
         });
         const posOrder = { 'Goleiro': 1, 'Defensor': 2, 'Volante': 3, 'Meio-Campo': 4, 'Ponta': 5, 'Atacante': 6 };
         playersWithOverall.sort((a, b) => (posOrder[a.detailedPosition] || 99) - (posOrder[b.detailedPosition] || 99) || b.overall - a.overall);
-        if (playersPerTeam && playersPerTeam > 0) {
-            const baseTeams = Array.from({ length: numberOfTeams }, () => ({ players: [] }));
-            const waitingTeams = [];
-            for (const player of playersWithOverall) {
-                const spot = baseTeams.find(t => t.players.length < playersPerTeam);
-                if (spot) spot.players.push(player);
-                else {
-                    let last = waitingTeams[waitingTeams.length - 1];
-                    if (!last || last.length >= playersPerTeam) {
-                        last = [];
-                        waitingTeams.push(last);
-                    }
-                    last.push(player);
-                }
-            }
-            const finalTeams = [
-                ...baseTeams.filter(t => t.players.length > 0).map(t => t.players),
-                ...waitingTeams.filter(t => t.length > 0)
-            ];
-            finishSessionSetup(finalTeams, availablePlayers);
-        } else {
-            let teams = Array.from({ length: numberOfTeams }, () => ({ players: [] }));
-            playersWithOverall.forEach(player => {
-                teams.sort((a, b) => a.players.length - b.players.length);
-                teams[0].players.push(player);
-            });
-            const finalTeams = teams.filter(t => t.players.length > 0).map(t => t.players);
-            finishSessionSetup(finalTeams, availablePlayers);
-        }
+        let teams = Array.from({ length: numberOfTeams }, () => ({ players: [] }));
+        playersWithOverall.forEach(player => {
+            teams.sort((a, b) => a.players.length - b.players.length);
+            teams[0].players.push(player);
+        });
+        const finalTeams = teams.filter(t => t.players.length > 0).map(t => t.players);
+        finishSessionSetup(finalTeams, availablePlayers);
     };
 
     const handleAssignPlayer = (playerToAssign, toTeamIndex) => {
         setAvailablePlayersForSetup(prev => prev.filter(p => p.id !== playerToAssign.id));
         setAllTeams(prevTeams => {
             const newTeams = prevTeams.map(team => team.filter(p => p.id !== playerToAssign.id));
-            if (playersPerTeam && playersPerTeam > 0 && newTeams[toTeamIndex].length >= playersPerTeam) {
-                return prevTeams;
-            }
             newTeams[toTeamIndex].push(playerToAssign);
             return newTeams;
         });
@@ -185,7 +148,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
 
     const finishSessionSetup = (finalTeams, availablePlayers) => {
         if (finalTeams.length < 2) {
-            alert("Não foi possível formar pelo menos 2 times completos.");
+            alert("NÃ£o foi possÃ­vel formar pelo menos 2 times completos.");
             return;
         }
         const initialStats = {};
@@ -201,17 +164,13 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
     const handleSingleMatchEnd = async (matchResult) => {
         setIsEditModeActive(false);
         if (!matchResult || !matchResult.teams) {
-            console.error("Resultado da partida inválido recebido:", matchResult);
+            console.error("Resultado da partida invÃ¡lido recebido:", matchResult);
             return;
         }
-        let savedMatch;
-        try {
-            savedMatch = await onMatchEnd(matchResult);
-        } catch (e) {
-            console.error('Falha ao salvar partida externamente:', e);
+        const savedMatch = await onMatchEnd(matchResult);
+        if(savedMatch) {
+            setMatchHistory(prev => [...prev, savedMatch]);
         }
-        const toStore = savedMatch || { ...matchResult, id: String(Date.now()), endedAt: new Date().toISOString() };
-        setMatchHistory(prev => [...prev, toStore]);
         setSessionPlayerStats(prevStats => {
             const newStats = JSON.parse(JSON.stringify(prevStats));
             for (const playerId in matchResult.playerStats) {
@@ -269,28 +228,18 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
             setAllTeams([winnerTeam, ...(nextChallenger ? [nextChallenger] : []), ...newQueue].filter(Boolean));
             setWinnerStreak({ teamId: winnerId, count: currentStreak });
         }
-        setStep('post_game');
+        setStep('pre_game');
     };
 
     const handleForceEndSession = () => {
         const sessionData = {
-            groupId,
             players: Array.from(selectedPlayerIds),
-            matches: matchHistory,
-            matchIds: matchHistory.map(m => m.id).filter(Boolean),
-            stats: sessionPlayerStats,
-            endedAt: new Date().toISOString(),
+            matchIds: matchHistory.map(match => match.id)
         };
-        try { onSessionEnd(sessionData); } catch (e) { console.error('Falha ao encerrar sessão:', e); }
+        onSessionEnd(sessionData);
         localStorage.removeItem(sessionStateKey);
         localStorage.removeItem(localStorageKey);
-        try { localStorage.removeItem(`liveMatchState-${groupId}`); } catch {}
         setStep('config');
-    };
-
-    const handleStartNextMatch = () => {
-        try { localStorage.removeItem(`liveMatchState-${groupId}`); } catch {}
-        setStep('in_game');
     };
     
     const handleMovePlayer = (playerToMove, fromTeamIndex, toTeamIndex) => {
@@ -342,7 +291,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
         let teamLabel = `Time ${teamLetter}`;
         return (
             <div className="bg-gray-800 p-4 rounded-lg w-full min-w-[280px]">
-                <h3 className="text-indigo-300 font-bold text-xl mb-3">{teamLabel}</h3>
+                <h3 className="text-yellow-400 font-bold text-xl mb-3">{teamLabel}</h3>
                 <ul className="space-y-2">
                     {team.filter(p => p).map(p => (
                         <li key={p.id} className="bg-gray-900 p-2 rounded flex justify-between items-center text-white">
@@ -360,8 +309,8 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                 </ul>
                 {isEditModeActive && teamIndex > 1 && (
                     <div className="flex justify-center gap-2 mt-3">
-                        <button onClick={() => handleSetPlayingTeam('A', teamIndex)} className="text-xs bg-gray-700 hover:bg-indigo-400 hover:text-black py-1 px-2 rounded">Definir como Time A</button>
-                        <button onClick={() => handleSetPlayingTeam('B', teamIndex)} className="text-xs bg-gray-700 hover:bg-indigo-400 hover:text-black py-1 px-2 rounded">Definir como Time B</button>
+                        <button onClick={() => handleSetPlayingTeam('A', teamIndex)} className="text-xs bg-gray-700 hover:bg-yellow-500 hover:text-black py-1 px-2 rounded">Definir como Time A</button>
+                        <button onClick={() => handleSetPlayingTeam('B', teamIndex)} className="text-xs bg-gray-700 hover:bg-yellow-500 hover:text-black py-1 px-2 rounded">Definir como Time B</button>
                     </div>
                 )}
             </div>
@@ -372,9 +321,6 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
         return <ActiveMatch 
             initialTeams={allTeams}
             onMatchEnd={handleSingleMatchEnd}
-            onTeamsUpdate={(updated) => setAllTeams(updated)}
-            groupId={groupId}
-            initialDurationSec={Math.max(1, Number(matchDurationMin) || 10) * 60}
         />
     }
 
@@ -384,17 +330,17 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
         const waitingTeams = allTeams.slice(2);
         return (
             <div className="text-center bg-gray-900/50 rounded-2xl p-4 sm:p-8">
-                <h2 className="text-2xl sm:text-3xl font-bold text-indigo-300 mb-2">
-                    {isEditModeActive ? 'Modo de Edição' : (step === 'post_game' ? 'Fim da Partida' : 'Próxima Partida')}
+                <h2 className="text-2xl sm:text-3xl font-bold text-yellow-400 mb-2">
+                    {isEditModeActive ? 'Modo de EdiÃ§Ã£o' : step === 'post_game' ? `Fim da Partida ${matchHistory.length}` : `Prontos para ComeÃ§ar!`}
                 </h2>
-                <p className="text-gray-400 mb-6">{isEditModeActive ? 'Organize os jogadores e os próximos times.' : 'Visualize os times ou inicie a Próxima partida.'}</p>
+                <p className="text-gray-400 mb-6">{isEditModeActive ? 'Organize os jogadores e os prÃ³ximos times.' : 'Visualize os times ou inicie a prÃ³xima partida.'}</p>
                 <div className="flex justify-center gap-4 mb-6">
-                    {!isEditModeActive ? (<button onClick={() => setIsEditModeActive(true)} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg flex items-center gap-2"><LucideEdit className="w-4 h-4"/>Editar Partida</button>) : (<button onClick={() => setIsEditModeActive(false)} className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-6 rounded-lg flex items-center gap-2"><LucideShieldCheck className="w-4 h-4"/>Salvar Alterações</button>)}
+                    {!isEditModeActive ? (<button onClick={() => setIsEditModeActive(true)} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg flex items-center gap-2"><LucideEdit className="w-4 h-4"/>Editar Partida</button>) : (<button onClick={() => setIsEditModeActive(false)} className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-6 rounded-lg flex items-center gap-2"><LucideShieldCheck className="w-4 h-4"/>Salvar AlteraÃ§Ãµes</button>)}
                 </div>
                 <div className="flex flex-col md:flex-row gap-4 mb-6 justify-center items-start">
                     {renderTeamCard(teamA, 0)}
                     <div className="flex items-center justify-center h-full text-2xl font-bold text-gray-500 p-4">VS</div>
-                    {teamB.length > 0 ? renderTeamCard(teamB, 1) : <div className="bg-gray-800 p-4 rounded-lg w-full min-w-[280px] flex items-center justify-center"><h3 className="text-indigo-300 font-bold text-xl">Sem desafiantes</h3></div>}
+                    {teamB.length > 0 ? renderTeamCard(teamB, 1) : <div className="bg-gray-800 p-4 rounded-lg w-full min-w-[280px] flex items-center justify-center"><h3 className="text-yellow-400 font-bold text-xl">Sem desafiantes</h3></div>}
                 </div>
                 {waitingTeams.length > 0 && (
                     <div className="mb-6">
@@ -403,7 +349,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                             {waitingTeams.map((team, index) => (
                                 <div key={index} className="flex flex-col gap-2 items-center">
                                     {renderTeamCard(team, index + 2)}
-                                    {isEditModeActive && ( // Alterado para isEditModeActive
+                                    {!isEditModeActive && (
                                         <div className="flex gap-2 mt-2">
                                             <button onClick={() => handleReorderQueue(index, 'up')} disabled={index === 0} className="bg-gray-700 p-2 rounded-full hover:bg-blue-600 disabled:opacity-50"><LucideUndo className="w-4 h-4 transform rotate-90"/></button>
                                             <button onClick={() => handleReorderQueue(index, 'down')} disabled={index === waitingTeams.length - 1} className="bg-gray-700 p-2 rounded-full hover:bg-blue-600 disabled:opacity-50"><LucideUndo className="w-4 h-4 transform -rotate-90"/></button>
@@ -414,8 +360,8 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                         </div>
                     </div>
                 )}
-                <div className="flex flex-col sm:flex-row justify-center gap-4 mt-8 border-t border-indigo-800 pt-6">
-                    <button onClick={handleStartNextMatch} disabled={!teamB || teamB.length === 0} className="bg-indigo-400 hover:bg-indigo-300 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-600 disabled:cursor-not-allowed">Começar Próxima Partida</button>
+                <div className="flex flex-col sm:flex-row justify-center gap-4 mt-8 border-t border-gray-700 pt-6">
+                    <button onClick={() => setStep('in_game')} disabled={!teamB || teamB.length === 0} className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-600 disabled:cursor-not-allowed">ComeÃ§ar PrÃ³xima Partida</button>
                     <button onClick={handleForceEndSession} className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg text-lg">Encerrar Pelada</button>
                 </div>
             </div>
@@ -424,11 +370,11 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
 
     if (step === 'manual_setup') {
         return (
-            <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-6 border border-indigo-800">
-                <h2 className="text-2xl font-bold text-indigo-300 mb-4">Montagem Manual dos Times</h2>
+            <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-6 border border-gray-700">
+                <h2 className="text-2xl font-bold text-yellow-400 mb-4">Montagem Manual dos Times</h2>
                 <div className="flex flex-col md:flex-row gap-6">
-                    <div className="w-full md:w-1/3 border border-indigo-800 rounded-lg p-4 bg-gray-800/20">
-                        <h3 className="font-semibold text-white mb-3">Jogadores Disponíveis ({availablePlayersForSetup.length})</h3>
+                    <div className="w-full md:w-1/3 border border-gray-700 rounded-lg p-4 bg-gray-800/20">
+                        <h3 className="font-semibold text-white mb-3">Jogadores DisponÃ­veis ({availablePlayersForSetup.length})</h3>
                         <div className="space-y-2 max-h-96 overflow-y-auto">
                             {availablePlayersForSetup.map(p => (
                                 <div key={p.id} className="text-white p-2 bg-gray-800 rounded">{p.name}</div>
@@ -437,8 +383,8 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                     </div>
                     <div className="w-full md:w-2/3 space-y-4">
                         {allTeams.map((team, teamIndex) => (
-                            <div key={teamIndex} className="border border-indigo-800 rounded-lg p-4 min-h-[150px]">
-                                <h3 className="font-semibold text-indigo-300 mb-3">Time {String.fromCharCode(65 + teamIndex)}</h3>
+                            <div key={teamIndex} className="border border-gray-700 rounded-lg p-4 min-h-[150px]">
+                                <h3 className="font-semibold text-yellow-400 mb-3">Time {String.fromCharCode(65 + teamIndex)}</h3>
                                 <div className="space-y-2 mb-3">
                                     {team.map(p => (
                                         <button key={p.id} onClick={() => handleUnassignPlayer(p, teamIndex)} className="w-full text-left p-2 bg-blue-900/50 rounded text-white flex items-center gap-2 hover:bg-red-800" title="Remover do time">
@@ -446,7 +392,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                                         </button>
                                     ))}
                                 </div>
-                                <div className="border-t border-indigo-800 pt-3">
+                                <div className="border-t border-gray-700 pt-3">
                                     <p className="text-xs text-gray-400 mb-2">Adicionar a este time:</p>
                                     <div className="flex flex-wrap gap-2">
                                         {availablePlayersForSetup.map(p => (
@@ -468,41 +414,27 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
     }
     
     return (
-        <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-6 border border-indigo-800">
-            <h2 className="text-2xl font-bold text-indigo-300 mb-4">Configurar Noite de Futebol</h2>
-            {/* Par�metros extras da partida */}
-            <fieldset className="border border-indigo-800 p-4 rounded-lg mb-6">
-                <legend className="px-2 text-indigo-300 font-semibold">Parâmetros da Partida</legend>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <label className="block font-semibold mb-2 text-gray-200">Duração (minutos):</label>
-                        <input type="number" min="1" value={matchDurationMin} onChange={e => setMatchDurationMin(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white border border-gray-600" />
-                    </div>
-                    <div>
-                        <label className="block font-semibold mb-2 text-gray-200">Jogadores por time (0 = livre):</label>
-                        <input type="number" min="0" value={playersPerTeam} onChange={e => setPlayersPerTeam(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white border border-gray-600" />
-                    </div>
-                </div>
-            </fieldset>
-            <fieldset className="border border-indigo-800 p-4 rounded-lg mb-6">
-                <legend className="px-2 text-indigo-300 font-semibold">Modo de Montagem</legend>
+        <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-6 border border-gray-700">
+            <h2 className="text-2xl font-bold text-yellow-400 mb-4">Configurar Noite de Futebol</h2>
+            <fieldset className="border border-gray-700 p-4 rounded-lg mb-6">
+                <legend className="px-2 text-yellow-400 font-semibold">Modo de Montagem</legend>
                 <div className="flex gap-4">
-                    <button onClick={() => setSetupMode('auto')} className={`flex-1 p-4 rounded-lg flex items-center justify-center gap-2 transition-colors ${setupMode === 'auto' ? 'bg-indigo-400 text-black' : 'bg-gray-800 text-white hover:bg-gray-700'}`}> <LucideShuffle/> Sorteio Automático </button>
-                    <button onClick={() => setSetupMode('manual')} className={`flex-1 p-4 rounded-lg flex items-center justify-center gap-2 transition-colors ${setupMode === 'manual' ? 'bg-indigo-400 text-black' : 'bg-gray-800 text-white hover:bg-gray-700'}`}> <LucideUsers/> Montagem Manual </button>
+                    <button onClick={() => setSetupMode('auto')} className={`flex-1 p-4 rounded-lg flex items-center justify-center gap-2 transition-colors ${setupMode === 'auto' ? 'bg-yellow-500 text-black' : 'bg-gray-800 text-white hover:bg-gray-700'}`}> <LucideShuffle/> Sorteio AutomÃ¡tico </button>
+                    <button onClick={() => setSetupMode('manual')} className={`flex-1 p-4 rounded-lg flex items-center justify-center gap-2 transition-colors ${setupMode === 'manual' ? 'bg-yellow-500 text-black' : 'bg-gray-800 text-white hover:bg-gray-700'}`}> <LucideUsers/> Montagem Manual </button>
                 </div>
             </fieldset>
             {setupMode === 'auto' && (
-                <fieldset className="border border-indigo-800 p-4 rounded-lg mb-6">
-                    <legend className="px-2 text-indigo-300 font-semibold">Configuração do Sorteio</legend>
+                <fieldset className="border border-gray-700 p-4 rounded-lg mb-6">
+                    <legend className="px-2 text-yellow-400 font-semibold">ConfiguraÃ§Ã£o do Sorteio</legend>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
-                            <label className="block font-semibold mb-2 text-white">Nº de times para sortear:</label>
+                            <label className="block font-semibold mb-2 text-white">NÂº de times para sortear:</label>
                             <input type="number" min="2" value={numberOfTeams} onChange={e => setNumberOfTeams(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white" />
                         </div>
                         <div>
                             <label className="block font-semibold mb-2 text-white">Sorteio baseado em:</label>
                             <select value={drawType} onChange={(e) => setDrawType(e.target.value)} className="w-full bg-gray-800 p-2 rounded text-white">
-                               <option value="self">Overall Próprio</option>
+                               <option value="self">Overall PrÃ³prio</option>
                                <option value="peer">Overall da Galera</option>
                                <option value="admin">Overall do Admin</option>
                             </select>
@@ -511,21 +443,21 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                 </fieldset>
             )}
             {setupMode === 'manual' && (
-                <fieldset className="border border-indigo-800 p-4 rounded-lg mb-6">
-                    <legend className="px-2 text-indigo-300 font-semibold">Configuração Manual</legend>
+                <fieldset className="border border-gray-700 p-4 rounded-lg mb-6">
+                    <legend className="px-2 text-yellow-400 font-semibold">ConfiguraÃ§Ã£o Manual</legend>
                     <div>
-                        <label className="block font-semibold mb-2 text-white">Nº de times para montar:</label>
+                        <label className="block font-semibold mb-2 text-white">NÂº de times a montar:</label>
                         <input type="number" min="2" value={numberOfTeams} onChange={e => setNumberOfTeams(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white" />
                     </div>
                 </fieldset>
             )}
-            <fieldset className="border border-indigo-800 p-4 rounded-lg mb-6">
-                <legend className="px-2 text-indigo-300 font-semibold">Regras da Partida</legend>
+            <fieldset className="border border-gray-700 p-4 rounded-lg mb-6">
+                <legend className="px-2 text-yellow-400 font-semibold">Regras da Partida</legend>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                        <label className="block font-semibold mb-2 text-gray-200">Limite de vitórias seguidas:</label>
+                        <label className="block font-semibold mb-2 text-gray-200">Limite de vitÃ³rias seguidas:</label>
                         <input type="number" min="0" value={streakLimit} onChange={e => setStreakLimit(Number(e.target.value))} className="w-full bg-gray-800 p-2 rounded text-white border border-gray-600" title="Deixe 0 para desativar o limite." />
-                        <p className="text-xs text-gray-500 mt-1">O time sai após X vitórias. (0 = desativado)</p>
+                        <p className="text-xs text-gray-500 mt-1">O time sai apÃ³s X vitÃ³rias. (0 = desativado)</p>
                     </div>
                     <div>
                         <label className="block font-semibold mb-2 text-gray-200">Regra de empate:</label>
@@ -537,12 +469,12 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
                     </div>
                 </div>
             </fieldset>
-            <h3 className="text-xl font-bold text-indigo-300 mb-4">Selecione os Jogadores Presentes</h3>
+            <h3 className="text-xl font-bold text-yellow-400 mb-4">Selecione os Jogadores Presentes</h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-6">
-                {players.map(p => (<button key={p.id} onClick={() => handlePlayerToggle(p.id)} className={`p-3 rounded-lg text-center transition-all duration-200 font-semibold ${selectedPlayerIds.has(p.id) ? 'bg-indigo-400 text-black scale-105 shadow-lg shadow-yellow-500/20' : 'bg-gray-800 text-white hover:bg-gray-700'}`}>{p.name}</button>))}
+                {players.map(p => (<button key={p.id} onClick={() => handlePlayerToggle(p.id)} className={`p-3 rounded-lg text-center transition-all duration-200 font-semibold ${selectedPlayerIds.has(p.id) ? 'bg-yellow-500 text-black scale-105 shadow-lg shadow-yellow-500/20' : 'bg-gray-800 text-white hover:bg-gray-700'}`}>{p.name}</button>))}
             </div>
             <div className="text-center">
-                <button onClick={handleProceedToSetup} disabled={selectedPlayerIds.size < 2} className="bg-indigo-400 hover:bg-indigo-300 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-600 disabled:cursor-not-allowed">
+                <button onClick={handleProceedToSetup} disabled={selectedPlayerIds.size < 2} className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3 px-8 rounded-lg text-lg disabled:bg-gray-600 disabled:cursor-not-allowed">
                     Continuar
                 </button>
             </div>

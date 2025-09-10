@@ -8,7 +8,7 @@ const SessionHistoryList = ({ sessions, onSelectSession, onDeleteSession, isAdmi
 
     return (
         <div className="space-y-4">
-            <h2 className="text-3xl font-bold text-yellow-400 mb-6 text-center">Histórico de Sessões</h2>
+            <h2 className="text-3xl font-bold text-indigo-300 mb-6 text-center">Histórico de Sessões</h2>
             {sessions.map(session => (
                 <div key={session.id} className="flex items-center gap-2">
                     <button 
