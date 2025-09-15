@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, useNavigate } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, onSnapshot, doc, getDoc, query, orderBy, updateDoc, deleteDoc, runTransaction, addDoc, arrayRemove, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, doc, getDoc, query, orderBy, updateDoc, deleteDoc, runTransaction, addDoc, arrayRemove, writeBatch, serverTimestamp, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 // Importações de Serviços e Componentes
@@ -165,6 +165,7 @@ function App() {
         navigateToView('dashboard');
     };
 
+    // eslint-disable-next-line no-unused-vars
    const handleSavePlayer = async (playerData, imageFile = null) => {
         // Cenário 1: Editando um jogador
         if (playerData.id) {
@@ -174,8 +175,8 @@ function App() {
                 try {
                     let finalPlayerData = { ...playerData };
                     if (imageFile) {
-                        const storageRef = ref(storage, `profile_pictures/${user.uid}`);
-                        const snapshot = await uploadBytes(storageRef, imageFile);
+                        const storageRef = ref(storage, `user_uploads/${user.uid}/profile_pictures/${user.uid}`);
+                        const snapshot = await uploadBytes(storageRef, imageFile, { contentType: imageFile.type || 'image/jpeg' });
                         finalPlayerData.photoURL = await getDownloadURL(snapshot.ref);
                     }
                     const { id, ...dataToSave } = finalPlayerData;
@@ -188,8 +189,8 @@ function App() {
                 try {
                     let finalPlayerData = { ...playerData };
                     if (imageFile) {
-                        const storageRef = ref(storage, `group_players/${activeGroupId}/${playerData.id}`);
-                        const snapshot = await uploadBytes(storageRef, imageFile);
+                        const storageRef = ref(storage, `user_uploads/${user.uid}/group_players/${activeGroupId}/${playerData.id}`);
+                        const snapshot = await uploadBytes(storageRef, imageFile, { contentType: imageFile.type || 'image/jpeg' });
                         finalPlayerData.photoURL = await getDownloadURL(snapshot.ref);
                     }
                     const { id, ...dataToSave } = finalPlayerData;
@@ -205,6 +206,102 @@ function App() {
             } else if (!playerProfile && user) {
                 // ... (lógica para criar perfil global, sem alterações)
             }
+        }
+    };
+
+    const handleSavePlayerFixed = async (playerData, imageFile = null) => {
+        console.log("handleSavePlayerFixed called", { playerData, imageFile });
+        console.log("Current state:", { playerProfile, user, activeGroupId, isAdminOfActiveGroup });
+
+        // Edição de jogador existente
+        if (playerData.id) {
+            console.log("Editing existing player");
+            if (playerData.id === user.uid) {
+                console.log("Editing own global profile");
+                try {
+                    let finalPlayerData = { ...playerData };
+                    if (imageFile) {
+                        console.log("Uploading profile picture");
+                        const storageRef = ref(storage, `user_uploads/${user.uid}/profile_pictures/${user.uid}`);
+                        const snapshot = await uploadBytes(storageRef, imageFile, { contentType: imageFile.type || 'image/jpeg' });
+                        finalPlayerData.photoURL = await getDownloadURL(snapshot.ref);
+                        console.log("Profile picture uploaded:", finalPlayerData.photoURL);
+                    }
+                    const { id, ...dataToSave } = finalPlayerData;
+                    await updateDoc(doc(db, 'players', id), dataToSave);
+                    console.log("Global profile updated successfully");
+                } catch (e) {
+                    console.error('Erro ao atualizar perfil global:', e);
+                } finally {
+                    setIsPlayerModalOpen(false);
+                }
+            } else {
+                console.log("Editing group player");
+                if (!activeGroupId || !isAdminOfActiveGroup) {
+                    console.log("Not admin or no active group, returning");
+                    return;
+                }
+                try {
+                    let finalPlayerData = { ...playerData };
+                    if (imageFile) {
+                        console.log("Uploading group player picture");
+                        const storageRef = ref(storage, `user_uploads/${user.uid}/group_players/${activeGroupId}/${playerData.id}`);
+                        const snapshot = await uploadBytes(storageRef, imageFile, { contentType: imageFile.type || 'image/jpeg' });
+                        finalPlayerData.photoURL = await getDownloadURL(snapshot.ref);
+                        console.log("Group player picture uploaded:", finalPlayerData.photoURL);
+                    }
+                    const { id, ...dataToSave } = finalPlayerData;
+                    await updateDoc(doc(db, `groups/${activeGroupId}/players`, id), dataToSave);
+                    console.log("Group player updated successfully");
+                } catch (e) {
+                    console.error('Erro ao atualizar jogador de grupo:', e);
+                } finally {
+                    setIsPlayerModalOpen(false);
+                }
+            }
+            return;
+        }
+
+        // Criação de novo jogador
+        console.log("Creating new player");
+        try {
+            if (playerProfile && isAdminOfActiveGroup && activeGroupId) {
+                console.log("Admin creating new group player");
+                // Admin adicionando jogador ao grupo atual
+                const playersColRef = collection(db, `groups/${activeGroupId}/players`);
+                const newDocRef = doc(playersColRef);
+                let photoURL = null;
+                if (imageFile) {
+                    console.log("Uploading group player picture");
+                    const storageRef = ref(storage, `user_uploads/${user.uid}/group_players/${activeGroupId}/${newDocRef.id}`);
+                    const snapshot = await uploadBytes(storageRef, imageFile, { contentType: imageFile.type || 'image/jpeg' });
+                    photoURL = await getDownloadURL(snapshot.ref);
+                    console.log("Group player picture uploaded:", photoURL);
+                }
+                const dataToSave = { ...playerData, photoURL: photoURL || null, createdBy: user.uid, createdAt: serverTimestamp() };
+                await setDoc(newDocRef, dataToSave);
+                console.log("Group player created successfully");
+            } else if (!playerProfile && user) {
+                console.log("User creating their own global profile");
+                // Usuário criando o próprio perfil global
+                let finalPlayerData = { ...playerData };
+                if (imageFile) {
+                    console.log("Uploading profile picture");
+                    const storageRef = ref(storage, `user_uploads/${user.uid}/profile_pictures/${user.uid}`);
+                    const snapshot = await uploadBytes(storageRef, imageFile, { contentType: imageFile.type || 'image/jpeg' });
+                    finalPlayerData.photoURL = await getDownloadURL(snapshot.ref);
+                    console.log("Profile picture uploaded:", finalPlayerData.photoURL);
+                }
+                await setDoc(doc(db, 'players', user.uid), { ...finalPlayerData, createdAt: serverTimestamp() });
+                console.log("Global profile created successfully");
+            } else {
+                console.log("No condition met for creating player");
+            }
+        } catch (e) {
+            console.error('Erro ao criar jogador:', e);
+            alert('Falha ao salvar o jogador. Verifique sua conexão e tente novamente.');
+        } finally {
+            setIsPlayerModalOpen(false);
         }
     };
 
@@ -313,7 +410,7 @@ function App() {
     const renderContent = () => {
         if (isLoading) return <div className="text-center p-10 text-white">A carregar...</div>;
         if (!user) return <AuthScreen />;
-        if (!playerProfile) return <CreatePlayerProfile user={user} onSave={handleSavePlayer} />;
+        if (!playerProfile) return <CreatePlayerProfile user={user} onSave={handleSavePlayerFixed} />;
         
         const showNavBar = currentView !== 'dashboard' && currentView !== 'groupGate';
         let mainComponent;
@@ -391,7 +488,7 @@ function App() {
             </header>
             <div className="p-4 sm:p-6 lg:p-8">
                 {renderContent()}
-                <PlayerModal isOpen={isPlayerModalOpen} onClose={() => setIsPlayerModalOpen(false)} onSave={handleSavePlayer} player={editingPlayer} isAdmin={isAdminOfActiveGroup} />
+                <PlayerModal isOpen={isPlayerModalOpen} onClose={() => setIsPlayerModalOpen(false)} onSave={handleSavePlayerFixed} player={editingPlayer} isAdmin={isAdminOfActiveGroup} />
                 <ConfirmationModal isOpen={!!playerToDelete} title="Confirmar Exclusão" message={`Tem certeza que deseja apagar o jogador ${playerToDelete?.name}?`} onConfirm={confirmDeletePlayer} onClose={() => setPlayerToDelete(null)} />
                 <ConfirmationModal isOpen={!!matchToDelete} title="Confirmar Exclusão" message="Tem certeza que deseja apagar esta partida?" onConfirm={confirmDeleteMatch} onClose={() => setMatchToDelete(null)} />
                 <ConfirmationModal isOpen={!!sessionToDelete} title="Confirmar Exclusão" message="Tem certeza que deseja apagar esta sessão?" onConfirm={confirmDeleteSession} onClose={() => setSessionToDelete(null)} />
