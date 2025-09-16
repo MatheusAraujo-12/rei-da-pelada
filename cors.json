@@ -1,0 +1,8 @@
+[
+  {
+    "origin": ["reidapelada.netlify.app", "http://localhost:3000", "http://localhost:3001"],
+    "method": ["POST"],
+    "maxAgeSeconds": 3600,
+    "responseHeader": ["Content-Type", "Authorization", "x-goog-meta-*"]
+  }
+]

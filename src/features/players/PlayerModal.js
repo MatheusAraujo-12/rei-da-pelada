@@ -65,7 +65,7 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
         }
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!name || !age) {
             alert("Por favor, preencha pelo menos o nome e a idade.");
             return;
@@ -83,8 +83,11 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
         if (player && player.id) {
             playerData.id = player.id;
         }
-        onSave(playerData, imageFile);
-        onClose();
+        try {
+            await onSave(playerData, imageFile);
+        } finally {
+            onClose();
+        }
     };
 
     const handleAdminSkillChange = (skill, value) => {

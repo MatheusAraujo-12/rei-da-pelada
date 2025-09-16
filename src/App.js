@@ -229,6 +229,7 @@ function App() {
                     }
                     const { id, ...dataToSave } = finalPlayerData;
                     await updateDoc(doc(db, 'players', id), dataToSave);
+                    try { setPlayerProfile(prev => ({ ...(prev || {}), ...dataToSave, id })); } catch {}
                     console.log("Global profile updated successfully");
                 } catch (e) {
                     console.error('Erro ao atualizar perfil global:', e);
@@ -293,6 +294,8 @@ function App() {
                     console.log("Profile picture uploaded:", finalPlayerData.photoURL);
                 }
                 await setDoc(doc(db, 'players', user.uid), { ...finalPlayerData, createdAt: serverTimestamp() });
+                // Atualiza imediatamente o estado local para concluir o cadastro sem esperar o snapshot
+                try { setPlayerProfile({ id: user.uid, ...finalPlayerData }); } catch {}
                 console.log("Global profile created successfully");
             } else {
                 console.log("No condition met for creating player");
@@ -391,6 +394,231 @@ function App() {
         } catch (error) { console.error("ERRO DETALHADO AO SALVAR:", error); alert(`ERRO AO SALVAR NO FIRESTORE: ${error.message}`); }
     };
     
+    // Botão de impressão: relatório completo das partidas do dia
+    /* eslint-disable no-unused-vars, no-useless-escape */
+    const handlePrintTodayReport = async () => {
+        try {
+            const today = new Date();
+            const isSameDay = (d) => d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
+
+            const sessionsToday = savedSessions.filter((s) => {
+                if (!s?.date) return false;
+                const jsDate = s.date?.seconds ? new Date(s.date.seconds * 1000) : new Date(s.date);
+                return isSameDay(jsDate);
+            });
+
+            if (sessionsToday.length === 0) { alert('Nenhuma sessão encontrada para hoje.'); return; }
+
+            const sessionsWithMatches = [];
+            for (const s of sessionsToday) {
+                let matchesDetails = [];
+                if (Array.isArray(s.matches) && s.matches.length > 0) {
+                    matchesDetails = s.matches;
+                } else if (Array.isArray(s.matchIds) && s.matchIds.length > 0 && activeGroupId) {
+                    const docs = await Promise.all(
+                        s.matchIds.map((id) => (id ? getDoc(doc(db, `groups/${activeGroupId}/matches`, id)) : null))
+                    );
+                    matchesDetails = docs
+                        .filter((d) => d && d.exists())
+                        .map((d) => ({ id: d.id, ...d.data() }));
+                }
+                sessionsWithMatches.push({ session: s, matches: matchesDetails });
+            }
+
+            const formatDate = (ts) => {
+                const d = ts?.seconds ? new Date(ts.seconds * 1000) : new Date(ts);
+                return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+            };
+
+            const htmlParts = [];
+            htmlParts.push(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8" />
+                <title>Relatório das Partidas do Dia</title>
+                <style>
+                    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; padding: 24px; }
+                    h1 { margin: 0 0 12px; }
+                    h2 { margin: 24px 0 8px; }
+                    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
+                    th, td { border: 1px solid #ddd; padding: 8px; font-size: 12px; }
+                    th { background: #f4f4f4; text-align: left; }
+                    .muted { color: #666; font-size: 12px; }
+                    .section { page-break-inside: avoid; }
+                    @media print { button { display: none; } }
+                </style></head><body>`);
+
+            htmlParts.push(`<h1>Relatório das partidas do dia ${today.toLocaleDateString('pt-BR')}</h1>`);
+
+            for (const { session: s, matches } of sessionsWithMatches) {
+                htmlParts.push(`<div class=\"section\">`);
+                htmlParts.push(`<h2>Sessão de ${formatDate(s.date)}</h2>`);
+                htmlParts.push(`<div class=\"muted\">Partidas: ${matches.length}</div>`);
+
+                if (matches.length === 0) {
+                    htmlParts.push(`<p class=\"muted\">Sem partidas registradas nesta sessão.</p>`);
+                } else {
+                    htmlParts.push(`<table><thead><tr>
+                        <th>#</th><th>Time A</th><th>Placar</th><th>Time B</th>
+                    </tr></thead><tbody>`);
+                    matches.forEach((m, idx) => {
+                        let scoreA = 0, scoreB = 0;
+                        if (m?.playerStats && m?.teams) {
+                            (m.teams.teamA || []).forEach((p) => { scoreA += (m.playerStats[p.id]?.goals || 0); });
+                            (m.teams.teamB || []).forEach((p) => { scoreB += (m.playerStats[p.id]?.goals || 0); });
+                        }
+                        const teamAList = (m.teams?.teamA || []).map((p) => p?.name || '—').join(', ');
+                        const teamBList = (m.teams?.teamB || []).map((p) => p?.name || '—').join(', ');
+                        htmlParts.push(`<tr>
+                            <td>${idx + 1}</td>
+                            <td>${teamAList}</td>
+                            <td style=\"text-align:center; font-weight:600;\">${scoreA} x ${scoreB}</td>
+                            <td>${teamBList}</td>
+                        </tr>`);
+                    });
+                    htmlParts.push(`</tbody></table>`);
+                }
+                htmlParts.push(`</div>`);
+            }
+
+            htmlParts.push(`<div style=\"margin-top:24px;\"><button onclick=\"window.print()\">Imprimir</button></div>`);
+            htmlParts.push(`</body></html>`);
+
+            const printWin = window.open('', '_blank');
+            if (!printWin) { alert('Bloqueador de pop-up ativo. Permita pop-ups para imprimir.'); return; }
+            printWin.document.open();
+            printWin.document.write(htmlParts.join(''));
+            printWin.document.close();
+            printWin.focus();
+            setTimeout(() => { try { printWin.print(); } catch {} }, 300);
+        } catch (e) {
+            console.error('Falha ao gerar relatório do dia:', e);
+            alert('Não foi possível gerar o relatório das partidas do dia.');
+        }
+    };
+
+    // Relatório do dia (somente resumo agregado, sem listar cada partida)
+    const handlePrintTodaySummary = async () => {
+        try {
+            const today = new Date();
+            const isSameDay = (d) => d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
+
+            const sessionsToday = savedSessions.filter((s) => {
+                if (!s?.date) return false;
+                const jsDate = s.date?.seconds ? new Date(s.date.seconds * 1000) : new Date(s.date);
+                return isSameDay(jsDate);
+            });
+
+            if (sessionsToday.length === 0) { alert('Nenhuma sessão encontrada para hoje.'); return; }
+
+            // Carrega detalhes das partidas por sessão
+            const sessionsWithMatches = [];
+            for (const s of sessionsToday) {
+                let matchesDetails = [];
+                if (Array.isArray(s.matches) && s.matches.length > 0) {
+                    matchesDetails = s.matches;
+                } else if (Array.isArray(s.matchIds) && s.matchIds.length > 0 && activeGroupId) {
+                    const docs = await Promise.all(
+                        s.matchIds.map((id) => (id ? getDoc(doc(db, `groups/${activeGroupId}/matches`, id)) : null))
+                    );
+                    matchesDetails = docs
+                        .filter((d) => d && d.exists())
+                        .map((d) => ({ id: d.id, ...d.data() }));
+                }
+                sessionsWithMatches.push({ session: s, matches: matchesDetails });
+            }
+
+            // Agrega estatísticas do dia
+            const stats = {};
+            const ensurePlayer = (id, name) => {
+                if (!stats[id]) stats[id] = { name: name || 'Desconhecido', wins: 0, draws: 0, losses: 0, goals: 0, assists: 0, tackles: 0 };
+                if (name && (!stats[id].name || stats[id].name === 'Desconhecido')) stats[id].name = name;
+            };
+            for (const { matches } of sessionsWithMatches) {
+                for (const m of matches) {
+                    const teamA = m?.teams?.teamA || [];
+                    const teamB = m?.teams?.teamB || [];
+                    const teamAIds = teamA.map(p => p?.id);
+                    const teamBIds = teamB.map(p => p?.id);
+                    let scoreA = 0, scoreB = 0;
+                    if (m?.playerStats) {
+                        for (const pid of Object.keys(m.playerStats)) {
+                            const st = m.playerStats[pid] || {};
+                            if (typeof st.goals === 'number') {
+                                if (teamAIds.includes(pid)) scoreA += st.goals; else if (teamBIds.includes(pid)) scoreB += st.goals;
+                            }
+                        }
+                    }
+                    if (scoreA > scoreB) {
+                        teamA.forEach(p => { ensurePlayer(p.id, p.name); stats[p.id].wins++; });
+                        teamB.forEach(p => { ensurePlayer(p.id, p.name); stats[p.id].losses++; });
+                    } else if (scoreB > scoreA) {
+                        teamB.forEach(p => { ensurePlayer(p.id, p.name); stats[p.id].wins++; });
+                        teamA.forEach(p => { ensurePlayer(p.id, p.name); stats[p.id].losses++; });
+                    } else {
+                        teamA.forEach(p => { ensurePlayer(p.id, p.name); stats[p.id].draws++; });
+                        teamB.forEach(p => { ensurePlayer(p.id, p.name); stats[p.id].draws++; });
+                    }
+                    if (m?.playerStats) {
+                        for (const pid of Object.keys(m.playerStats)) {
+                            const st = m.playerStats[pid] || {};
+                            const pInfo = [...teamA, ...teamB].find(pp => pp?.id === pid);
+                            ensurePlayer(pid, pInfo?.name);
+                            stats[pid].goals += Number(st.goals || 0);
+                            stats[pid].assists += Number(st.assists || 0);
+                            stats[pid].tackles += Number(st.tackles || 0);
+                        }
+                    }
+                }
+            }
+            const ranking = Object.values(stats).sort((a,b) => (b.wins - a.wins) || (b.goals - a.goals) || (b.assists - a.assists));
+
+            // HTML simples para imprimir
+            const htmlParts = [];
+            htmlParts.push(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8" />
+                <title>Relatório do Dia</title>
+                <style>
+                    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; padding: 24px; }
+                    h1 { margin: 0 0 16px; }
+                    table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
+                    th, td { border: 1px solid #ddd; padding: 8px; font-size: 12px; }
+                    th { background: #f4f4f4; text-align: left; }
+                    @media print { button { display: none; } }
+                </style></head><body>`);
+            htmlParts.push(`<h1>Resumo do dia ${today.toLocaleDateString('pt-BR')}</h1>`);
+            if (ranking.length === 0) {
+                htmlParts.push('<p>Sem partidas registradas hoje.</p>');
+            } else {
+                htmlParts.push(`<table><thead><tr>
+                    <th>Jogador</th><th>V</th><th>E</th><th>D</th><th>Gols</th><th>Assist.</th><th>Desarmes</th>
+                </tr></thead><tbody>`);
+                ranking.forEach(p => {
+                    htmlParts.push(`<tr>
+                        <td>${p.name}</td>
+                        <td style="text-align:center;">${p.wins}</td>
+                        <td style="text-align:center;">${p.draws}</td>
+                        <td style="text-align:center;">${p.losses}</td>
+                        <td style="text-align:center;">${p.goals}</td>
+                        <td style="text-align:center;">${p.assists}</td>
+                        <td style="text-align:center;">${p.tackles}</td>
+                    </tr>`);
+                });
+                htmlParts.push(`</tbody></table>`);
+            }
+            htmlParts.push(`<div style="margin-top:24px;"><button onclick="window.print()">Imprimir</button></div>`);
+            htmlParts.push(`</body></html>`);
+
+            const printWin = window.open('', '_blank');
+            if (!printWin) { alert('Bloqueador de pop-up ativo. Permita pop-ups para imprimir.'); return; }
+            printWin.document.open();
+            printWin.document.write(htmlParts.join(''));
+            printWin.document.close();
+            printWin.focus();
+            setTimeout(() => { try { printWin.print(); } catch {} }, 300);
+        } catch (e) {
+            console.error('Falha ao gerar relatório do dia:', e);
+            alert('Não foi possível gerar o relatório do dia.');
+        }
+    };
+    /* eslint-enable */
+
     const openEditModal = (p) => { setEditingPlayer(p); setIsPlayerModalOpen(true); };
     const openAddModal = () => { setEditingPlayer(null); setIsPlayerModalOpen(true); };
     const handleLogout = () => signOut(auth);
@@ -430,7 +658,16 @@ function App() {
                 mainComponent = isAdminOfActiveGroup ? <MatchFlow players={players} groupId={activeGroupId} onMatchEnd={handleMatchEnd} onSessionEnd={handleSessionEnd} /> : <div>Apenas administradores podem iniciar uma partida.</div>;
                 break;
             case 'sessions':
-                mainComponent = viewingSession ? <SessionReportDetail session={{...viewingSession, groupId: activeGroupId}} onBack={() => setViewingSession(null)} /> : <SessionHistoryList sessions={savedSessions} onSelectSession={setViewingSession} onDeleteSession={setSessionToDelete} isAdmin={isAdminOfActiveGroup} />;
+                mainComponent = viewingSession ? (
+                    <SessionReportDetail session={{...viewingSession, groupId: activeGroupId}} onBack={() => setViewingSession(null)} />
+                ) : (
+                    <SessionHistoryList
+                        sessions={savedSessions}
+                        onSelectSession={setViewingSession}
+                        onDeleteSession={setSessionToDelete}
+                        isAdmin={isAdminOfActiveGroup}
+                    />
+                );
                 break;
             case 'history':
                 mainComponent = isAdminOfActiveGroup ? <MatchHistory matches={matches} onEditMatch={setEditingMatch} onDeleteMatch={setMatchToDelete}/> : null;
@@ -499,4 +736,3 @@ function App() {
         </div>
     );
 }
-
