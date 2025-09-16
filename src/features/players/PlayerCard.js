@@ -57,7 +57,11 @@ const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => 
         <div className="relative h-48 flex items-center justify-center">
           <div className="relative w-28 h-28 rounded-full overflow-hidden ring-4 ring-indigo-400/70 ring-offset-4 ring-offset-[#0b1220] shadow-xl">
             {player.photoURL ? (
-              <img src={player.photoURL} alt={player.name} className="w-full h-full object-cover" />
+              <img
+                src={player.photoURL + (player.photoURL.includes('?') ? '&' : '?') + 'v=' + (player.updatedAt?.seconds || player.updatedAt || 0)}
+                alt={player.name}
+                className="w-full h-full object-cover"
+              />
             ) : (
               <div className="w-full h-full bg-[#0f1a2e] flex items-center justify-center">
                 <LucideUser className="w-14 h-14 text-indigo-300/70" />

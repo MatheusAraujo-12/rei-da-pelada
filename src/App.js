@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, useNavigate } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, onSnapshot, doc, getDoc, query, orderBy, updateDoc, deleteDoc, runTransaction, addDoc, arrayRemove, writeBatch, serverTimestamp, setDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, getDoc, query, orderBy, updateDoc, deleteDoc, runTransaction, addDoc, arrayRemove, arrayUnion, writeBatch, serverTimestamp, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 // Importações de Serviços e Componentes
@@ -143,7 +143,13 @@ function App() {
             return;
         }
         const groupDocRef = doc(db, 'groups', activeGroupId);
-        const unsubGroup = onSnapshot(groupDocRef, (docSnap) => setIsAdminOfActiveGroup(docSnap.exists() && docSnap.data().createdBy === user.uid));
+        const unsubGroup = onSnapshot(groupDocRef, (docSnap) => {
+            if (!docSnap.exists()) { setIsAdminOfActiveGroup(false); return; }
+            const g = docSnap.data();
+            const isOwner = g.createdBy === user.uid;
+            const isListed = Array.isArray(g.admins) && g.admins.includes(user.uid);
+            setIsAdminOfActiveGroup(isOwner || isListed);
+        });
         
         const playersColRef = collection(db, `groups/${activeGroupId}/players`);
         const unsubPlayers = onSnapshot(query(playersColRef), s => setPlayers(s.docs.map(d => ({ id: d.id, ...d.data() }))));
@@ -676,7 +682,23 @@ function App() {
                 mainComponent = <HallOfFame players={players} matches={matches} />;
                 break;
             case 'group':
-                mainComponent = <GroupDashboard groupId={activeGroupId} />;
+                mainComponent = (
+                    <GroupDashboard
+                        user={user}
+                        groupId={activeGroupId}
+                        isAdmin={isAdminOfActiveGroup}
+                        onSetAdminStatus={async (targetUserId, makeAdmin) => {
+                            try {
+                                const groupDocRef = doc(db, 'groups', activeGroupId);
+                                const snap = await getDoc(groupDocRef);
+                                if (!snap.exists()) return;
+                                const data = snap.data();
+                                if (data.createdBy !== user.uid) { alert('Apenas o dono do grupo pode gerenciar administradores.'); return; }
+                                await updateDoc(groupDocRef, makeAdmin ? { admins: arrayUnion(targetUserId) } : { admins: arrayRemove(targetUserId) });
+                            } catch (e) { console.error('Erro ao atualizar admins:', e); alert('Falha ao atualizar administradores.'); }
+                        }}
+                    />
+                );
                 break;
             case 'dashboard':
             default:
