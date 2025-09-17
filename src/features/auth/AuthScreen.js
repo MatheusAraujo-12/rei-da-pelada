@@ -49,7 +49,7 @@ const AuthScreen = () => {
     return (
         <div className="flex items-center justify-center min-h-screen">
             <div className="w-full max-w-md bg-gray-900/50 rounded-2xl p-8 border border-gray-700 text-white">
-                <h2 className="text-3xl font-bold text-yellow-400 mb-6 text-center">
+                <h2 className="text-3xl font-bold text-indigo-300 mb-6 text-center">
                     {isLogin ? 'Entrar' : 'Criar Conta'}
                 </h2>
                 
@@ -61,14 +61,14 @@ const AuthScreen = () => {
                         placeholder="E-mail"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        className="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-yellow-500 focus:outline-none"
+                        className="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                     <input
                         type="password"
                         placeholder="Senha"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-yellow-500 focus:outline-none"
+                        className="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                 </div>
                 
@@ -76,7 +76,7 @@ const AuthScreen = () => {
                     <button 
                         onClick={handleAuthAction} 
                         disabled={loading}
-                        className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3 px-6 rounded-lg disabled:opacity-50"
+                        className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-6 rounded-lg disabled:opacity-50"
                     >
                         {loading ? 'A processar...' : (isLogin ? 'Entrar' : 'Registar')}
                     </button>
@@ -88,7 +88,7 @@ const AuthScreen = () => {
                             setIsLogin(!isLogin);
                             setError('');
                         }}
-                        className="text-gray-400 hover:text-yellow-400"
+                        className="text-gray-400 hover:text-indigo-400"
                     >
                         {isLogin ? 'Ainda não tem uma conta? Registe-se' : 'Já tem uma conta? Entre'}
                     </button>

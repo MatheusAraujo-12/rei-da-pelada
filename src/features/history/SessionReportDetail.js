@@ -161,6 +161,100 @@ const SessionReportDetail = ({ session, onBack }) => {
       alert('Falha ao salvar seu voto.');
     }
   };
+  
+  const shareReport = async () => {
+    try {
+      const dataUrl = await generateReportImage({ returnDataUrl: true });
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      const file = new File([blob], 'relatorio_sessao.png', { type: 'image/png' });
+      const shareData = { title: 'Relatório da Sessão', text: `Relatório da sessão ${sessionDate || ''}`, files: [file] };
+      if (navigator.canShare && navigator.canShare(shareData)) {
+        await navigator.share(shareData);
+        return;
+      }
+      if (navigator.share) {
+        await navigator.share({ title: 'Relatório da Sessão', text: `Relatório da sessão ${sessionDate || ''}` });
+      }
+      const summary = `Relatório da sessão ${sessionDate || ''}\nMVP(s): ${(votingSummary?.mvpNames || []).join(', ') || '—'}`;
+      window.open(`https://wa.me/?text=${encodeURIComponent(summary)}`, '_blank');
+      const a = document.createElement('a'); a.href = dataUrl; a.download = 'relatorio_sessao.png'; a.click();
+    } catch (e) { console.error('Falha ao compartilhar:', e); alert('Não foi possível compartilhar.'); }
+  };
+
+  // Gera imagem PNG compartilhável com o resumo da sessão
+  const generateReportImage = async ({ returnDataUrl = false } = {}) => {
+    try {
+      const width = 1200; const pad = 32; const rowH = 44;
+      const headerH = 160; const tableHeadH = 40; const summaryH = 70;
+      const rows = Math.max(calculatedStats.length, (votingSummary?.avgList?.length || 0));
+      const height = headerH + summaryH + tableHeadH + (rows * rowH) + pad * 2;
+      const ratio = Math.min(2, (window.devicePixelRatio || 1));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(width * ratio);
+      canvas.height = Math.round(height * ratio);
+      const ctx = canvas.getContext('2d');
+      ctx.scale(ratio, ratio);
+      ctx.fillStyle = '#0b1220'; ctx.fillRect(0, 0, width, height);
+      const grad = ctx.createLinearGradient(0, 0, width, height);
+      grad.addColorStop(0, 'rgba(99,102,241,0.18)'); grad.addColorStop(1, 'rgba(11,18,32,0.2)');
+      ctx.fillStyle = grad; ctx.fillRect(0, 0, width, height);
+      ctx.fillStyle = '#c7d2fe'; ctx.font = 'bold 36px system-ui,Segoe UI,Arial';
+      ctx.fillText('Relatório da Sessão', pad, pad + 40);
+      ctx.fillStyle = '#9ca3af'; ctx.font = '16px system-ui,Segoe UI,Arial';
+      ctx.fillText(sessionDate || '', pad, pad + 68);
+      const mvpText = (votingSummary?.mvpNames?.length ? `MVP(s): ${votingSummary.mvpNames.join(', ')}` : 'MVP(s): —');
+      ctx.fillStyle = '#fbbf24'; ctx.font = 'bold 18px system-ui,Segoe UI,Arial';
+      ctx.fillText(mvpText, pad, pad + 100);
+      ctx.fillStyle = '#9ca3af'; ctx.font = '14px system-ui,Segoe UI,Arial';
+      if (votingSummary?.totalMvpVotes) ctx.fillText(`Total de votos: ${votingSummary.totalMvpVotes}`, pad, pad + 120);
+      let y = headerH; const colX = [pad, width * 0.5 - 80, width * 0.5 + 20, width - pad - 60];
+      ctx.fillStyle = '#111827'; ctx.fillRect(pad, y, width - pad * 2, 40);
+      ctx.fillStyle = '#c7d2fe'; ctx.font = 'bold 14px system-ui,Segoe UI,Arial';
+      ctx.fillText('Jogador', colX[0], y + 26);
+      ctx.fillText('V/E/D | G/A/Ds', colX[1], y + 26);
+      ctx.fillText('Média', colX[2], y + 26);
+      ctx.fillText('Votos', colX[3], y + 26);
+      y += 40;
+      const avgRows = votingSummary?.avgList || [];
+      for (let i = 0; i < Math.max(calculatedStats.length, avgRows.length); i++) {
+        const stat = calculatedStats[i]; const avgRow = avgRows[i];
+        ctx.fillStyle = i % 2 === 0 ? 'rgba(17,24,39,0.7)' : 'rgba(31,41,55,0.5)';
+        ctx.fillRect(pad, y, width - pad * 2, rowH);
+        ctx.fillStyle = '#e5e7eb'; ctx.font = 'bold 14px system-ui,Segoe UI,Arial';
+        const name = avgRow?.name || stat?.name || '';
+        ctx.fillText(name, colX[0], y + 28);
+        ctx.fillStyle = '#9ca3af'; ctx.font = '12px system-ui,Segoe UI,Arial';
+        if (stat) {
+          const line = `${stat.wins||0}/${stat.draws||0}/${stat.losses||0} | ${stat.goals||0}/${stat.assists||0}/${stat.tackles||0}`;
+          ctx.fillText(line, colX[1], y + 28);
+        }
+        if (avgRow) {
+          ctx.fillStyle = '#c4b5fd'; ctx.fillText((avgRow.avg||0).toFixed(1), colX[2], y + 28);
+          ctx.fillStyle = '#93c5fd'; ctx.fillText(String(avgRow.votes||0), colX[3], y + 28);
+        }
+        y += rowH;
+      }
+      const url = canvas.toDataURL('image/png');
+      if (returnDataUrl) return url;
+      const a = document.createElement('a'); a.href = url; a.download = `relatorio_sessao_${(sessionDate||'').replace(/\s+/g,'_')}.png`; a.click();
+      return url;
+    } catch (e) { console.error('Falha ao gerar imagem:', e); alert('Não foi possível gerar a imagem do relatório.'); }
+  };
+
+  // eslint-disable-next-line no-unused-vars
+  const downloadPdfFromImage = async () => {
+    try {
+      const dataUrl = await generateReportImage({ returnDataUrl: true });
+      const jsPDF = window.jspdf?.jsPDF || window.jsPDF;
+      if (!jsPDF) { alert('Para exportar PDF, adicione jsPDF ao projeto.'); return; }
+      const pdf = new jsPDF({ orientation: 'p', unit: 'px', format: 'a4' });
+      const pdfW = pdf.internal.pageSize.getWidth();
+      const img = new Image(); await new Promise(res => { img.onload = res; img.src = dataUrl; });
+      const ratio = img.height / img.width; const pdfH = pdfW * ratio;
+      pdf.addImage(dataUrl, 'PNG', 0, 0, pdfW, pdfH); pdf.save('relatorio_sessao.pdf');
+    } catch (e) { console.error('Falha ao gerar PDF:', e); alert('Não foi possível gerar o PDF.'); }
+  };
 
   const handlePrintDetailedReport = () => {
     try {
@@ -249,11 +343,14 @@ const SessionReportDetail = ({ session, onBack }) => {
         <h2 className="text-3xl font-bold text-indigo-300 mb-2 text-center">Relatório da Sessão</h2>
         <p className="text-center text-gray-400 mb-4">{sessionDate}</p>
         <div className="flex items-center justify-center gap-2 mb-6">
-          <button onClick={() => setIsVotingOpen(true)} disabled={loading} className="bg-green-600 hover:bg-green-500 disabled:opacity-60 text-white font-bold py-2 px-4 rounded-lg">
+          <button onClick={() => setIsVotingOpen(true)} disabled={loading} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white font-bold py-2 px-4 rounded-lg">
             Votar
           </button>
-          <button onClick={handlePrintDetailedReport} disabled={loading} className="bg-yellow-500 hover:bg-yellow-400 disabled:opacity-60 text-black font-bold py-2 px-4 rounded-lg">
+          <button onClick={handlePrintDetailedReport} disabled={loading} className="bg-fuchsia-600 hover:bg-fuchsia-500 disabled:opacity-60 text-white font-bold py-2 px-4 rounded-lg">
             Imprimir relatório
+          </button>
+          <button onClick={() => shareReport()} disabled={loading} className="bg-fuchsia-600 hover:bg-fuchsia-500 disabled:opacity-60 text-white font-bold py-2 px-4 rounded-lg">
+            Compartilhar
           </button>
         </div>
         {loading ? (

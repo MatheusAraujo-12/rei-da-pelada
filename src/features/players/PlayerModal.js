@@ -105,18 +105,18 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
                 {position === 'Linha' && (
                     <div className="mt-4">
                         <label className="block text-sm font-medium text-gray-300 mb-1">Posição Detalhada</label>
-                        <div className="flex gap-2 overflow-x-auto no-scrollbar py-1">
+                        <select
+                            value={detailedPosition}
+                            onChange={e => setDetailedPosition(e.target.value)}
+                            size={6}
+                            className="w-full bg-gray-800 border border-gray-600 rounded-lg p-2 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none overflow-y-auto"
+                        >
                             {['Atacante','Ponta','Meio-Campo','Volante','Lateral','Zagueiro'].map(opt => (
-                                <button
-                                    key={opt}
-                                    type="button"
-                                    onClick={() => setDetailedPosition(opt)}
-                                    className={`whitespace-nowrap px-3 py-2 rounded-lg text-sm border ${detailedPosition === opt ? 'bg-indigo-500 text-black border-indigo-400' : 'bg-gray-800 text-gray-200 border-gray-600 hover:border-indigo-400'}`}
-                                >
+                                <option key={opt} value={opt} className="bg-gray-800">
                                     {opt}
-                                </button>
+                                </option>
                             ))}
-                        </div>
+                        </select>
                     </div>
                 )}
                 

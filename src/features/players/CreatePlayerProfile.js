@@ -46,13 +46,13 @@ const CreatePlayerProfile = ({ user, onSave }) => {
     return (
         <div className="flex items-center justify-center min-h-screen">
             <div className="w-full max-w-md bg-gray-900/50 rounded-2xl p-8 border border-gray-700 space-y-6">
-                <h2 className="text-3xl font-bold text-yellow-400 text-center">Crie seu Perfil de Jogador</h2>
+                <h2 className="text-3xl font-bold text-indigo-300 text-center">Crie seu Perfil de Jogador</h2>
                 
                 {/* ✅ Componente de Upload de Foto */}
                 <div className="flex justify-center">
                     <label className="relative cursor-pointer">
                         <input type="file" className="hidden" accept="image/*" onChange={handleImageChange} />
-                        <div className="w-32 h-32 rounded-full bg-gray-800 border-2 border-dashed border-gray-600 flex items-center justify-center text-gray-500 hover:bg-gray-700 hover:border-yellow-400">
+                        <div className="w-32 h-32 rounded-full bg-gray-800 border-2 border-dashed border-gray-600 flex items-center justify-center text-gray-500 hover:bg-gray-700 hover:border-indigo-400">
                             {imagePreview ? (
                                 <img src={imagePreview} alt="Pré-visualização" className="w-full h-full rounded-full object-cover" />
                             ) : (
@@ -63,17 +63,17 @@ const CreatePlayerProfile = ({ user, onSave }) => {
                 </div>
                 
                 <div className="grid grid-cols-1 gap-4">
-                    <input type="text" placeholder="Seu Nome ou Apelido" value={name} onChange={e => setName(e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 text-white" />
-                    <input type="number" placeholder="Sua Idade" value={age} onChange={e => setAge(e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 text-white" />
-                    <select value={position} onChange={e => setPosition(e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 text-white">
+                    <input type="text" placeholder="Seu Nome ou Apelido" value={name} onChange={e => setName(e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+                    <input type="number" placeholder="Sua Idade" value={age} onChange={e => setAge(e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+                    <select value={position} onChange={e => setPosition(e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
                         <option>Atacante</option> <option>Ponta</option> <option>Meio-Campo</option> <option>Volante</option> <option>Lateral</option> <option>Zagueiro</option> <option>Goleiro</option>
                     </select>
-                    <select value={preferredFoot} onChange={e => setPreferredFoot(e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 text-white">
+                    <select value={preferredFoot} onChange={e => setPreferredFoot(e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
                         <option>Direita</option> <option>Esquerda</option> <option>Ambidestro</option>
                     </select>
                 </div>
                 <div className="mt-6">
-                    <button onClick={handleSave} className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold py-3 px-6 rounded-lg text-lg">
+                    <button onClick={handleSave} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-6 rounded-lg text-lg">
                         Finalizar e Criar Perfil
                     </button>
                 </div>

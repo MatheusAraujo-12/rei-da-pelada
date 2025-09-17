@@ -68,6 +68,11 @@ const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => 
               </div>
             )}
           </div>
+          {false && (
+            <div className="absolute top-9 right-4 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-fuchsia-700 bg-fuchsia-900/60 text-fuchsia-100">
+              {player.detailedPosition}
+            </div>
+          )}
 
           {/* OVR grande */}
           <div className="absolute top-3 left-4 text-white/95">
@@ -76,7 +81,7 @@ const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => 
           </div>
 
           {/* Posição */}
-          <div className="absolute top-3 right-4 px-3 py-1 rounded-full text-xs font-semibold border border-indigo-700 bg-indigo-900/50 text-indigo-100">
+          <div className="absolute top-3 left-24 px-3 py-1 rounded-full text-xs font-semibold border border-indigo-700 bg-indigo-900/60 text-indigo-100">
             {position}
           </div>
 
@@ -108,6 +113,13 @@ const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => 
               className="bg-indigo-400 hover:bg-indigo-300 text-black font-bold py-2 px-3 rounded-lg text-sm shadow"
             >
               Avaliar
+            </button>
+            <button
+              onClick={() => onEdit(player)}
+              className="hidden px-3 py-2 rounded-lg text-xs border border-indigo-700 bg-indigo-900/40 text-indigo-200 hover:bg-indigo-800/60"
+              title="Alterar posição"
+            >
+              Posição: {position}
             </button>
             {isAdmin && (
               <div className="flex gap-2">
