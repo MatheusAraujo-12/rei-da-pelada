@@ -2,36 +2,41 @@ import React from 'react';
 import { LucideUser, LucideEdit, LucideTrash2, LucideStar } from 'lucide-react';
 import { calculateOverall } from '../../utils/helpers';
 
-// Mapeia chaves comuns para os 6 atributos clássicos (PAC, SHO, PAS, DRI, DEF, PHY)
-const sixKeys = [
-  { key: 'PAC', synonyms: ['pace', 'velocidade', 'speed'] },
-  { key: 'SHO', synonyms: ['shooting', 'chute', 'finalizacao', 'finalização'] },
-  { key: 'PAS', synonyms: ['passing', 'passe'] },
-  { key: 'DRI', synonyms: ['dribbling', 'drible', 'driblando'] },
-  { key: 'DEF', synonyms: ['defending', 'defesa', 'marcacao', 'marcação'] },
-  { key: 'PHY', synonyms: ['physical', 'fisico', 'físico', 'forca', 'força', 'stamina', 'resistencia', 'resistência'] }
-];
+const fallbackSkillLabels = ['PAC', 'SHO', 'PAS', 'DRI', 'DEF', 'PHY'];
 
-const toLowerNum = (obj) => Object.fromEntries(
-  Object.entries(obj || {}).map(([k, v]) => [String(k).toLowerCase(), Number(v)])
-);
+const formatSkillLabel = (rawKey) => {
+  const key = String(rawKey || '').trim();
+  if (!key) return '-';
+  const normalized = key.replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!normalized) return '-';
+  if (normalized.length <= 4) return normalized.toUpperCase();
+  return normalized
+    .split(' ')
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
 
-function computeSix(selfOverall) {
-  const low = toLowerNum(selfOverall);
-  const out = [];
-  for (const spec of sixKeys) {
-    const found = spec.synonyms.find(s => low[s] !== undefined && !isNaN(low[s]));
-    out.push({ label: spec.key, value: found ? Math.round(low[found]) : 0 });
+const buildSkillList = (selfOverall) => {
+  const entries = Object.entries(selfOverall || {})
+    .map(([key, value]) => {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) return null;
+      return { label: formatSkillLabel(key), value: Math.round(numeric) };
+    })
+    .filter(Boolean);
+
+  if (entries.length > 0) {
+    return entries;
   }
-  return out;
-}
+
+  return fallbackSkillLabels.map(label => ({ label, value: 0 }));
+};
 
 const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => {
   const overall = calculateOverall(player.selfOverall);
   const peerOverall = player.peerOverall ? calculateOverall(player.peerOverall.avgSkills) : null;
-  const position = player.detailedPosition || player.position || '—';
-  const six = computeSix(player.selfOverall);
-
+  const position = player.detailedPosition || player.position || '-';
+  const skillEntries = React.useMemo(() => buildSkillList(player.selfOverall), [player.selfOverall]);
   // Variação de brilho/velocidade por jogador
   const seed = String(player?.id || player?.name || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0);
   const variants = [
@@ -97,10 +102,10 @@ const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => 
 
         {/* Atributos (6 em 2 linhas) */}
         <div className="px-4 mt-2 grid grid-cols-3 gap-2">
-          {six.map(s => (
-            <div key={s.label} className="flex flex-col items-center justify-center bg-[#0f1a2e]/70 border border-[#1c2a47] rounded-lg py-2">
-              <span className="text-[10px] tracking-wider text-indigo-200">{s.label}</span>
-              <span className="text-lg font-extrabold text-white">{s.value}</span>
+          {skillEntries.map(skill => (
+            <div key={skill.label} className="flex flex-col items-center justify-center bg-[#0f1a2e]/70 border border-[#1c2a47] rounded-lg py-2">
+              <span className="text-[10px] tracking-wider text-indigo-200">{skill.label}</span>
+              <span className="text-lg font-extrabold text-white">{skill.value}</span>
             </div>
           ))}
         </div>

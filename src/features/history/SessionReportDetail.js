@@ -3,6 +3,18 @@ import { doc, getDoc, setDoc, serverTimestamp, collection, onSnapshot } from 'fi
 import { db, auth } from '../../services/firebase';
 import PostSessionVotingModal from './PostSessionVotingModal';
 
+const championsTheme = {
+  primary: '#4338ca',
+  accent: '#a855f7',
+  cyan: '#06b6d4',
+  surface: '#10152a',
+  surfaceSoft: '#16203a',
+  border: '#28324d',
+  textPrimary: '#f8fafc',
+  textSecondary: '#cbd5f5',
+  textMuted: '#94a3b8',
+};
+
 const SessionReportDetail = ({ session, onBack }) => {
   const [matchesDetails, setMatchesDetails] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -164,290 +176,427 @@ const SessionReportDetail = ({ session, onBack }) => {
   
   const shareReport = async () => {
     try {
-      const dataUrl = await generateReportImage({ returnDataUrl: true });
-      const res = await fetch(dataUrl);
-      const blob = await res.blob();
-      const file = new File([blob], 'relatorio_sessao.png', { type: 'image/png' });
-      const shareData = { title: 'Relatório da Sessão', text: `Relatório da sessão ${sessionDate || ''}`, files: [file] };
+      const images = await generateReportImages({ returnDataUrl: true });
+      const orderedKeys = ['stats', 'ratings'];
+      const entries = orderedKeys
+        .map(key => [key, images?.[key]])
+        .filter(([, url]) => typeof url === 'string' && url.length > 0);
+
+      if (entries.length === 0) {
+        alert('Nao ha dados para compartilhar.');
+        return;
+      }
+
+      const files = [];
+      for (const [key, url] of entries) {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        const filename = key === 'stats' ? 'relatorio_estatisticas.png' : 'relatorio_notas.png';
+        files.push(new File([blob], filename, { type: 'image/png' }));
+      }
+
+      const shareData = {
+        title: 'Relatorio da Sessao',
+        text: `Relatorio da sessao ${sessionDate || ''}`,
+        files,
+      };
+
       if (navigator.canShare && navigator.canShare(shareData)) {
         await navigator.share(shareData);
         return;
       }
+
       if (navigator.share) {
-        await navigator.share({ title: 'Relatório da Sessão', text: `Relatório da sessão ${sessionDate || ''}` });
+        await navigator.share({ title: shareData.title, text: shareData.text });
       }
-      const summary = `Relatório da sessão ${sessionDate || ''}\nMVP(s): ${(votingSummary?.mvpNames || []).join(', ') || '—'}`;
+
+      entries.forEach(([key, url]) => {
+        const link = document.createElement('a');
+        const filename = key === 'stats' ? 'relatorio_estatisticas.png' : 'relatorio_notas.png';
+        link.href = url;
+        link.download = filename;
+        link.click();
+      });
+
+      const summary = [
+        `Relatorio da sessao ${sessionDate || ''}`,
+        `MVP(s): ${(votingSummary?.mvpNames || []).join(', ') || 'Sem votos'}`,
+      ].join('\n');
       window.open(`https://wa.me/?text=${encodeURIComponent(summary)}`, '_blank');
-      const a = document.createElement('a'); a.href = dataUrl; a.download = 'relatorio_sessao.png'; a.click();
-    } catch (e) { console.error('Falha ao compartilhar:', e); alert('Não foi possível compartilhar.'); }
-  };
-
-  // Gera imagem PNG compartilhável com o resumo da sessão
-  const generateReportImage = async ({ returnDataUrl = false } = {}) => {
-    try {
-      const width = 1200; const pad = 32; const rowH = 44;
-      const headerH = 160; const tableHeadH = 40; const summaryH = 70;
-      const rows = Math.max(calculatedStats.length, (votingSummary?.avgList?.length || 0));
-      const height = headerH + summaryH + tableHeadH + (rows * rowH) + pad * 2;
-      const ratio = Math.min(2, (window.devicePixelRatio || 1));
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.round(width * ratio);
-      canvas.height = Math.round(height * ratio);
-      const ctx = canvas.getContext('2d');
-      ctx.scale(ratio, ratio);
-      ctx.fillStyle = '#0b1220'; ctx.fillRect(0, 0, width, height);
-      const grad = ctx.createLinearGradient(0, 0, width, height);
-      grad.addColorStop(0, 'rgba(99,102,241,0.18)'); grad.addColorStop(1, 'rgba(11,18,32,0.2)');
-      ctx.fillStyle = grad; ctx.fillRect(0, 0, width, height);
-      ctx.fillStyle = '#c7d2fe'; ctx.font = 'bold 36px system-ui,Segoe UI,Arial';
-      ctx.fillText('Relatório da Sessão', pad, pad + 40);
-      ctx.fillStyle = '#9ca3af'; ctx.font = '16px system-ui,Segoe UI,Arial';
-      ctx.fillText(sessionDate || '', pad, pad + 68);
-      const mvpText = (votingSummary?.mvpNames?.length ? `MVP(s): ${votingSummary.mvpNames.join(', ')}` : 'MVP(s): —');
-      ctx.fillStyle = '#fbbf24'; ctx.font = 'bold 18px system-ui,Segoe UI,Arial';
-      ctx.fillText(mvpText, pad, pad + 100);
-      ctx.fillStyle = '#9ca3af'; ctx.font = '14px system-ui,Segoe UI,Arial';
-      if (votingSummary?.totalMvpVotes) ctx.fillText(`Total de votos: ${votingSummary.totalMvpVotes}`, pad, pad + 120);
-      let y = headerH; const colX = [pad, width * 0.5 - 80, width * 0.5 + 20, width - pad - 60];
-      ctx.fillStyle = '#111827'; ctx.fillRect(pad, y, width - pad * 2, 40);
-      ctx.fillStyle = '#c7d2fe'; ctx.font = 'bold 14px system-ui,Segoe UI,Arial';
-      ctx.fillText('Jogador', colX[0], y + 26);
-      ctx.fillText('V/E/D | G/A/Ds', colX[1], y + 26);
-      ctx.fillText('Média', colX[2], y + 26);
-      ctx.fillText('Votos', colX[3], y + 26);
-      y += 40;
-      const avgRows = votingSummary?.avgList || [];
-      for (let i = 0; i < Math.max(calculatedStats.length, avgRows.length); i++) {
-        const stat = calculatedStats[i]; const avgRow = avgRows[i];
-        ctx.fillStyle = i % 2 === 0 ? 'rgba(17,24,39,0.7)' : 'rgba(31,41,55,0.5)';
-        ctx.fillRect(pad, y, width - pad * 2, rowH);
-        ctx.fillStyle = '#e5e7eb'; ctx.font = 'bold 14px system-ui,Segoe UI,Arial';
-        const name = avgRow?.name || stat?.name || '';
-        ctx.fillText(name, colX[0], y + 28);
-        ctx.fillStyle = '#9ca3af'; ctx.font = '12px system-ui,Segoe UI,Arial';
-        if (stat) {
-          const line = `${stat.wins||0}/${stat.draws||0}/${stat.losses||0} | ${stat.goals||0}/${stat.assists||0}/${stat.tackles||0}`;
-          ctx.fillText(line, colX[1], y + 28);
-        }
-        if (avgRow) {
-          ctx.fillStyle = '#c4b5fd'; ctx.fillText((avgRow.avg||0).toFixed(1), colX[2], y + 28);
-          ctx.fillStyle = '#93c5fd'; ctx.fillText(String(avgRow.votes||0), colX[3], y + 28);
-        }
-        y += rowH;
-      }
-      const url = canvas.toDataURL('image/png');
-      if (returnDataUrl) return url;
-      const a = document.createElement('a'); a.href = url; a.download = `relatorio_sessao_${(sessionDate||'').replace(/\s+/g,'_')}.png`; a.click();
-      return url;
-    } catch (e) { console.error('Falha ao gerar imagem:', e); alert('Não foi possível gerar a imagem do relatório.'); }
-  };
-
-  // eslint-disable-next-line no-unused-vars
-  const downloadPdfFromImage = async () => {
-    try {
-      const dataUrl = await generateReportImage({ returnDataUrl: true });
-      const jsPDF = window.jspdf?.jsPDF || window.jsPDF;
-      if (!jsPDF) { alert('Para exportar PDF, adicione jsPDF ao projeto.'); return; }
-      const pdf = new jsPDF({ orientation: 'p', unit: 'px', format: 'a4' });
-      const pdfW = pdf.internal.pageSize.getWidth();
-      const img = new Image(); await new Promise(res => { img.onload = res; img.src = dataUrl; });
-      const ratio = img.height / img.width; const pdfH = pdfW * ratio;
-      pdf.addImage(dataUrl, 'PNG', 0, 0, pdfW, pdfH); pdf.save('relatorio_sessao.pdf');
-    } catch (e) { console.error('Falha ao gerar PDF:', e); alert('Não foi possível gerar o PDF.'); }
-  };
-
-  const handlePrintDetailedReport = () => {
-    try {
-      const formatDate = (ts) => {
-        if (!ts) return '';
-        const d = ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts);
-        return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
-      };
-      const html = [];
-      html.push(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8" />
-        <title>Relatório da Sessão</title>
-        <style>
-          body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, 'Helvetica Neue', Arial; padding: 24px; }
-          h1 { margin: 0 0 16px; }
-          h2 { margin: 16px 0 8px; }
-          table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
-          th, td { border: 1px solid #ddd; padding: 8px; font-size: 12px; }
-          th { background: #f4f4f4; text-align: left; }
-          .muted { color: #666; font-size: 12px; }
-          @media print { button { display: none; } }
-        </style></head><body>`);
-      html.push(`<h1>Relatório da sessão (${formatDate(session?.date)})</h1>`);
-      html.push(`<h2>Desempenho dos jogadores</h2>`);
-      if (!calculatedStats || calculatedStats.length === 0) {
-        html.push('<p class="muted">Sem estatísticas para esta sessão.</p>');
-      } else {
-        html.push(`<table><thead><tr>
-          <th>Jogador</th><th>V</th><th>E</th><th>D</th><th>Gols</th><th>Assist.</th><th>Desarmes</th><th>Defesas</th><th>Falhas</th>
-        </tr></thead><tbody>`);
-        calculatedStats.forEach(p => {
-          html.push(`<tr>
-            <td>${p.name}</td>
-            <td style="text-align:center;">${p.wins || 0}</td>
-            <td style="text-align:center;">${p.draws || 0}</td>
-            <td style="text-align:center;">${p.losses || 0}</td>
-            <td style="text-align:center;">${p.goals || 0}</td>
-            <td style="text-align:center;">${p.assists || 0}</td>
-            <td style="text-align:center;">${p.tackles || 0}</td>
-            <td style="text-align:center;">${p.saves || 0}</td>
-            <td style="text-align:center;">${p.failures || 0}</td>
-          </tr>`);
-        });
-        html.push(`</tbody></table>`);
-      }
-      html.push(`<h2>Resultados das partidas</h2>`);
-      if (!matchesDetails || matchesDetails.length === 0) {
-        html.push('<p class="muted">Sem partidas registradas nesta sessão.</p>');
-      } else {
-        html.push(`<table><thead><tr>
-          <th>#</th><th>Time A</th><th>Placar</th><th>Time B</th>
-        </tr></thead><tbody>`);
-        matchesDetails.forEach((match, index) => {
-          let scoreA = 0, scoreB = 0;
-          const playerStats = match?.playerStats || {};
-          (match?.teams?.teamA || []).forEach(p => { scoreA += playerStats[p.id]?.goals || 0; });
-          (match?.teams?.teamB || []).forEach(p => { scoreB += playerStats[p.id]?.goals || 0; });
-          const teamAList = (match?.teams?.teamA || []).map(p => p?.name || '-').join(', ');
-          const teamBList = (match?.teams?.teamB || []).map(p => p?.name || '-').join(', ');
-          html.push(`<tr>
-            <td>${index + 1}</td>
-            <td>${teamAList}</td>
-            <td style="text-align:center; font-weight:600;">${scoreA} x ${scoreB}</td>
-            <td>${teamBList}</td>
-          </tr>`);
-        });
-        html.push(`</tbody></table>`);
-      }
-      html.push(`<div style="margin-top:24px;"><button onclick="window.print()">Imprimir</button></div>`);
-      html.push(`</body></html>`);
-      const win = window.open('', '_blank');
-      if (!win) { alert('Permita pop-ups para imprimir.'); return; }
-      win.document.open();
-      win.document.write(html.join(''));
-      win.document.close();
-      win.focus();
-      setTimeout(() => { try { win.print(); } catch {} }, 200);
     } catch (e) {
-      console.error('Falha ao imprimir sessão:', e);
-      alert('Não foi possível gerar o relatório desta sessão.');
+      console.error('Falha ao compartilhar:', e);
+      alert('Nao foi possivel compartilhar.');
+    }
+  };
+
+  const generateReportImages = async ({ returnDataUrl = false } = {}) => {
+    try {
+      const width = 1280;
+      const pad = 48;
+      const ratio = Math.min(2, window.devicePixelRatio || 1);
+
+      const createContext = (height) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(width * ratio);
+        canvas.height = Math.round(height * ratio);
+        const ctx = canvas.getContext('2d');
+        ctx.scale(ratio, ratio);
+        ctx.fillStyle = championsTheme.surface;
+        ctx.fillRect(0, 0, width, height);
+        const gradient = ctx.createLinearGradient(0, 0, width, height);
+        gradient.addColorStop(0, 'rgba(67,56,202,0.55)');
+        gradient.addColorStop(0.45, 'rgba(168,85,247,0.32)');
+        gradient.addColorStop(1, 'rgba(6,182,212,0.28)');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, width, height);
+        return { canvas, ctx };
+      };
+
+      const drawHeader = (ctx, subtitle) => {
+        ctx.fillStyle = championsTheme.textPrimary;
+        ctx.font = 'bold 48px system-ui,Segoe UI,Arial';
+        ctx.fillText('Relatorio da Sessao', pad, pad + 48);
+        ctx.fillStyle = championsTheme.textMuted;
+        ctx.font = '22px system-ui,Segoe UI,Arial';
+        if (sessionDate) ctx.fillText(sessionDate, pad, pad + 82);
+        ctx.fillStyle = championsTheme.accent;
+        ctx.font = 'bold 32px system-ui,Segoe UI,Arial';
+        ctx.fillText(subtitle, pad, pad + 128);
+      };
+
+      const statsRows = Math.max(calculatedStats.length, 1);
+      const statsRowHeight = 56;
+      const statsHeight = pad + 190 + statsRowHeight * (statsRows + 1);
+      const { canvas: statsCanvas, ctx: statsCtx } = createContext(statsHeight);
+      drawHeader(statsCtx, 'Desempenho dos jogadores');
+
+      if (calculatedStats.length === 0) {
+        statsCtx.fillStyle = championsTheme.textSecondary;
+        statsCtx.font = '20px system-ui,Segoe UI,Arial';
+        statsCtx.fillText('Sem estatisticas registradas.', pad, pad + 232);
+      } else {
+        const columns = [
+          { key: 'name', label: 'Jogador', width: 360, align: 'left' },
+          { key: 'wins', label: 'V', width: 80, align: 'center' },
+          { key: 'draws', label: 'E', width: 80, align: 'center' },
+          { key: 'losses', label: 'D', width: 80, align: 'center' },
+          { key: 'goals', label: 'G', width: 80, align: 'center' },
+          { key: 'assists', label: 'A', width: 80, align: 'center' },
+          { key: 'tackles', label: 'Ds', width: 80, align: 'center' },
+          { key: 'saves', label: 'Df', width: 80, align: 'center' },
+          { key: 'failures', label: 'F', width: 80, align: 'center' },
+        ];
+
+        const tableX = pad;
+        const tableYStart = pad + 170;
+        const tableWidth = columns.reduce((sum, col) => sum + col.width, 0);
+
+        statsCtx.textBaseline = 'middle';
+        const headerGradient = statsCtx.createLinearGradient(tableX, tableYStart, tableX + tableWidth, tableYStart);
+        headerGradient.addColorStop(0, 'rgba(67,56,202,0.9)');
+        headerGradient.addColorStop(0.5, 'rgba(168,85,247,0.85)');
+        headerGradient.addColorStop(1, 'rgba(6,182,212,0.8)');
+        statsCtx.fillStyle = headerGradient;
+        statsCtx.fillRect(tableX, tableYStart, tableWidth, statsRowHeight);
+        let currentX = tableX;
+        statsCtx.font = 'bold 20px system-ui,Segoe UI,Arial';
+        columns.forEach((col) => {
+          if (col.align === 'left') {
+            statsCtx.textAlign = 'left';
+            statsCtx.fillStyle = championsTheme.textPrimary;
+            statsCtx.fillText(col.label, currentX + 18, tableYStart + statsRowHeight / 2);
+          } else {
+            statsCtx.textAlign = 'center';
+            statsCtx.fillStyle = championsTheme.textPrimary;
+            statsCtx.fillText(col.label, currentX + col.width / 2, tableYStart + statsRowHeight / 2);
+          }
+          col.start = currentX;
+          col.center = currentX + col.width / 2;
+          currentX += col.width;
+        });
+
+        let rowY = tableYStart + statsRowHeight;
+        calculatedStats.forEach((player, index) => {
+          statsCtx.fillStyle = index % 2 === 0 ? 'rgba(16,21,42,0.82)' : 'rgba(22,32,58,0.76)';
+          statsCtx.fillRect(tableX, rowY, tableWidth, statsRowHeight);
+
+          statsCtx.textAlign = 'left';
+          statsCtx.fillStyle = championsTheme.textPrimary;
+          statsCtx.font = 'bold 24px system-ui,Segoe UI,Arial';
+          statsCtx.fillText(player.name || '-', columns[0].start + 18, rowY + statsRowHeight / 2);
+
+          const values = [
+            player.wins ?? 0,
+            player.draws ?? 0,
+            player.losses ?? 0,
+            player.goals ?? 0,
+            player.assists ?? 0,
+            player.tackles ?? 0,
+            player.saves ?? 0,
+            player.failures ?? 0,
+          ];
+
+          statsCtx.textAlign = 'center';
+          statsCtx.font = 'bold 20px system-ui,Segoe UI,Arial';
+          statsCtx.fillStyle = '#cdeafe';
+          values.forEach((value, idx) => {
+            const column = columns[idx + 1];
+            statsCtx.fillText(String(value), column.center, rowY + statsRowHeight / 2);
+          });
+
+          rowY += statsRowHeight;
+        });
+      }
+
+      const avgRows = votingSummary?.avgList || [];
+      const ratingsRows = Math.max(avgRows.length, 1);
+      const ratingsRowHeight = 60;
+      const ratingsHeight = pad + 240 + ratingsRowHeight * (ratingsRows + 1);
+      const { canvas: ratingsCanvas, ctx: ratingsCtx } = createContext(ratingsHeight);
+      drawHeader(ratingsCtx, 'Notas e destaques');
+
+      const mvpLine = (votingSummary?.mvpNames?.length
+        ? `MVP(s): ${votingSummary.mvpNames.join(', ')}`
+        : 'MVP(s): Sem votos');
+      ratingsCtx.fillStyle = championsTheme.cyan;
+      ratingsCtx.font = 'bold 28px system-ui,Segoe UI,Arial';
+      ratingsCtx.fillText(mvpLine, pad, pad + 172);
+      ratingsCtx.fillStyle = championsTheme.textSecondary;
+      ratingsCtx.font = '20px system-ui,Segoe UI,Arial';
+      const totalVotesText = `Total de votos: ${votingSummary?.totalMvpVotes || 0}`;
+      ratingsCtx.fillText(totalVotesText, pad, pad + 206);
+
+      ratingsCtx.textBaseline = 'middle';
+      if (avgRows.length === 0) {
+        ratingsCtx.fillStyle = championsTheme.textSecondary;
+        ratingsCtx.font = '20px system-ui,Segoe UI,Arial';
+        ratingsCtx.fillText('Sem notas registradas.', pad, pad + 268);
+      } else {
+        const ratingColumns = [
+          { key: 'name', label: 'Jogador', width: 440, align: 'left' },
+          { key: 'avg', label: 'Media', width: 180, align: 'center' },
+          { key: 'votes', label: 'Votos', width: 180, align: 'center' },
+        ];
+        const tableX = pad;
+        const tableYStart = pad + 220;
+        const tableWidth = ratingColumns.reduce((sum, col) => sum + col.width, 0);
+
+        const ratingHeaderGradient = ratingsCtx.createLinearGradient(tableX, tableYStart, tableX + tableWidth, tableYStart);
+        ratingHeaderGradient.addColorStop(0, 'rgba(67,56,202,0.9)');
+        ratingHeaderGradient.addColorStop(0.5, 'rgba(168,85,247,0.85)');
+        ratingHeaderGradient.addColorStop(1, 'rgba(6,182,212,0.8)');
+        ratingsCtx.fillStyle = ratingHeaderGradient;
+        ratingsCtx.fillRect(tableX, tableYStart, tableWidth, ratingsRowHeight);
+        let currentX = tableX;
+        ratingsCtx.font = 'bold 20px system-ui,Segoe UI,Arial';
+        ratingColumns.forEach((col) => {
+          if (col.align === 'left') {
+            ratingsCtx.textAlign = 'left';
+            ratingsCtx.fillStyle = championsTheme.textPrimary;
+            ratingsCtx.fillText(col.label, currentX + 18, tableYStart + ratingsRowHeight / 2);
+          } else {
+            ratingsCtx.textAlign = 'center';
+            ratingsCtx.fillStyle = championsTheme.textPrimary;
+            ratingsCtx.fillText(col.label, currentX + col.width / 2, tableYStart + ratingsRowHeight / 2);
+          }
+          col.start = currentX;
+          col.center = currentX + col.width / 2;
+          currentX += col.width;
+        });
+
+        let rowY = tableYStart + ratingsRowHeight;
+        avgRows.forEach((row, index) => {
+          ratingsCtx.fillStyle = index % 2 === 0 ? 'rgba(16,21,42,0.82)' : 'rgba(22,32,58,0.76)';
+          ratingsCtx.fillRect(tableX, rowY, tableWidth, ratingsRowHeight);
+
+          ratingsCtx.textAlign = 'left';
+          ratingsCtx.fillStyle = championsTheme.textPrimary;
+          ratingsCtx.font = 'bold 24px system-ui,Segoe UI,Arial';
+          ratingsCtx.fillText(row.name || '-', ratingColumns[0].start + 18, rowY + ratingsRowHeight / 2);
+
+          ratingsCtx.textAlign = 'center';
+          ratingsCtx.font = 'bold 22px system-ui,Segoe UI,Arial';
+          ratingsCtx.fillStyle = championsTheme.cyan;
+          const avgText = Number(row.avg ?? 0).toFixed(1);
+          ratingsCtx.fillText(avgText, ratingColumns[1].center, rowY + ratingsRowHeight / 2);
+          ratingsCtx.fillStyle = '#fef3c7';
+          ratingsCtx.fillText(String(row.votes ?? 0), ratingColumns[2].center, rowY + ratingsRowHeight / 2);
+
+          rowY += ratingsRowHeight;
+        });
+      }
+
+      const statsUrl = statsCanvas.toDataURL('image/png');
+      const ratingsUrl = ratingsCanvas.toDataURL('image/png');
+      const data = { stats: statsUrl, ratings: ratingsUrl };
+
+      if (!returnDataUrl) {
+        Object.entries(data).forEach(([key, url]) => {
+          const link = document.createElement('a');
+          const filename = key === 'stats' ? 'relatorio_estatisticas.png' : 'relatorio_notas.png';
+          link.href = url;
+          link.download = filename;
+          link.click();
+        });
+      }
+
+      return data;
+    } catch (e) {
+      console.error('Falha ao gerar imagens:', e);
+      alert('Nao foi possivel gerar as imagens do relatorio.');
+      return {};
     }
   };
 
   return (
-    <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-8 text-white space-y-8">
-      <div>
-        <h2 className="text-3xl font-bold text-indigo-300 mb-2 text-center">Relatório da Sessão</h2>
-        <p className="text-center text-gray-400 mb-4">{sessionDate}</p>
-        <div className="flex items-center justify-center gap-2 mb-6">
-          <button onClick={() => setIsVotingOpen(true)} disabled={loading} className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white font-bold py-2 px-4 rounded-lg">
-            Votar
-          </button>
-          <button onClick={handlePrintDetailedReport} disabled={loading} className="bg-fuchsia-600 hover:bg-fuchsia-500 disabled:opacity-60 text-white font-bold py-2 px-4 rounded-lg">
-            Imprimir relatório
-          </button>
-          <button onClick={() => shareReport()} disabled={loading} className="bg-fuchsia-600 hover:bg-fuchsia-500 disabled:opacity-60 text-white font-bold py-2 px-4 rounded-lg">
-            Compartilhar
-          </button>
-        </div>
-        {loading ? (
-          <div className="text-center">Carregando estatísticas...</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left min-w-[720px]">
-              <thead className="bg-gray-800">
-                <tr>
-                  <th className="p-3">Jogador</th>
-                  <th className="p-3 text-center">V</th>
-                  <th className="p-3 text-center">E</th>
-                  <th className="p-3 text-center">D</th>
-                  <th className="p-3 text-center">Gols</th>
-                  <th className="p-3 text-center">Assist.</th>
-                  <th className="p-3 text-center">Desarmes</th>
-                  <th className="p-3 text-center">Defesas</th>
-                  <th className="p-3 text-center">Falhas</th>
-                </tr>
-              </thead>
-              <tbody className="bg-gray-800/50">
-                {calculatedStats.map(player => (
-                  <tr key={player.name} className="border-b border-gray-700">
-                    <td className="p-3 font-semibold">{player.name}</td>
-                    <td className="p-3 text-center text-green-400 font-bold">{player.wins}</td>
-                    <td className="p-3 text-center text-gray-400 font-bold">{player.draws}</td>
-                    <td className="p-3 text-center text-red-400 font-bold">{player.losses}</td>
-                    <td className="p-3 text-center">{player.goals}</td>
-                    <td className="p-3 text-center">{player.assists}</td>
-                    <td className="p-3 text-center">{player.tackles}</td>
-                    <td className="p-3 text-center">{player.saves}</td>
-                    <td className="p-3 text-center">{player.failures}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+    <div className="relative overflow-hidden rounded-2xl border border-[#28324d] bg-gradient-to-br from-[#0e162c] via-[#10172f] to-[#060b1a] p-4 sm:p-8 text-white">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,#4338ca33,transparent_55%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_bottom,#06b6d455,transparent_60%)]" />
+      <div className="relative space-y-10">
+      <header className="text-center space-y-3">
+        <h2 className="text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#4338ca] via-[#a855f7] to-[#06b6d4]">Relatorio da Sessao</h2>
+        <p className="text-lg text-[#a5b4fc]">{sessionDate}</p>
+      </header>
+
+      <div className="flex flex-wrap items-center justify-center gap-4">
+        <button
+          onClick={() => setIsVotingOpen(true)}
+          disabled={loading}
+          className="rounded-lg bg-gradient-to-r from-[#4338ca] via-[#5b4ae5] to-[#a855f7] px-5 py-2 font-semibold text-white shadow-lg shadow-[#4338ca33] transition-colors hover:from-[#4c3edb] hover:to-[#b779f3] disabled:opacity-60"
+        >
+          Votar
+        </button>
+        <button
+          onClick={shareReport}
+          disabled={loading}
+          className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[#4338ca] via-[#a855f7] to-[#06b6d4] text-white shadow-lg shadow-[#06b6d455] transition-transform hover:-translate-y-0.5 disabled:opacity-60"
+          aria-label="Compartilhar relatorio"
+        >
+          <span className="sr-only">Compartilhar relatorio</span>
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-6 w-6"
+            aria-hidden="true"
+          >
+            <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
+            <path d="m16 6-4-4-4 4" />
+            <path d="M12 2v13" />
+          </svg>
+        </button>
       </div>
 
-      {/* Feedback agregado: MVP e médias das notas */}
-      <div className="bg-gray-900/40 rounded-xl p-4 border border-gray-800">
-        <h3 className="text-2xl font-bold text-indigo-300 mb-3 text-center">Feedback dos Participantes</h3>
-        <div className="text-center mb-4">
-          <span className="text-gray-400">MVP(s): </span>
-          <span className="font-bold text-yellow-400">
-            {votingSummary.mvpNames && votingSummary.mvpNames.length > 0 ? votingSummary.mvpNames.join(', ') : 'Sem votos'}
-          </span>
-          {votingSummary.totalMvpVotes > 0 && (
-            <span className="text-gray-500"> ({votingSummary.totalMvpVotes} voto(s))</span>
-          )}
+      {loading ? (
+        <div className="text-center text-[#cbd5f5]">Carregando estatisticas...</div>
+      ) : (
+        <div className="grid gap-6 xl:grid-cols-2">
+          <section className="relative overflow-hidden rounded-xl border border-[#28324d] bg-[#111a32]/80 p-5 shadow-[0_20px_60px_rgba(4,8,20,0.45)] space-y-4">
+            <span className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#a855f7] to-transparent" />
+            <h3 className="text-3xl font-bold text-[#e0e7ff] text-center">Estatisticas da partida</h3>
+            {calculatedStats.length === 0 ? (
+              <p className="text-center text-[#7c8fbf]">Sem estatisticas registradas.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left min-w-[760px]">
+                  <thead className="bg-gradient-to-r from-[#4338ca]/60 via-[#a855f7]/55 to-[#06b6d4]/60 text-[#f8fafc] uppercase text-sm">
+                    <tr>
+                      <th className="p-3 text-left">Jogador</th>
+                      <th className="p-3 text-center">V</th>
+                      <th className="p-3 text-center">E</th>
+                      <th className="p-3 text-center">D</th>
+                      <th className="p-3 text-center">Gols</th>
+                      <th className="p-3 text-center">Assist.</th>
+                      <th className="p-3 text-center">Desarmes</th>
+                      <th className="p-3 text-center">Defesas</th>
+                      <th className="p-3 text-center">Falhas</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-[#131d36]/60">
+                    {calculatedStats.map(player => (
+                      <tr key={player.name} className="border-b border-[#27334e]/60">
+                        <td className="p-3 font-semibold text-lg text-white">{player.name}</td>
+                        <td className="p-3 text-center text-emerald-300 font-bold">{player.wins ?? 0}</td>
+                        <td className="p-3 text-center text-[#cbd5f5] font-bold">{player.draws ?? 0}</td>
+                        <td className="p-3 text-center text-rose-300 font-bold">{player.losses ?? 0}</td>
+                        <td className="p-3 text-center text-[#b8c2ff]">{player.goals ?? 0}</td>
+                        <td className="p-3 text-center text-[#b8c2ff]">{player.assists ?? 0}</td>
+                        <td className="p-3 text-center text-[#8fd3ff]">{player.tackles ?? 0}</td>
+                        <td className="p-3 text-center text-[#8fd3ff]">{player.saves ?? 0}</td>
+                        <td className="p-3 text-center text-orange-300">{player.failures ?? 0}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          <section className="relative overflow-hidden rounded-xl border border-[#28324d] bg-[#111a32]/80 p-5 shadow-[0_20px_60px_rgba(4,8,20,0.45)] space-y-4">
+            <span className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#06b6d4] to-transparent" />
+            <h3 className="text-3xl font-bold text-[#e0e7ff] text-center">Notas dos jogadores</h3>
+            <div className="text-center text-base text-[#b7c4f0] space-y-1">
+              <div>
+                <span className="text-[#9aa7d7]">MVP(s): </span>
+                <span className="font-bold text-yellow-400">
+                  {votingSummary.mvpNames && votingSummary.mvpNames.length > 0 ? votingSummary.mvpNames.join(', ') : 'Sem votos'}
+                </span>
+                {votingSummary.totalMvpVotes > 0 && (
+                  <span className="text-[#7c8fbf]"> ({votingSummary.totalMvpVotes} voto(s))</span>
+                )}
+              </div>
+            </div>
+            {votingSummary.avgList && votingSummary.avgList.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left min-w-[520px]">
+                  <thead className="bg-gradient-to-r from-[#4338ca]/60 via-[#a855f7]/55 to-[#06b6d4]/60 text-[#f8fafc] uppercase text-sm">
+                    <tr>
+                      <th className="p-3 text-left">Jogador</th>
+                      <th className="p-3 text-center">Media</th>
+                      <th className="p-3 text-center">Votos</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-[#131d36]/60">
+                    {votingSummary.avgList.map(row => (
+                      <tr key={row.id} className="border-b border-[#27334e]/60">
+                        <td className="p-3 font-semibold text-lg text-white">{row.name}</td>
+                        <td className="p-3 text-center text-[#b8c2ff]">{row.avg.toFixed(1)}</td>
+                        <td className="p-3 text-center text-[#cbd5f5]">{row.votes}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-center text-[#7c8fbf]">Sem notas registradas.</p>
+            )}
+          </section>
         </div>
-        {votingSummary.avgList && votingSummary.avgList.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left min-w-[520px]">
-              <thead className="bg-gray-800">
-                <tr>
-                  <th className="p-2">Jogador</th>
-                  <th className="p-2 text-center">Média</th>
-                  <th className="p-2 text-center">Votos</th>
-                </tr>
-              </thead>
-              <tbody className="bg-gray-800/50">
-                {votingSummary.avgList.map(row => (
-                  <tr key={row.id} className="border-b border-gray-700">
-                    <td className="p-2 font-semibold">{row.name}</td>
-                    <td className="p-2 text-center">{row.avg.toFixed(1)}</td>
-                    <td className="p-2 text-center">{row.votes}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="text-center text-gray-500">Sem notas registradas.</p>
-        )}
-      </div>
+      )}
 
       {session.matchIds && session.matchIds.length > 0 && (
-        <div>
-          <h3 className="text-2xl font-bold text-indigo-300 mb-4 text-center">Resultados das Partidas</h3>
+        <div className="space-y-4">
+          <h3 className="text-3xl font-bold text-[#e0e7ff] text-center">Resultados das partidas</h3>
           <div className="space-y-3 max-h-60 overflow-y-auto p-1">
             {loading ? (
-              <p className="text-center">Carregando partidas...</p>
+              <p className="text-center text-[#9aa7d7]">Carregando partidas...</p>
             ) : (
               matchesDetails.map((match, index) => {
-                let scoreA = 0, scoreB = 0;
+                let scoreA = 0;
+                let scoreB = 0;
                 const playerStats = match?.playerStats || {};
                 (match?.teams?.teamA || []).forEach(p => { scoreA += playerStats[p.id]?.goals || 0; });
                 (match?.teams?.teamB || []).forEach(p => { scoreB += playerStats[p.id]?.goals || 0; });
                 return (
-                  <div key={match.id || index} className="bg-gray-800 p-3 rounded-lg text-center">
-                    <p className="text-sm text-gray-400">Partida {index + 1}</p>
-                    <p className="font-bold text-lg text-white">
-                      Time A <span className="text-xl text-indigo-300 mx-2">{scoreA}</span>
+                  <div key={match.id || index} className="rounded-lg border border-[#28324d] bg-gradient-to-br from-[#101a31]/85 via-[#111a32]/70 to-[#0b1228]/90 p-3 text-center shadow-[0_12px_32px_rgba(6,182,212,0.18)]">
+                    <p className="text-sm uppercase tracking-wide text-[#9aa7d7]">Partida {index + 1}</p>
+                    <p className="font-bold text-xl text-white">
+                      Time A <span className="mx-2 text-2xl text-[#b8c2ff]">{scoreA}</span>
                       vs
-                      <span className="text-xl text-indigo-300 mx-2">{scoreB}</span> Time B
+                      <span className="mx-2 text-2xl text-[#b8c2ff]">{scoreB}</span> Time B
                     </p>
                   </div>
                 );
@@ -457,9 +606,12 @@ const SessionReportDetail = ({ session, onBack }) => {
         </div>
       )}
 
-      <div className="text-center mt-4">
-        <button onClick={onBack} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg">
-          Voltar para o Histórico de Sessões
+      <div className="text-center">
+        <button
+          onClick={onBack}
+          className="rounded-lg bg-gradient-to-r from-[#4338ca] via-[#a855f7] to-[#06b6d4] px-6 py-2 font-semibold text-white shadow-lg shadow-[#4338ca33] transition-transform hover:-translate-y-0.5"
+        >
+          Voltar para o Historico de Sessoes
         </button>
       </div>
 
@@ -469,8 +621,10 @@ const SessionReportDetail = ({ session, onBack }) => {
         players={participants}
         onSubmit={handleSubmitVoting}
       />
+      </div>
     </div>
   );
 };
+
 
 export default SessionReportDetail;
