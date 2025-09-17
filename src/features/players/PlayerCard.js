@@ -4,6 +4,21 @@ import { calculateOverall } from '../../utils/helpers';
 
 const fallbackSkillLabels = ['PAC', 'SHO', 'PAS', 'DRI', 'DEF', 'PHY'];
 
+const skillAliasMap = {
+  chute: 'finalizacao',
+  chutes: 'finalizacao',
+  finalizacao: 'finalizacao',
+  cruzamento: 'passe',
+  cruzamentos: 'passe'
+};
+
+const normalizeSkillKey = (rawKey) =>
+  String(rawKey || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+
 const formatSkillLabel = (rawKey) => {
   const key = String(rawKey || '').trim();
   if (!key) return '-';
@@ -17,21 +32,38 @@ const formatSkillLabel = (rawKey) => {
 };
 
 const buildSkillList = (selfOverall) => {
-  const entries = Object.entries(selfOverall || {})
-    .map(([key, value]) => {
-      const numeric = Number(value);
-      if (!Number.isFinite(numeric)) return null;
-      return { label: formatSkillLabel(key), value: Math.round(numeric) };
-    })
-    .filter(Boolean);
+  const aggregated = new Map();
 
-  if (entries.length > 0) {
-    return entries;
+  Object.entries(selfOverall || {}).forEach(([key, value]) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return;
+
+    const normalizedKey = normalizeSkillKey(key);
+    if (!normalizedKey) return;
+
+    const canonical = skillAliasMap[normalizedKey] || normalizedKey;
+    const rounded = Math.round(numeric);
+    const current = aggregated.get(canonical);
+
+    if (current) {
+      current.value = Math.max(current.value, rounded);
+    } else {
+      aggregated.set(canonical, { rawLabel: canonical, value: rounded });
+    }
+  });
+
+  if (aggregated.size > 0) {
+    return Array.from(aggregated.values())
+      .map(({ rawLabel, value }) => ({
+        label: formatSkillLabel(rawLabel),
+        value,
+      }))
+      .sort((a, b) => (b.value - a.value) || a.label.localeCompare(b.label))
+      .slice(0, 6);
   }
 
   return fallbackSkillLabels.map(label => ({ label, value: 0 }));
 };
-
 const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => {
   const overall = calculateOverall(player.selfOverall);
   const peerOverall = player.peerOverall ? calculateOverall(player.peerOverall.avgSkills) : null;
@@ -47,9 +79,9 @@ const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => 
   const __unused = variants.length + seed; void __unused;
 
   return (
-    <div className="relative w-full max-w-[280px] h-[400px] mx-auto">
+    <div className="relative w-full max-w-[280px] min-h-[420px] mx-auto">
       {/* Conteúdo com bordas arredondadas (sem animação) */}
-      <div className="relative h-full w-full rounded-3xl overflow-hidden bg-gradient-to-b from-[#0b1220] via-[#0b1220]/95 to-black border border-[#152238]">
+      <div className="relative flex h-full w-full flex-col rounded-3xl overflow-hidden bg-gradient-to-b from-[#0b1220] via-[#0b1220]/95 to-black border border-[#152238]">
         {/* Overlays decorativos */}
         <div className="pointer-events-none absolute inset-0 opacity-30" style={{
           background: 'radial-gradient(80% 50% at 50% 0%, rgba(99,102,241,0.25) 0%, rgba(0,0,0,0) 70%)'
@@ -100,44 +132,42 @@ const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => 
           </div>
         </div>
 
-        {/* Atributos (6 em 2 linhas) */}
-        <div className="px-4 mt-2 grid grid-cols-3 gap-2">
-          {skillEntries.map(skill => (
-            <div key={skill.label} className="flex flex-col items-center justify-center bg-[#0f1a2e]/70 border border-[#1c2a47] rounded-lg py-2">
-              <span className="text-[10px] tracking-wider text-indigo-200">{skill.label}</span>
-              <span className="text-lg font-extrabold text-white">{skill.value}</span>
-            </div>
-          ))}
+        {/* Atributos (resumo) */}
+        <div className="px-4 mt-4 flex-1">
+          <div className="grid grid-cols-3 gap-2">
+            {skillEntries.map(skill => (
+              <div
+                key={skill.label}
+                className="flex min-h-[64px] flex-col items-center justify-center rounded-lg border border-[#1c2a47] bg-[#0f1a2e]/70 px-2 py-2 text-center"
+              >
+                <span className="text-[10px] font-semibold tracking-wider text-indigo-200">{skill.label}</span>
+                <span className="text-lg font-extrabold text-white">{skill.value}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Ações */}
-        <div className="px-4 mt-3">
-          <div className="flex items-center justify-between">
+        <div className="px-4 mt-4 mb-5">
+          <div className={`flex items-center gap-3 ${isAdmin ? 'justify-between' : 'justify-center'}`}>
             <button
               onClick={() => onOpenPeerReview(player)}
-              className="bg-indigo-400 hover:bg-indigo-300 text-black font-bold py-2 px-3 rounded-lg text-sm shadow"
+              className={`flex-1 rounded-lg bg-gradient-to-r from-[#4338ca] via-[#a855f7] to-[#06b6d4] py-2 px-3 text-sm font-semibold text-white shadow-lg shadow-[#4338ca33] transition-transform hover:-translate-y-0.5 ${isAdmin ? '' : 'max-w-full'}`}
             >
               Avaliar
             </button>
-            <button
-              onClick={() => onEdit(player)}
-              className="hidden px-3 py-2 rounded-lg text-xs border border-indigo-700 bg-indigo-900/40 text-indigo-200 hover:bg-indigo-800/60"
-              title="Alterar posição"
-            >
-              Posição: {position}
-            </button>
             {isAdmin && (
-              <div className="flex gap-2">
+              <div className="flex shrink-0 gap-2">
                 <button
                   onClick={() => onEdit(player)}
-                  className="p-2 bg-blue-600 hover:bg-blue-500 rounded-lg shadow"
+                  className="rounded-lg bg-blue-600 p-2 text-white shadow transition hover:bg-blue-500"
                   title="Editar Jogador"
                 >
                   <LucideEdit size={16} />
                 </button>
                 <button
                   onClick={() => onDelete(player)}
-                  className="p-2 bg-rose-600 hover:bg-rose-500 rounded-lg shadow"
+                  className="rounded-lg bg-rose-600 p-2 text-white shadow transition hover:bg-rose-500"
                   title="Apagar Jogador"
                 >
                   <LucideTrash2 size={16} />

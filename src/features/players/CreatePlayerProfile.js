@@ -24,7 +24,7 @@ const CreatePlayerProfile = ({ user, onSave }) => {
             const isGoalkeeper = position === 'Goleiro';
             const baseSkills = isGoalkeeper 
                 ? { reflexo: 50, posicionamento: 50, lancamento: 50 } 
-                : { finalizacao: 50, drible: 50, velocidade: 50, folego: 50, passe: 50, desarme: 50, chute: 50, cruzamento: 50 };
+                : { finalizacao: 50, drible: 50, velocidade: 50, folego: 50, passe: 50, desarme: 50 };
             
             const playerData = {
                 name,
