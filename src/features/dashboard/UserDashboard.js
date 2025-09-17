@@ -2,15 +2,15 @@ import React from 'react';
 import { LucideUser, LucideArrowRight, LucidePlusCircle, LucideLogOut, LucideDoorOpen, LucideEdit, LucideCheckCircle } from 'lucide-react';
 
 const STARFIELD_PARTICLES = Array.from({ length: 48 }, () => {
-    const size = 1 + Math.random() * 1.6;
+    const size = 2 + Math.random() * 2.4;
     return {
         left: Math.random() * 100,
         top: Math.random() * 100,
         size,
-        speed: 14 + Math.random() * 14,
+        speed: 20 + Math.random() * 16,
         delay: Math.random() * -24,
-        opacity: 0.35 + Math.random() * 0.55,
-        blur: Math.random() * 1.5,
+        opacity: 0.55 + Math.random() * 0.35,
+        blur: 0.3 + Math.random() * 1.2,
     };
 });
 
@@ -76,10 +76,26 @@ const UserDashboard = ({ playerProfile, groups = [], activeGroupId, onEnterGroup
                         <div className="space-y-3">
                             {groups.length > 0 ? groups.map(group => (
                                 <div key={group.id} className={`rounded-2xl border border-[#28324d] bg-[#111a32]/70 p-4 sm:p-5 flex flex-col sm:flex-row justify-between items-center gap-4 transition shadow-[0_10px_30px_rgba(4,10,35,0.35)] ${group.id === activeGroupId ? 'ring-2 ring-[#a855f7]' : ''}`}>
-                                    <div className="text-center sm:text-left">
-                                        <p className="font-semibold text-lg text-white">{group.name}</p>
-                                        <p className="text-sm text-[#9aa7d7]">{group.members?.length || 0} membros</p>
+                                    <div className="flex items-center gap-3 sm:gap-4 text-center sm:text-left">
+                                        <div className="flex-shrink-0">
+                                            {group.crestURL ? (
+                                                <img
+                                                    src={group.crestURL}
+                                                    alt={`Escudo do grupo ${group.name}`}
+                                                    className="h-12 w-12 rounded-xl border border-[#28324d] bg-[#111a32]/90 object-cover"
+                                                />
+                                            ) : (
+                                                <div className="h-12 w-12 rounded-xl border border-dashed border-[#28324d] bg-[#111a32]/70 flex items-center justify-center text-[#9aa7d7]">
+                                                    <LucidePlusCircle className="h-5 w-5" />
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="flex flex-col items-center sm:items-start">
+                                            <p className="font-semibold text-lg text-white">{group.name}</p>
+                                            <p className="text-sm text-[#9aa7d7]">{group.members?.length || 0} membros</p>
+                                        </div>
                                     </div>
+
                                     <div className="flex items-center gap-3">
                                         {group.id === activeGroupId && (
                                             <span className="rounded-lg border border-[#28324d] bg-[#111a32]/80 px-3 py-2 text-xs font-semibold text-[#cbd5f5] flex items-center gap-2">

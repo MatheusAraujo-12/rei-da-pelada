@@ -1,6 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { LucideX, LucideCamera } from 'lucide-react';
 
+const ADMIN_EXCLUDED_SKILLS = new Set(['chute', 'cruzamento']);
+
+const sanitizeAdminSkills = (rawSkills = {}, fallback = {}) => {
+    const entries = Object.entries(rawSkills || {}).filter(([key]) => {
+        const normalized = String(key || '').toLowerCase().trim();
+        return !ADMIN_EXCLUDED_SKILLS.has(normalized);
+    });
+    if (entries.length === 0 && Object.keys(fallback).length > 0) {
+        return { ...fallback };
+    }
+    return Object.fromEntries(entries);
+};
+
 const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
     const [name, setName] = useState('');
     const [age, setAge] = useState('');
@@ -33,7 +46,7 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
                 setPreferredSide(player.preferredSide || 'Qualquer');
                 setImagePreview(player.photoURL || null);
                 if (isAdmin) {
-                    setAdminSkills(player.adminOverall || player.selfOverall || baseSkills);
+                    setAdminSkills(sanitizeAdminSkills(player.adminOverall || player.selfOverall, baseSkills));
                 }
             } else { // Modo Criação
                 setName(''); setAge(''); setPosition('Linha'); setDetailedPosition('Meio-Campo');
@@ -79,7 +92,7 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
             preferredSide,
             selfOverall: skills,
             progression: player?.progression || { matchesPlayed: 0 },
-            adminOverall: isAdmin ? adminSkills : player?.adminOverall || null,
+            adminOverall: isAdmin ? sanitizeAdminSkills(adminSkills || {}, position === 'Goleiro' ? initialGkSkills : initialLineSkills) : player?.adminOverall || null,
         };
         if (player && player.id) {
             playerData.id = player.id;

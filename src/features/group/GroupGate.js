@@ -21,7 +21,9 @@ const GroupGate = ({ user, playerProfile, onGroupAssociated, onBackToDashboard }
                 name: groupName,
                 createdBy: user.uid,
                 createdAt: new Date(),
-                members: [user.uid]
+                members: [user.uid],
+                crestURL: null,
+                crestUpdatedAt: null
             });
 
             const userDocRef = doc(db, 'users', user.uid);

@@ -267,6 +267,11 @@ function App() {
         navigateToView('dashboard');
     };
 
+    const handleGroupCrestUpdated = (groupId, crestURL) => {
+        if (!groupId) return;
+        setUserGroups((prev) => prev.map((group) => (group.id === groupId ? { ...group, crestURL } : group)));
+    };
+
     // eslint-disable-next-line no-unused-vars
    const handleSavePlayer = async (playerData, imageFile = null) => {
         // Cenário 1: Editando um jogador
@@ -801,6 +806,7 @@ function App() {
                         user={user}
                         groupId={activeGroupId}
                         isAdmin={isAdminOfActiveGroup}
+                        onCrestUpdated={handleGroupCrestUpdated}
                         onSetAdminStatus={async (targetUserId, makeAdmin) => {
                             try {
                                 const groupDocRef = doc(db, 'groups', activeGroupId);

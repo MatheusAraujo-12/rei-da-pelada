@@ -1,12 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { LucideX } from 'lucide-react';
 
+const EXCLUDED_SKILLS = new Set(['chute', 'cruzamento']);
+
+const sanitizeSkills = (rawSkills = {}) => {
+    const entries = Object.entries(rawSkills || {}).filter(([key]) => {
+        const normalized = String(key || '').toLowerCase().trim();
+        return !EXCLUDED_SKILLS.has(normalized);
+    });
+    return Object.fromEntries(entries);
+};
+
 const PeerReviewModal = ({ isOpen, player, onClose, onSave }) => {
     const [skills, setSkills] = useState({});
 
     useEffect(() => {
         if (player && isOpen) {
-             setSkills(player.selfOverall);
+            setSkills(sanitizeSkills(player.selfOverall));
         }
     }, [player, isOpen]);
 
@@ -17,10 +27,10 @@ const PeerReviewModal = ({ isOpen, player, onClose, onSave }) => {
     };
 
     const handleSave = () => {
-        onSave(player, skills);
+        onSave(player, sanitizeSkills(skills));
         onClose();
     };
-    
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-80 flex justify-center items-center z-50 p-4">
              <div className="bg-gradient-to-br from-gray-900 to-black rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-full overflow-y-auto text-white border border-cyan-400/30">
@@ -40,7 +50,7 @@ const PeerReviewModal = ({ isOpen, player, onClose, onSave }) => {
                     ))}
                 </div>
                 <div className="mt-8 flex justify-end">
-                    <button onClick={handleSave} className="bg-cyan-500 hover:bg-cyan-600 text-black font-bold py-2 px-6 rounded-lg">Salvar Avaliação</button>
+                    <button onClick={handleSave} className="bg-cyan-500 hover:bg-cyan-600 text-black font-bold py-2 px-6 rounded-lg">Salvar Avaliacao</button>
                 </div>
              </div>
         </div>
