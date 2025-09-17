@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { doc, getDoc, setDoc, serverTimestamp, collection, onSnapshot } from 'firebase/firestore';
+import { applyRatingPenaltiesToPlayers } from '../../utils/playerProgression';
 import { db, auth } from '../../services/firebase';
 import PostSessionVotingModal from './PostSessionVotingModal';
 
@@ -166,6 +167,14 @@ const SessionReportDetail = ({ session, onBack }) => {
       if (!session?.groupId || !session?.id) { alert('Sessão inválida para votação.'); return; }
       const ref = doc(db, `groups/${session.groupId}/sessions/${session.id}/feedback`, uid);
       await setDoc(ref, { ratings: ratings || {}, mvp: mvpId || null, createdAt: serverTimestamp() }, { merge: true });
+      if (session?.groupId) {
+        try {
+          await applyRatingPenaltiesToPlayers({ db, groupId: session.groupId, ratings });
+        } catch (penaltyError) {
+          console.error('Falha ao aplicar penalidades de avaliacao:', penaltyError);
+        }
+      }
+
       setIsVotingOpen(false);
       alert('Voto enviado!');
     } catch (e) {

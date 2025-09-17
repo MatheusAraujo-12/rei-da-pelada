@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter, useNavigate } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, onSnapshot, doc, getDoc, query, orderBy, updateDoc, deleteDoc, runTransaction, addDoc, arrayRemove, arrayUnion, writeBatch, serverTimestamp, setDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, getDoc, getDocs, query, where, orderBy, updateDoc, deleteDoc, runTransaction, addDoc, arrayRemove, arrayUnion, writeBatch, serverTimestamp, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 // Importações de Serviços e Componentes
@@ -20,7 +20,9 @@ import SessionReportDetail from './features/history/SessionReportDetail';
 import SessionHistoryList from './features/history/SessionHistoryList';
 import MatchHistory from './features/history/MatchHistory';
 import MatchFlow from './features/match/MatchFlow';
-import UserDashboard from './features/dashboard/UserDashboard'; 
+import UserDashboard from './features/dashboard/UserDashboard';
+import { applyMatchProgressionToPlayers } from './utils/playerProgression';
+import { subscribeToGlobalPlayer, getCachedGlobalPlayer } from './utils/playerRealtimeStore';
 
 // Importações de Ícones
 import { LucideArrowLeft, LucideUserPlus, LucideUsers, LucideSwords, LucideHistory, LucideTrophy } from 'lucide-react';
@@ -78,6 +80,41 @@ function App() {
     const [editingMatch, setEditingMatch] = useState(null);
     const [viewingSession, setViewingSession] = useState(null);
     const [groupToLeave, setGroupToLeave] = useState(null);
+
+    const globalPlayerSubsRef = useRef(new Map());
+
+    const clearGlobalPlayerSubscriptions = () => {
+        globalPlayerSubsRef.current.forEach((unsub) => {
+            try { unsub(); } catch (error) { console.error('Falha ao cancelar assinatura global:', error); }
+        });
+        globalPlayerSubsRef.current.clear();
+    };
+
+    const syncGlobalPlayerSubscriptions = (playerList) => {
+        const currentMap = globalPlayerSubsRef.current;
+        const activeIds = new Set((playerList || []).map(p => p?.id).filter(Boolean));
+
+        Array.from(currentMap.entries()).forEach(([playerId, unsubscribe]) => {
+            if (!activeIds.has(playerId)) {
+                try { unsubscribe(); } catch (error) { console.error('Falha ao cancelar assinatura global:', error); }
+                currentMap.delete(playerId);
+            }
+        });
+
+        (playerList || []).forEach((player) => {
+            if (!player?.id || currentMap.has(player.id)) return;
+            const unsubscribe = subscribeToGlobalPlayer({
+                db,
+                playerId: player.id,
+                onChange: (globalData) => {
+                    if (!globalData) return;
+                    setPlayers(prev => prev.map(p => (p.id === player.id ? { ...p, ...globalData } : p)));
+                },
+            });
+            currentMap.set(player.id, unsubscribe);
+        });
+    };
+
     
     const navigate = useNavigate();
 
@@ -139,6 +176,7 @@ function App() {
     // Efeito para carregar dados do grupo ativo
     useEffect(() => {
         if (!user || !activeGroupId) {
+            clearGlobalPlayerSubscriptions();
             setPlayers([]); setMatches([]); setSavedSessions([]); setIsAdminOfActiveGroup(false);
             return;
         }
@@ -152,7 +190,15 @@ function App() {
         });
         
         const playersColRef = collection(db, `groups/${activeGroupId}/players`);
-        const unsubPlayers = onSnapshot(query(playersColRef), s => setPlayers(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+        const unsubPlayers = onSnapshot(query(playersColRef), (snapshot) => {
+            const groupPlayers = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+            syncGlobalPlayerSubscriptions(groupPlayers);
+            const mergedPlayers = groupPlayers.map((player) => {
+                const globalSnapshot = getCachedGlobalPlayer(player.id);
+                return globalSnapshot ? { ...player, ...globalSnapshot } : player;
+            });
+            setPlayers(mergedPlayers);
+        });
 
         const matchesColRef = collection(db, `groups/${activeGroupId}/matches`);
         const mSub = onSnapshot(query(matchesColRef, orderBy('date', 'desc')), s => setMatches(s.docs.map(d => ({ id: d.id, ...d.data() }))));
@@ -160,11 +206,61 @@ function App() {
         const sessionsColRef = collection(db, `groups/${activeGroupId}/sessions`);
         const qSessions = query(sessionsColRef, orderBy('date', 'desc'));
         const sSub = onSnapshot(qSessions, s => setSavedSessions(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-        return () => { unsubGroup(); unsubPlayers(); mSub(); sSub(); };
+        return () => {
+            unsubGroup();
+            unsubPlayers();
+            mSub();
+            sSub();
+            clearGlobalPlayerSubscriptions();
+        };
     }, [user, activeGroupId]);
     
     // Funções de manipulação
     
+    const syncPlayerProfileToAdminGroups = async (playerId, payload) => {
+        try {
+            const groupsCollection = collection(db, 'groups');
+            const [createdBySnap, adminSnap] = await Promise.all([
+                getDocs(query(groupsCollection, where('createdBy', '==', playerId))),
+                getDocs(query(groupsCollection, where('admins', 'array-contains', playerId))).catch(() => null),
+            ]);
+
+            const groupIds = new Set();
+            createdBySnap?.forEach((docSnap) => groupIds.add(docSnap.id));
+            adminSnap?.forEach((docSnap) => groupIds.add(docSnap.id));
+
+            await Promise.all(Array.from(groupIds).map(async (groupId) => {
+                try {
+                    const playersCollection = collection(db, `groups/${groupId}/players`);
+                    const directRef = doc(playersCollection, playerId);
+                    const directSnap = await getDoc(directRef);
+                    const updateTargets = [];
+
+                    if (directSnap.exists()) {
+                        updateTargets.push(directRef);
+                    } else {
+                        const [createdByCandidates, idCandidates] = await Promise.all([
+                            getDocs(query(playersCollection, where('createdBy', '==', playerId))).catch(() => null),
+                            getDocs(query(playersCollection, where('id', '==', playerId))).catch(() => null),
+                        ]);
+                        createdByCandidates?.forEach((docSnap) => updateTargets.push(docSnap.ref));
+                        idCandidates?.forEach((docSnap) => updateTargets.push(docSnap.ref));
+                    }
+
+                    if (updateTargets.length === 0) {
+                        updateTargets.push(directRef);
+                    }
+
+                    await Promise.all(updateTargets.map((refToUpdate) => setDoc(refToUpdate, payload, { merge: true })));
+                } catch (syncError) {
+                    console.error('Falha ao sincronizar perfil de jogador no grupo:', groupId, syncError);
+                }
+            }));
+        } catch (syncError) {
+            console.error('Falha geral ao buscar grupos administrados:', syncError);
+        }
+    };
+
     const handleGroupAssociated = (newGroupIds) => {
         const newActiveId = newGroupIds[newGroupIds.length - 1];
         setActiveGroupId(newActiveId);
@@ -187,6 +283,10 @@ function App() {
                     }
                     const { id, ...dataToSave } = finalPlayerData;
                     await updateDoc(doc(db, 'players', id), dataToSave);
+
+                    const syncPayload = { ...dataToSave };
+                    await syncPlayerProfileToAdminGroups(id, syncPayload);
+                    setPlayers(prev => prev.map(p => (p.id === id ? { ...p, ...syncPayload } : p)));
                 } catch (e) { console.error("Erro ao ATUALIZAR perfil global:", e); }
                 finally { setIsPlayerModalOpen(false); }
             } else {
@@ -285,7 +385,8 @@ function App() {
                     photoURL = await getDownloadURL(snapshot.ref);
                     console.log("Group player picture uploaded:", photoURL);
                 }
-                const dataToSave = { ...playerData, photoURL: photoURL || null, createdBy: user.uid, createdAt: serverTimestamp() };
+                const baseProgression = (playerData.progression && typeof playerData.progression === 'object') ? playerData.progression : { matchesPlayed: 0 };
+                const dataToSave = { ...playerData, progression: baseProgression, photoURL: photoURL || null, createdBy: user.uid, createdAt: serverTimestamp() };
                 await setDoc(newDocRef, dataToSave);
                 console.log("Group player created successfully");
             } else if (!playerProfile && user) {
@@ -299,7 +400,8 @@ function App() {
                     finalPlayerData.photoURL = await getDownloadURL(snapshot.ref);
                     console.log("Profile picture uploaded:", finalPlayerData.photoURL);
                 }
-                await setDoc(doc(db, 'players', user.uid), { ...finalPlayerData, createdAt: serverTimestamp() });
+                const baseProgression = (finalPlayerData.progression && typeof finalPlayerData.progression === 'object') ? finalPlayerData.progression : { matchesPlayed: 0 };
+                await setDoc(doc(db, 'players', user.uid), { ...finalPlayerData, progression: baseProgression, createdAt: serverTimestamp() });
                 // Atualiza imediatamente o estado local para concluir o cadastro sem esperar o snapshot
                 try { setPlayerProfile({ id: user.uid, ...finalPlayerData }); } catch {}
                 console.log("Global profile created successfully");
@@ -382,10 +484,22 @@ function App() {
 
     const handleMatchEnd = async (matchData) => {
         if (!activeGroupId) return null;
+
+        let savedMatch = null;
         try {
             const matchDocRef = await addDoc(collection(db, `groups/${activeGroupId}/matches`), { ...matchData, date: serverTimestamp() });
-            return { id: matchDocRef.id, ...matchData };
-        } catch (e) { console.error("Erro ao salvar a partida:", e); return null; }
+            savedMatch = { id: matchDocRef.id, ...matchData };
+        } catch (e) {
+            console.error("Erro ao salvar a partida:", e);
+        }
+
+        try {
+            await applyMatchProgressionToPlayers({ db, groupId: activeGroupId, matchData });
+        } catch (progressionError) {
+            console.error('Falha ao aplicar evolucao dos jogadores:', progressionError);
+        }
+
+        return savedMatch;
     };
 
     const handleSessionEnd = async (sessionData) => {

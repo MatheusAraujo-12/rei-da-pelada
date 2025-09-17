@@ -118,7 +118,7 @@ const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => 
           </div>
 
           {/* Posição */}
-          <div className="absolute top-3 left-24 px-3 py-1 rounded-full text-xs font-semibold border border-indigo-700 bg-indigo-900/60 text-indigo-100">
+          <div className="absolute top-3 right-4 px-3 py-1 rounded-full text-xs font-semibold border border-indigo-700 bg-indigo-900/60 text-indigo-100">
             {position}
           </div>
 

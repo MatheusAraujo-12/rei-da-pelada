@@ -33,6 +33,7 @@ const CreatePlayerProfile = ({ user, onSave }) => {
                 detailedPosition: isGoalkeeper ? null : position,
                 preferredFoot,
                 selfOverall: baseSkills, // Começa com skills base
+                progression: { matchesPlayed: 0 },
                 createdBy: user.uid,
             };
 

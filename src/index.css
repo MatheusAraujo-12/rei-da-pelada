@@ -60,3 +60,49 @@ code {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
+/* Starfield background layer used on the dashboard */
+.starfield {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+  mix-blend-mode: screen;
+}
+
+.starfield span {
+  position: absolute;
+  width: var(--star-size, 2px);
+  height: var(--star-size, 2px);
+  left: var(--star-left, 50%);
+  top: var(--star-top, 50%);
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 9999px;
+  opacity: var(--star-opacity, 0.5);
+  filter: blur(var(--star-blur, 0px));
+  box-shadow: 0 0 6px rgba(80, 180, 255, 0.35);
+  animation: starfield-move var(--star-speed, 22s) linear infinite;
+  animation-delay: var(--star-delay, 0s);
+  will-change: transform;
+}
+
+.starfield span::after {
+  content: '';
+  position: absolute;
+  left: calc(var(--star-size, 2px) * -8);
+  top: 50%;
+  width: calc(var(--star-size, 2px) * 10);
+  height: 1px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.75));
+  transform: translateY(-50%);
+  opacity: 0.6;
+}
+
+@keyframes starfield-move {
+  0% {
+    transform: translate3d(55vw, -12vh, 0);
+  }
+  100% {
+    transform: translate3d(-70vw, 28vh, 0);
+  }
+}
