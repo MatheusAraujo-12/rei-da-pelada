@@ -195,7 +195,12 @@ function App() {
             syncGlobalPlayerSubscriptions(groupPlayers);
             const mergedPlayers = groupPlayers.map((player) => {
                 const globalSnapshot = getCachedGlobalPlayer(player.id);
-                return globalSnapshot ? { ...player, ...globalSnapshot } : player;
+                if (!globalSnapshot) return player;
+                const merged = { ...player, ...globalSnapshot };
+                if (player.adminOverall !== undefined) {
+                    merged.adminOverall = player.adminOverall;
+                }
+                return merged;
             });
             setPlayers(mergedPlayers);
         });
