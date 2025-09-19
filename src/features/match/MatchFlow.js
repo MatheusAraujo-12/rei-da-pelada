@@ -190,7 +190,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
         }
         const initialStats = {};
         availablePlayers.forEach(p => {
-            initialStats[p.id] = { name: p.name, wins: 0, draws: 0, losses: 0, goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 };
+            initialStats[p.id] = { name: p.name, wins: 0, draws: 0, losses: 0, goals: 0, assists: 0, dribbles: 0, tackles: 0, saves: 0, failures: 0 };
         });
         setSessionPlayerStats(initialStats);
         setAllTeams(finalTeams);

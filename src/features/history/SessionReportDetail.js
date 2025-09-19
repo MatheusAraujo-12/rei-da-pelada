@@ -75,7 +75,7 @@ const SessionReportDetail = ({ session, onBack }) => {
     (session.players || []).forEach(playerId => {
       stats[playerId] = {
         name: 'Desconhecido', wins: 0, draws: 0, losses: 0,
-        goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0,
+        goals: 0, assists: 0, dribbles: 0, tackles: 0, saves: 0, failures: 0,
       };
     });
 
@@ -112,6 +112,7 @@ const SessionReportDetail = ({ session, onBack }) => {
         const ps = playerStats[pId] || {};
         stats[pId].goals += ps.goals || 0;
         stats[pId].assists += ps.assists || 0;
+        stats[pId].dribbles += ps.dribbles || 0;
         stats[pId].tackles += ps.tackles || 0;
         stats[pId].saves += ps.saves || 0;
         stats[pId].failures += ps.failures || 0;
@@ -291,6 +292,7 @@ const SessionReportDetail = ({ session, onBack }) => {
           { key: 'losses', label: 'D', width: 80, align: 'center' },
           { key: 'goals', label: 'G', width: 80, align: 'center' },
           { key: 'assists', label: 'A', width: 80, align: 'center' },
+          { key: 'dribbles', label: 'Dr', width: 80, align: 'center' },
           { key: 'tackles', label: 'Ds', width: 80, align: 'center' },
           { key: 'saves', label: 'Df', width: 80, align: 'center' },
           { key: 'failures', label: 'F', width: 80, align: 'center' },
@@ -519,6 +521,7 @@ const SessionReportDetail = ({ session, onBack }) => {
                       <th className="p-3 text-center">D</th>
                       <th className="p-3 text-center">Gols</th>
                       <th className="p-3 text-center">Assist.</th>
+                      <th className="p-3 text-center">Dribles</th>
                       <th className="p-3 text-center">Desarmes</th>
                       <th className="p-3 text-center">Defesas</th>
                       <th className="p-3 text-center">Falhas</th>
@@ -533,6 +536,7 @@ const SessionReportDetail = ({ session, onBack }) => {
                         <td className="p-3 text-center text-rose-300 font-bold">{player.losses ?? 0}</td>
                         <td className="p-3 text-center text-[#b8c2ff]">{player.goals ?? 0}</td>
                         <td className="p-3 text-center text-[#b8c2ff]">{player.assists ?? 0}</td>
+                        <td className="p-3 text-center text-[#b8c2ff]">{player.dribbles ?? 0}</td>
                         <td className="p-3 text-center text-[#8fd3ff]">{player.tackles ?? 0}</td>
                         <td className="p-3 text-center text-[#8fd3ff]">{player.saves ?? 0}</td>
                         <td className="p-3 text-center text-orange-300">{player.failures ?? 0}</td>

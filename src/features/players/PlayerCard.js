@@ -2,6 +2,9 @@ import React from 'react';
 import { LucideUser, LucideEdit, LucideTrash2, LucideStar } from 'lucide-react';
 import { calculateOverall } from '../../utils/helpers';
 
+const GK_DEFAULT_SKILLS = { reflexo: 50, posicionamento: 50, lancamento: 50, folego: 50, reposicao: 50, habilidade: 50, impulsao: 50 };
+const LINE_DEFAULT_SKILLS = { finalizacao: 50, drible: 50, velocidade: 50, folego: 50, passe: 50, desarme: 50 };
+
 const fallbackSkillLabels = ['PAC', 'SHO', 'PAS', 'DRI', 'DEF', 'PHY'];
 
 const skillAliasMap = {
@@ -65,10 +68,14 @@ const buildSkillList = (selfOverall) => {
   return fallbackSkillLabels.map(label => ({ label, value: 0 }));
 };
 const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => {
-  const overall = calculateOverall(player.selfOverall);
+  const isGoalkeeper = (player.position || '').trim() === 'Goleiro';
+  const baseSkills = isGoalkeeper ? GK_DEFAULT_SKILLS : LINE_DEFAULT_SKILLS;
+  const mergedSkills = React.useMemo(() => ({ ...baseSkills, ...(player.selfOverall || {}) }), [baseSkills, player.selfOverall]);
+  const overall = calculateOverall(mergedSkills);
   const peerOverall = player.peerOverall ? calculateOverall(player.peerOverall.avgSkills) : null;
+  const adminOverall = isAdmin && player.adminOverall ? calculateOverall(player.adminOverall) : null;
   const position = player.detailedPosition || player.position || '-';
-  const skillEntries = React.useMemo(() => buildSkillList(player.selfOverall), [player.selfOverall]);
+  const skillEntries = React.useMemo(() => buildSkillList(mergedSkills), [mergedSkills]);
   // Variação de brilho/velocidade por jogador
   const seed = String(player?.id || player?.name || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0);
   const variants = [
@@ -177,6 +184,7 @@ const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => 
           </div>
         </div>
 
+
         {/* Badge de peer overall */}
         {peerOverall && (
           <div
@@ -185,6 +193,17 @@ const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => 
           >
             <LucideStar className="w-4 h-4 text-yellow-300" />
             <span className="text-sm font-bold">{peerOverall}</span>
+          </div>
+        )}
+
+        {/* Badge de overall admin (somente para admins) */}
+        {adminOverall && (
+          <div
+            className="absolute top-[100px] right-3 bg-cyan-700/60 border border-cyan-300/50 text-white rounded-xl px-2 py-1 flex items-center gap-1 shadow"
+            title="Overall do administrador"
+          >
+            <LucideStar className="w-4 h-4 text-cyan-200" />
+            <span className="text-sm font-bold">{adminOverall}</span>
           </div>
         )}
       </div>

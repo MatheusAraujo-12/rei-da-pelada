@@ -658,7 +658,7 @@ function App() {
             // Agrega estatísticas do dia
             const stats = {};
             const ensurePlayer = (id, name) => {
-                if (!stats[id]) stats[id] = { name: name || 'Desconhecido', wins: 0, draws: 0, losses: 0, goals: 0, assists: 0, tackles: 0 };
+                if (!stats[id]) stats[id] = { name: name || 'Desconhecido', wins: 0, draws: 0, losses: 0, goals: 0, assists: 0, dribbles: 0, tackles: 0 };
                 if (name && (!stats[id].name || stats[id].name === 'Desconhecido')) stats[id].name = name;
             };
             for (const { matches } of sessionsWithMatches) {
@@ -693,6 +693,7 @@ function App() {
                             ensurePlayer(pid, pInfo?.name);
                             stats[pid].goals += Number(st.goals || 0);
                             stats[pid].assists += Number(st.assists || 0);
+                            stats[pid].dribbles += Number(st.dribbles || 0);
                             stats[pid].tackles += Number(st.tackles || 0);
                         }
                     }
@@ -717,7 +718,7 @@ function App() {
                 htmlParts.push('<p>Sem partidas registradas hoje.</p>');
             } else {
                 htmlParts.push(`<table><thead><tr>
-                    <th>Jogador</th><th>V</th><th>E</th><th>D</th><th>Gols</th><th>Assist.</th><th>Desarmes</th>
+                    <th>Jogador</th><th>V</th><th>E</th><th>D</th><th>Gols</th><th>Assist.</th><th>Dribles</th><th>Desarmes</th>
                 </tr></thead><tbody>`);
                 ranking.forEach(p => {
                     htmlParts.push(`<tr>
@@ -727,6 +728,7 @@ function App() {
                         <td style="text-align:center;">${p.losses}</td>
                         <td style="text-align:center;">${p.goals}</td>
                         <td style="text-align:center;">${p.assists}</td>
+                        <td style="text-align:center;">${p.dribbles}</td>
                         <td style="text-align:center;">${p.tackles}</td>
                     </tr>`);
                 });

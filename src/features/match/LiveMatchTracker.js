@@ -37,22 +37,25 @@ const LiveMatchTracker = ({
     };
 
     const renderTeam = (team, teamName, teamKey) => (
-        <div className="w-full bg-gray-800/50 rounded-xl p-4 space-y-4">
-            <h3 className="text-2xl font-bold text-indigo-300 mb-2 text-center">{teamName}</h3>
-            {team && team.filter(p => p).map(p => (
-                <button 
-                    key={p.id} 
-                    onClick={() => onPlayerAction(p, teamKey)}
-                    className="w-full bg-gray-900/70 p-3 rounded-lg text-left hover:bg-gray-700 transition-colors"
-                >
-                    <p className="font-bold text-lg text-center text-white">{p.name}</p>
-                    <div className="flex justify-around text-xs text-gray-400 mt-2">
-                        <span>G: {playerStats[p.id]?.goals || 0}</span>
-                        <span>A: {playerStats[p.id]?.assists || 0}</span>
-                        <span>D: {playerStats[p.id]?.tackles || 0}</span>
-                    </div>
-                </button>
-            ))}
+        <div className="flex-1 min-w-[150px] bg-gray-800/60 rounded-xl p-3 space-y-3 shadow-lg shadow-black/10">
+            <h3 className="text-sm font-semibold text-indigo-200 text-center uppercase tracking-widest">{teamName}</h3>
+            <div className="space-y-2">
+                {team && team.filter(p => p).map(p => (
+                    <button
+                        key={p.id}
+                        onClick={() => onPlayerAction(p, teamKey)}
+                        className="w-full bg-gray-900/80 p-2 rounded-lg text-left hover:bg-gray-700 transition-colors"
+                    >
+                        <p className="font-semibold text-sm text-center text-white truncate" title={p.name}>{p.name}</p>
+                        <div className="mt-1 flex justify-between text-[10px] text-gray-400">
+                            <span>G: {playerStats[p.id]?.goals || 0}</span>
+                            <span>A: {playerStats[p.id]?.assists || 0}</span>
+                            <span>Dr: {playerStats[p.id]?.dribbles || 0}</span>
+                            <span>Ds: {playerStats[p.id]?.tackles || 0}</span>
+                        </div>
+                    </button>
+                ))}
+            </div>
         </div>
     );
 
@@ -102,8 +105,13 @@ const LiveMatchTracker = ({
                         <span className="text-white">{score.teamB}</span>
                     </h2>
                 </div>
-                <div className="flex flex-col md:flex-row gap-6">
+                <div className="relative flex flex-wrap items-stretch justify-center gap-4">
                     {teams?.teamA && renderTeam(teams.teamA, 'Time A', 'teamA')}
+                    {teams?.teamA && teams?.teamB && (
+                        <div className="flex items-center justify-center px-2">
+                            <span className="rounded-full border border-indigo-500/60 bg-indigo-500/10 px-3 py-1 text-sm font-bold uppercase tracking-[0.3em] text-indigo-200">VS</span>
+                        </div>
+                    )}
                     {teams?.teamB && renderTeam(teams.teamB, 'Time B', 'teamB')}
                 </div>
                 <div className="text-center mt-6">

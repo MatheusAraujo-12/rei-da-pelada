@@ -49,6 +49,7 @@ const getMatchStats = (stats = {}) => ({
   assists: Number(stats.assists || 0),
   tackles: Number(stats.tackles || 0),
   saves: Number(stats.saves || 0),
+  dribbles: Number(stats.dribbles || 0),
   failures: Number(stats.failures || 0),
 });
 
@@ -60,87 +61,80 @@ const getRandomStatKey = (selfOverall) => {
 };
 
 const applyRoleGains = (role, matchStats, skills) => {
+  const { goals = 0, assists = 0, tackles = 0, saves = 0, dribbles = 0 } = matchStats || {};
+
   if (role === 'goalkeeper') {
-    if (matchStats.saves > 0) {
-      applyDelta(skills, 'posicionamento', matchStats.saves * 1);
-      applyDelta(skills, 'reflexo', matchStats.saves * 1);
+    if (saves > 0) {
+      applyDelta(skills, 'impulsao', saves * 1);
+      applyDelta(skills, 'reflexo', saves * 1);
     }
-    if (matchStats.assists > 0) {
-      applyDelta(skills, 'lancamento', matchStats.assists * 1);
+    if (assists > 0) {
+      applyDelta(skills, 'lancamento', assists * 1);
+      applyDelta(skills, 'reposicao', assists * 1);
     }
-    if (matchStats.goals > 0) {
-      applyDelta(skills, 'lancamento', matchStats.goals * 0.5);
+    if (goals > 0) {
+      applyDelta(skills, 'habilidade', goals * 1);
+    }
+    if (tackles > 0) {
+      applyDelta(skills, 'posicionamento', tackles * 1);
     }
     return;
   }
 
-  switch (role) {
-    case 'attacker':
-      if (matchStats.goals > 0) applyDelta(skills, 'finalizacao', matchStats.goals * 1);
-      if (matchStats.assists > 0) applyDelta(skills, 'passe', matchStats.assists * 1);
-      if (matchStats.tackles > 0) applyDelta(skills, 'desarme', matchStats.tackles * 0.5);
-      break;
-    case 'midfielder':
-      if (matchStats.goals > 0) applyDelta(skills, 'finalizacao', matchStats.goals * 0.5);
-      if (matchStats.assists > 0) applyDelta(skills, 'passe', matchStats.assists * 1);
-      if (matchStats.tackles > 0) applyDelta(skills, 'desarme', matchStats.tackles * 1);
-      break;
-    case 'defender':
-      if (matchStats.goals > 0) applyDelta(skills, 'finalizacao', matchStats.goals * 0.5);
-      if (matchStats.assists > 0) applyDelta(skills, 'passe', matchStats.assists * 0.5);
-      if (matchStats.tackles > 0) applyDelta(skills, 'desarme', matchStats.tackles * 2);
-      break;
-    default:
-      break;
+  if (goals > 0) applyDelta(skills, 'finalizacao', goals * 2);
+  if (assists > 0) applyDelta(skills, 'passe', assists * 2);
+  if (tackles > 0) applyDelta(skills, 'desarme', tackles * 2);
+  if (dribbles > 0) {
+    applyDelta(skills, 'drible', dribbles * 1);
+    applyDelta(skills, 'velocidade', dribbles * 1);
   }
 };
 
 const applyRoleFailures = (role, failures, skills) => {
   if (!failures) return;
-  switch (role) {
-    case 'attacker':
-    case 'midfielder':
-      applyDelta(skills, 'finalizacao', -1 * failures);
-      applyDelta(skills, 'passe', -1 * failures);
-      break;
-    case 'defender':
-      applyDelta(skills, 'desarme', -1 * failures);
-      applyDelta(skills, 'passe', -0.5 * failures);
-      break;
-    case 'goalkeeper':
-      applyDelta(skills, 'reflexo', -1 * failures);
-      applyDelta(skills, 'posicionamento', -0.5 * failures);
-      break;
-    default:
-      break;
+  if (role === 'goalkeeper') {
+    applyDelta(skills, 'folego', -1 * failures);
+    return;
+  }
+  applyDelta(skills, 'passe', -1 * failures);
+};
+
+const applyLossPenalty = (role, skills) => {
+  if (role === 'goalkeeper') {
+    applyDelta(skills, 'posicionamento', -1);
+    applyDelta(skills, 'reflexo', -1);
+    applyDelta(skills, 'impulsao', -1);
+    return;
+  }
+  applyDelta(skills, 'finalizacao', -1);
+  applyDelta(skills, 'passe', -1);
+  applyDelta(skills, 'desarme', -1);
+};
+
+const applyMilestoneBonuses = (role, skills, winEarned, drawEarned) => {
+  if (winEarned) {
+    if (role === 'goalkeeper') {
+      applyDelta(skills, 'posicionamento', 1);
+      applyDelta(skills, 'reflexo', 1);
+    } else {
+      applyDelta(skills, 'folego', 1);
+      applyDelta(skills, 'velocidade', 1);
+    }
+  }
+  if (drawEarned) {
+    applyDelta(skills, 'folego', 1);
   }
 };
 
-const applyLossPenalty = (skills) => {
-  Object.keys(skills || {}).forEach((key) => {
-    if (key === 'folego' || key === 'velocidade') return;
-    if (typeof skills[key] === 'number') applyDelta(skills, key, -0.5);
-  });
-};
-
-const applyTenMatchBonus = (skills, previousMatches, newMatches) => {
-  const prevMilestone = Math.floor(previousMatches / 10);
-  const newMilestone = Math.floor(newMatches / 10);
-  if (newMilestone > prevMilestone) {
-    applyDelta(skills, 'folego', newMilestone - prevMilestone);
-    applyDelta(skills, 'velocidade', newMilestone - prevMilestone);
-  }
-};
-
-const applyRandomPenalty = (skills, count) => {
-  const appliedKeys = [];
+const applyRandomPenalty = (skills, count, amount = 1) => {
+  const applied = [];
   for (let i = 0; i < count; i += 1) {
     const key = getRandomStatKey(skills);
     if (!key) break;
-    applyDelta(skills, key, -1);
-    appliedKeys.push(key);
+    applyDelta(skills, key, -amount);
+    applied.push({ key, amount });
   }
-  return appliedKeys;
+  return applied;
 };
 
 const cloneSkills = (selfOverall = {}) => {
@@ -185,12 +179,13 @@ export const applyMatchProgressionToPlayers = async ({ db, groupId, matchData })
     applyRoleGains(role, matchStats, selfSkills);
     applyRoleFailures(role, matchStats.failures, selfSkills);
 
+    const teamWon = (teamKey === 'teamA' && scoreA > scoreB) || (teamKey === 'teamB' && scoreB > scoreA);
     const teamLost = (teamKey === 'teamA' && scoreA < scoreB) || (teamKey === 'teamB' && scoreB < scoreA);
-    if (teamLost) applyLossPenalty(selfSkills);
+    const teamDraw = !teamLost && !teamWon;
 
-    if (role !== 'goalkeeper') {
-      applyTenMatchBonus(selfSkills, previousMatches, newMatches);
-    }
+    applyMilestoneBonuses(role, selfSkills, teamWon, teamDraw);
+
+    if (teamLost) applyLossPenalty(role, selfSkills);
 
     const progression = { ...(playerRecord.progression || {}), matchesPlayed: newMatches };
     const changed = needsUpdate(playerRecord.selfOverall || {}, selfSkills) || newMatches !== previousMatches;
@@ -240,13 +235,12 @@ export const applyMatchProgressionToPlayers = async ({ db, groupId, matchData })
   if (hasUpdates) await batch.commit();
 };
 
-const getPenaltyCountFromRating = (overall, rating) => {
-  let penalties = 0;
-  if (rating < 2 && overall >= 50) penalties += 1;
-  if (overall >= 60 && rating < 3) penalties += 1;
-  if (overall >= 70 && rating < 4) penalties += 1;
-  if (overall >= 80 && rating < 5) penalties += 1;
-  return penalties;
+const getRandomPenaltyInstructions = (overall, rating) => {
+  const instructions = [];
+  if (overall >= 60 && rating < 3) instructions.push({ count: 1, amount: 2 });
+  if (overall >= 70 && rating < 4) instructions.push({ count: 1, amount: 2 });
+  if (overall >= 80 && rating < 5) instructions.push({ count: 1, amount: 2 });
+  return instructions;
 };
 
 export const applyRatingPenaltiesToPlayers = async ({ db, groupId, ratings }) => {
@@ -264,22 +258,48 @@ export const applyRatingPenaltiesToPlayers = async ({ db, groupId, ratings }) =>
       const snap = await getDoc(playerRef);
       if (!snap.exists()) return;
       const playerData = snap.data();
+      const role = determineRole(playerData);
       const overall = calculateOverall(playerData.selfOverall || {});
-      const penalties = getPenaltyCountFromRating(overall, rating);
-      if (!penalties) return;
+      const randomInstructions = getRandomPenaltyInstructions(overall, rating);
+      const applyLowRatingPenalty = rating < 2 && overall >= 50;
+      if (!applyLowRatingPenalty && randomInstructions.length === 0) return;
 
       const groupSkills = cloneSkills(playerData.selfOverall);
-      const appliedKeys = applyRandomPenalty(groupSkills, penalties);
-      if (appliedKeys.length > 0) {
-        batch.update(playerRef, { selfOverall: groupSkills });
-        hasUpdates = true;
+      const deterministicAdjustments = [];
+      const applyDeterministicPenalty = (key, amount) => {
+        applyDelta(groupSkills, key, -amount);
+        deterministicAdjustments.push({ key, amount });
+      };
+
+      if (applyLowRatingPenalty) {
+        if (role === 'goalkeeper') {
+          applyDeterministicPenalty('reposicao', 1);
+          applyDeterministicPenalty('habilidade', 1);
+          applyDeterministicPenalty('folego', 1);
+        } else {
+          applyDeterministicPenalty('drible', 1);
+          applyDeterministicPenalty('velocidade', 1);
+          applyDeterministicPenalty('folego', 1);
+        }
       }
+
+      const randomAdjustments = [];
+      randomInstructions.forEach(({ count, amount }) => {
+        const applied = applyRandomPenalty(groupSkills, count, amount);
+        randomAdjustments.push(...applied);
+      });
+
+      if (deterministicAdjustments.length === 0 && randomAdjustments.length === 0) return;
+
+      batch.update(playerRef, { selfOverall: groupSkills });
+      hasUpdates = true;
 
       const globalRef = doc(db, 'players', playerId);
       const globalSnap = await getDoc(globalRef);
       if (globalSnap.exists()) {
         const globalSkills = cloneSkills(globalSnap.data().selfOverall);
-        appliedKeys.forEach((key) => applyDelta(globalSkills, key, -1));
+        deterministicAdjustments.forEach(({ key, amount }) => applyDelta(globalSkills, key, -amount));
+        randomAdjustments.forEach(({ key, amount }) => applyDelta(globalSkills, key, -amount));
         batch.update(globalRef, { selfOverall: globalSkills });
         hasUpdates = true;
       }

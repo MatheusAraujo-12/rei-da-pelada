@@ -59,13 +59,17 @@ const HallOfFame = ({ players, matches }) => {
 
     const rankings = useMemo(() => {
         const aggregatedStats = {};
-        players.forEach(p => { aggregatedStats[p.id] = { id: p.id, name: p.name, position: p.position, goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 }; });
+        players.forEach(p => { aggregatedStats[p.id] = { id: p.id, name: p.name, position: p.position, goals: 0, assists: 0, dribbles: 0, tackles: 0, saves: 0, failures: 0 }; });
         filteredMatches.forEach(match => {
             if(match.playerStats) {
                 for (const playerId in match.playerStats) {
                     if (aggregatedStats[playerId]) {
                         Object.keys(match.playerStats[playerId]).forEach(stat => {
-                            aggregatedStats[playerId][stat] += match.playerStats[playerId][stat] || 0;
+                            const value = match.playerStats[playerId][stat] || 0;
+                            if (typeof aggregatedStats[playerId][stat] !== 'number') {
+                                aggregatedStats[playerId][stat] = 0;
+                            }
+                            aggregatedStats[playerId][stat] += value;
                         });
                     }
                 }

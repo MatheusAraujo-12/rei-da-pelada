@@ -8,10 +8,11 @@ const sanitizeAdminSkills = (rawSkills = {}, fallback = {}) => {
         const normalized = String(key || '').toLowerCase().trim();
         return !ADMIN_EXCLUDED_SKILLS.has(normalized);
     });
-    if (entries.length === 0 && Object.keys(fallback).length > 0) {
-        return { ...fallback };
+    const sanitized = Object.fromEntries(entries);
+    if (Object.keys(fallback || {}).length > 0) {
+        return { ...fallback, ...sanitized };
     }
-    return Object.fromEntries(entries);
+    return sanitized;
 };
 
 const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
@@ -26,7 +27,7 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
     const [imagePreview, setImagePreview] = useState(null);
     
     const initialLineSkills = useMemo(() => ({ finalizacao: 50, drible: 50, velocidade: 50, folego: 50, passe: 50, desarme: 50 }), []);
-    const initialGkSkills = useMemo(() => ({ reflexo: 50, posicionamento: 50, lancamento: 50 }), []);
+    const initialGkSkills = useMemo(() => ({ reflexo: 50, posicionamento: 50, lancamento: 50, folego: 50, reposicao: 50, habilidade: 50, impulsao: 50 }), []);
 
     const [skills, setSkills] = useState(initialLineSkills);
     const [adminSkills, setAdminSkills] = useState(null);
@@ -40,7 +41,7 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
                 setName(player.name || '');
                 setAge(player.age || '');
                 setPosition(player.position || 'Linha');
-                setSkills(player.selfOverall || baseSkills);
+                setSkills(player.selfOverall ? { ...baseSkills, ...player.selfOverall } : baseSkills);
                 setDetailedPosition(player.detailedPosition || 'Meio-Campo');
                 setPreferredFoot(player.preferredFoot || 'Direita');
                 setPreferredSide(player.preferredSide || 'Qualquer');

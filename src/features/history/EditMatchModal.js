@@ -22,7 +22,7 @@ const EditMatchModal = ({ isOpen, onClose, match, players, onSave }) => {
             const newStats = { ...currentStats };
             
             // Criamos uma nova cópia do objeto do jogador específico
-            const playerStats = { ...(newStats[playerId] || { goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 }) };
+            const playerStats = { ...(newStats[playerId] || { goals: 0, assists: 0, dribbles: 0, tackles: 0, saves: 0, failures: 0 }) };
             
             const currentValue = playerStats[stat] || 0;
             playerStats[stat] = Math.max(0, currentValue + delta);
@@ -56,7 +56,7 @@ const EditMatchModal = ({ isOpen, onClose, match, players, onSave }) => {
                             <div key={playerId} className="bg-gray-800 p-4 rounded-lg">
                                 <h3 className="font-bold text-lg text-white mb-3">{player.name}</h3>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                    {Object.keys(localStats[playerId] || { goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 }).map(statName => (
+                                    {Object.keys(localStats[playerId] || { goals: 0, assists: 0, dribbles: 0, tackles: 0, saves: 0, failures: 0 }).map(statName => (
                                          <div key={statName}>
                                             <label className="capitalize text-sm text-gray-400">{statName}</label>
                                             <div className="flex items-center gap-2 mt-1">

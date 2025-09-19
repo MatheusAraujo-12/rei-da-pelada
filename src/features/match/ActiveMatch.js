@@ -2,6 +2,9 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import LiveMatchTracker from './LiveMatchTracker';
 import SubstitutionModal from './SubstitutionModal';
 
+const EMPTY_MATCH_PLAYER_STATS = { goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0, dribbles: 0 };
+const fillPlayerStats = (stats = {}) => ({ ...EMPTY_MATCH_PLAYER_STATS, ...stats });
+
 const ActiveMatch = ({ initialTeams, onMatchEnd, onTeamsUpdate, groupId, initialDurationSec = 10 * 60 }) => {
     const [allTeams, setAllTeams] = useState(initialTeams);
     const [timeLeft, setTimeLeft] = useState(initialDurationSec);
@@ -12,7 +15,7 @@ const ActiveMatch = ({ initialTeams, onMatchEnd, onTeamsUpdate, groupId, initial
     const initialPlayerStats = useMemo(() => {
         const stats = {};
         initialTeams.flat().forEach(p => {
-            if (p) stats[p.id] = { goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 };
+            if (p) stats[p.id] = { ...EMPTY_MATCH_PLAYER_STATS };
         });
         return stats;
     }, [initialTeams]);
@@ -80,7 +83,10 @@ const ActiveMatch = ({ initialTeams, onMatchEnd, onTeamsUpdate, groupId, initial
                     if (typeof saved.timeLeft === 'number') setTimeLeft(saved.timeLeft);
                     if (typeof saved.isPaused === 'boolean') setIsPaused(saved.isPaused);
                     if (saved.score && typeof saved.score.teamA === 'number' && typeof saved.score.teamB === 'number') setScore(saved.score);
-                    if (saved.playerStats && typeof saved.playerStats === 'object') setPlayerStats(saved.playerStats);
+                    if (saved.playerStats && typeof saved.playerStats === 'object') {
+                        const normalizedStats = Object.fromEntries(Object.entries(saved.playerStats).map(([id, stats]) => [id, fillPlayerStats(stats)]));
+                        setPlayerStats(normalizedStats);
+                    }
                     if (Array.isArray(saved.history)) setHistory(saved.history);
                     if (saved.startedAt) startedAtRef.current = saved.startedAt;
                     // worker será configurado no efeito dedicado acima
@@ -153,10 +159,10 @@ const ActiveMatch = ({ initialTeams, onMatchEnd, onTeamsUpdate, groupId, initial
         
         setPlayerStats(prev => {
             const newPlayerStats = { ...prev };
-            const pStats = newPlayerStats[player.id] || { goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 };
+            const pStats = fillPlayerStats(newPlayerStats[player.id]);
             newPlayerStats[player.id] = { ...pStats, [statToUpdate]: (pStats[statToUpdate] || 0) + 1 };
             if (assisterId) {
-                const aStats = newPlayerStats[assisterId] || { goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0 };
+                const aStats = fillPlayerStats(newPlayerStats[assisterId]);
                 newPlayerStats[assisterId] = { ...aStats, assists: (aStats.assists || 0) + 1 };
             }
             return newPlayerStats;
