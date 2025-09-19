@@ -118,11 +118,14 @@ const applyMilestoneBonuses = (role, skills, winEarned, drawEarned) => {
       applyDelta(skills, 'reflexo', 1);
     } else {
       applyDelta(skills, 'folego', 1);
-      applyDelta(skills, 'velocidade', 1);
     }
   }
   if (drawEarned) {
-    applyDelta(skills, 'folego', 1);
+    if (role === 'goalkeeper') {
+      applyDelta(skills, 'folego', 1);
+    } else {
+      applyDelta(skills, 'folego', 0.5);
+    }
   }
 };
 

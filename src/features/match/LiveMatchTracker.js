@@ -4,6 +4,50 @@ import ConfirmationModal from '../../components/ConfirmationModal';
 import PlayerActionModal from './PlayerActionModal';
 import AssistSelectorModal from './AssistSelectorModal';
 
+const PlayerPickerModal = ({ isOpen, onClose, teams, onSelect }) => {
+    if (!isOpen) return null;
+    const teamA = (teams?.teamA || []).filter(Boolean);
+    const teamB = (teams?.teamB || []).filter(Boolean);
+    const renderTeamGroup = (players, label, teamKey) => (
+        <div className="space-y-2">
+            <h3 className="text-sm font-semibold uppercase tracking-[0.3em] text-indigo-300">{label}</h3>
+            {players.length > 0 ? (
+                <div className="space-y-2">
+                    {players.map((player) => (
+                        <button
+                            key={`${teamKey}-${player.id}`}
+                            onClick={() => onSelect(player, teamKey)}
+                            className="w-full rounded-lg border border-indigo-500/30 bg-indigo-900/40 px-3 py-2 text-left text-sm font-semibold text-white hover:border-indigo-400 hover:bg-indigo-800/60 transition-colors"
+                        >
+                            {player.name}
+                        </button>
+                    ))}
+                </div>
+            ) : (
+                <p className="text-xs text-slate-400">Nenhum jogador disponivel.</p>
+            )}
+        </div>
+    );
+
+
+    return (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4">
+            <div className="w-full max-w-xl rounded-2xl border border-indigo-500/40 bg-[#0b1220]/95 p-6 shadow-2xl">
+                <div className="mb-4 flex items-center justify-between">
+                    <h2 className="text-lg font-bold text-white">Selecionar jogador</h2>
+                    <button onClick={onClose} className="rounded-full border border-slate-600 p-2 text-slate-300 hover:text-white">
+                        <span className="sr-only">Fechar</span>
+                        <span aria-hidden="true">X</span>
+                    </button>
+                </div>
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                    {renderTeamGroup(teamA, 'Time A', 'teamA')}
+                    {renderTeamGroup(teamB, 'Time B', 'teamB')}
+                </div>
+            </div>
+        </div>
+    );
+};
 // Substituicao controlada pelo componente pai (ActiveMatch)
 const LiveMatchTracker = ({
     teams,
@@ -25,6 +69,8 @@ const LiveMatchTracker = ({
     onSelectAssister,
 }) => {
     const [showConfirm, setShowConfirm] = useState(false);
+    const [isPlayerPickerOpen, setIsPlayerPickerOpen] = useState(false);
+    const fieldStripes = React.useMemo(() => Array.from({ length: 6 }), []);
 
     const formatTime = (s) => {
         if (isNaN(s) || s < 0) s = 0;
@@ -36,31 +82,24 @@ const LiveMatchTracker = ({
         onEndMatch(result);
     };
 
-    const renderTeam = (team, teamName, teamKey) => (
-        <div className="flex-1 min-w-[150px] bg-gray-800/60 rounded-xl p-3 space-y-3 shadow-lg shadow-black/10">
-            <h3 className="text-sm font-semibold text-indigo-200 text-center uppercase tracking-widest">{teamName}</h3>
-            <div className="space-y-2">
-                {team && team.filter(p => p).map(p => (
-                    <button
-                        key={p.id}
-                        onClick={() => onPlayerAction(p, teamKey)}
-                        className="w-full bg-gray-900/80 p-2 rounded-lg text-left hover:bg-gray-700 transition-colors"
-                    >
-                        <p className="font-semibold text-sm text-center text-white truncate" title={p.name}>{p.name}</p>
-                        <div className="mt-1 flex justify-between text-[10px] text-gray-400">
-                            <span>G: {playerStats[p.id]?.goals || 0}</span>
-                            <span>A: {playerStats[p.id]?.assists || 0}</span>
-                            <span>Dr: {playerStats[p.id]?.dribbles || 0}</span>
-                            <span>Ds: {playerStats[p.id]?.tackles || 0}</span>
-                        </div>
-                    </button>
-                ))}
-            </div>
-        </div>
-    );
+    const handleOpenPlayerPicker = () => setIsPlayerPickerOpen(true);
+    const handleClosePlayerPicker = () => setIsPlayerPickerOpen(false);
+    const handleSelectPlayerFromPicker = (player, teamKey) => {
+        setIsPlayerPickerOpen(false);
+        if (player) onPlayerAction(player, teamKey);
+    };
+
+    const fieldAnimationStyles = `@keyframes interactive-field-ball {
+        0% { transform: translate(-50%, -50%) translateX(-120px) translateY(0); }
+        25% { transform: translate(-50%, -50%) translateX(-60px) translateY(-12px); }
+        50% { transform: translate(-50%, -50%) translateX(0) translateY(0); }
+        75% { transform: translate(-50%, -50%) translateX(60px) translateY(-12px); }
+        100% { transform: translate(-50%, -50%) translateX(-120px) translateY(0); }
+    }`;
 
     return (
         <>
+            <style>{fieldAnimationStyles}</style>
             <PlayerActionModal 
                 isOpen={!!playerForAction}
                 onClose={() => onPlayerAction(null, null)}
@@ -105,14 +144,39 @@ const LiveMatchTracker = ({
                         <span className="text-white">{score.teamB}</span>
                     </h2>
                 </div>
-                <div className="relative flex flex-wrap items-stretch justify-center gap-4">
-                    {teams?.teamA && renderTeam(teams.teamA, 'Time A', 'teamA')}
-                    {teams?.teamA && teams?.teamB && (
-                        <div className="flex items-center justify-center px-2">
-                            <span className="rounded-full border border-indigo-500/60 bg-indigo-500/10 px-3 py-1 text-sm font-bold uppercase tracking-[0.3em] text-indigo-200">VS</span>
-                        </div>
-                    )}
-                    {teams?.teamB && renderTeam(teams.teamB, 'Time B', 'teamB')}
+                <div
+                    className="relative mx-auto mt-4 h-64 w-full max-w-3xl cursor-pointer select-none overflow-hidden rounded-[32px] border border-emerald-900/60 bg-[#0b3a14] shadow-[0_18px_45px_rgba(6,24,10,0.4)] transition-transform hover:scale-[1.01]"
+                    role="button"
+                    tabIndex={0}
+                    onClick={handleOpenPlayerPicker}
+                    onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); handleOpenPlayerPicker(); } }}
+                >
+                    <div className="pointer-events-none absolute inset-0 flex">
+                        {fieldStripes.map((_, index) => (
+                            <span
+                                key={`field-stripe-${index}`}
+                                className={`flex-1 ${index % 2 === 0 ? 'bg-[#134820]/45' : 'bg-[#0d3116]'}`}
+                            />
+                        ))}
+                    </div>
+                    <div className="pointer-events-none absolute inset-2 rounded-[28px] border border-white/15" />
+                    <div className="pointer-events-none absolute inset-y-2 left-1/2 w-px -translate-x-1/2 bg-white/25" />
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                        <div className="h-36 w-36 rounded-full border border-white/18" />
+                        <div className="h-2 w-2 rounded-full bg-white/70" />
+                    </div>
+                    <div className="pointer-events-none absolute inset-y-10 left-4 w-24 rounded-r-[26px] border border-white/18" />
+                    <div className="pointer-events-none absolute inset-y-18 left-8 w-12 rounded-r-[20px] border border-white/12" />
+                    <div className="pointer-events-none absolute inset-y-10 right-4 w-24 rounded-l-[26px] border border-white/18" />
+                    <div className="pointer-events-none absolute inset-y-18 right-8 w-12 rounded-l-[20px] border border-white/12" />
+                    <div
+                        className="pointer-events-none absolute top-1/2 left-1/2 h-5 w-5 rounded-full border border-white/55 bg-gradient-to-br from-white via-slate-200 to-slate-500 shadow-[0_6px_10px_rgba(0,0,0,0.35)]"
+                        style={{ animation: 'interactive-field-ball 3.4s ease-in-out infinite' }}
+                    />
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-emerald-50/90">
+                        <span className="text-[10px] uppercase tracking-[0.45em]">Campo Interativo</span>
+                        <span className="mt-1 text-xs font-semibold rounded-full bg-black/25 px-3 py-1">Toque para registrar um evento</span>
+                    </div>
                 </div>
                 <div className="text-center mt-6">
                     <button onClick={handleEndMatchClick} className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-8 rounded-lg text-lg">
@@ -120,6 +184,12 @@ const LiveMatchTracker = ({
                     </button>
                 </div>
             </div>
+            <PlayerPickerModal
+                isOpen={isPlayerPickerOpen}
+                onClose={handleClosePlayerPicker}
+                teams={teams}
+                onSelect={handleSelectPlayerFromPicker}
+            />
         </>
     );
 };
