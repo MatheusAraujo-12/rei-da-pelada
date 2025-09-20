@@ -3,11 +3,19 @@ import { LucideX, LucideCamera } from 'lucide-react';
 
 const ADMIN_EXCLUDED_SKILLS = new Set(['chute', 'cruzamento']);
 
+const clampSkillValue = (value, fallback = 50) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return fallback;
+    return Math.min(99, Math.max(1, Math.round(numeric)));
+};
+
 const sanitizeAdminSkills = (rawSkills = {}, fallback = {}) => {
-    const entries = Object.entries(rawSkills || {}).filter(([key]) => {
-        const normalized = String(key || '').toLowerCase().trim();
-        return !ADMIN_EXCLUDED_SKILLS.has(normalized);
-    });
+    const entries = Object.entries(rawSkills || {})
+        .filter(([key]) => {
+            const normalized = String(key || '').toLowerCase().trim();
+            return !ADMIN_EXCLUDED_SKILLS.has(normalized);
+        })
+        .map(([key, value]) => [key, clampSkillValue(value, typeof fallback === 'object' && fallback !== null ? (fallback[key] ?? 50) : 50)]);
     const sanitized = Object.fromEntries(entries);
     if (Object.keys(fallback || {}).length > 0) {
         return { ...fallback, ...sanitized };
@@ -106,7 +114,7 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
     };
 
     const handleAdminSkillChange = (skill, value) => {
-        setAdminSkills(prev => ({ ...prev, [skill]: Number(value) }));
+        setAdminSkills(prev => ({ ...prev, [skill]: clampSkillValue(value, prev?.[skill] ?? 50) }));
     };
     
     return (
@@ -175,11 +183,11 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
                                         <input
                                             type="range"
                                             min="1" max="99"
-                                            value={value}
+                                            value={clampSkillValue(value, adminSkills?.[skill] ?? 50)}
                                             onChange={e => handleAdminSkillChange(skill, e.target.value)}
                                             className="w-full h-2 rounded-lg bg-[#182036] appearance-none cursor-pointer range-slider"
                                         />
-                                        <span className="text-[#a855f7] font-bold w-10 text-center">{value}</span>
+                                        <span className="text-[#a855f7] font-bold w-10 text-center">{clampSkillValue(value, adminSkills?.[skill] ?? 50)}</span>
                                     </div>
                                 </div>
                             ))}
@@ -197,3 +205,4 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
 };
 
 export default PlayerModal;
+

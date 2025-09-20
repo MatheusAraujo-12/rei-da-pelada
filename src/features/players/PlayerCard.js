@@ -86,7 +86,7 @@ const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => 
   const __unused = variants.length + seed; void __unused;
 
   return (
-    <div className="relative w-full max-w-[280px] min-h-[420px] mx-auto">
+    <div className="relative w-full max-w-[220px] min-h-[360px] mx-auto">
       {/* Conteúdo com bordas arredondadas (sem animação) */}
       <div className="relative flex h-full w-full flex-col rounded-3xl overflow-hidden bg-gradient-to-b from-[#0b1220] via-[#0b1220]/95 to-black border border-[#152238]">
         {/* Overlays decorativos */}
@@ -98,8 +98,8 @@ const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => 
         }} />
 
         {/* Topo: retrato + badges */}
-        <div className="relative h-48 flex items-center justify-center">
-          <div className="relative w-28 h-28 rounded-full overflow-hidden ring-4 ring-indigo-400/70 ring-offset-4 ring-offset-[#0b1220] shadow-xl">
+        <div className="relative h-40 flex items-center justify-center">
+          <div className="relative w-24 h-24 rounded-full overflow-hidden ring-4 ring-indigo-400/70 ring-offset-4 ring-offset-[#0b1220] shadow-xl">
             {player.photoURL ? (
               <img
                 src={player.photoURL + (player.photoURL.includes('?') ? '&' : '?') + 'v=' + (player.updatedAt?.seconds || player.updatedAt || 0)}
@@ -108,12 +108,12 @@ const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => 
               />
             ) : (
               <div className="w-full h-full bg-[#0f1a2e] flex items-center justify-center">
-                <LucideUser className="w-14 h-14 text-indigo-300/70" />
+                <LucideUser className="w-12 h-12 text-indigo-300/70" />
               </div>
             )}
           </div>
           {false && (
-            <div className="absolute top-9 right-4 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-fuchsia-700 bg-fuchsia-900/60 text-fuchsia-100">
+            <div className="absolute top-9 right-4 px-2 py-0.5 rounded-full text-[9px] font-semibold border border-fuchsia-700 bg-fuchsia-900/60 text-fuchsia-100">
               {player.detailedPosition}
             </div>
           )}
@@ -125,14 +125,14 @@ const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => 
           </div>
 
           {/* Posição */}
-          <div className="absolute top-3 right-4 px-3 py-1 rounded-full text-xs font-semibold border border-indigo-700 bg-indigo-900/60 text-indigo-100">
+          <div className="absolute top-3 right-3 px-2 py-0.5 rounded-full text-xs font-semibold border border-indigo-700 bg-indigo-900/60 text-indigo-100">
             {position}
           </div>
 
           {/* Nome */}
-          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-[88%]">
-            <div className="bg-gradient-to-r from-indigo-400 via-fuchsia-400 to-indigo-400 text-black rounded-md px-3 py-1.5 text-center shadow">
-              <p className="text-base font-extrabold uppercase tracking-wide truncate" title={player.name}>
+          <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-[90%]">
+            <div className="bg-gradient-to-r from-indigo-400 via-fuchsia-400 to-indigo-400 text-black rounded-md px-2.5 py-1 text-center shadow">
+              <p className="text-sm font-extrabold uppercase tracking-wide truncate" title={player.name}>
                 {player.name}
               </p>
             </div>
@@ -140,22 +140,22 @@ const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => 
         </div>
 
         {/* Atributos (resumo) */}
-        <div className="px-4 mt-4 flex-1">
-          <div className="grid grid-cols-3 gap-2">
+        <div className="px-3 mt-3 flex-1">
+          <div className="grid grid-cols-3 gap-1.5">
             {skillEntries.map(skill => (
               <div
                 key={skill.label}
-                className="flex min-h-[64px] flex-col items-center justify-center rounded-lg border border-[#1c2a47] bg-[#0f1a2e]/70 px-2 py-2 text-center"
+                className="flex min-h-[56px] flex-col items-center justify-center rounded-lg border border-[#1c2a47] bg-[#0f1a2e]/70 px-1.5 py-2 text-center"
               >
-                <span className="text-[10px] font-semibold tracking-wider text-indigo-200">{skill.label}</span>
-                <span className="text-lg font-extrabold text-white">{skill.value}</span>
+                <span className="text-[9px] font-semibold tracking-wider text-indigo-200">{skill.label}</span>
+                <span className="text-sm font-extrabold text-white">{skill.value}</span>
               </div>
             ))}
           </div>
         </div>
 
         {/* Ações */}
-        <div className="px-4 mt-4 mb-5">
+        <div className="px-3 mt-3 mb-4">
           <div className={`flex items-center gap-3 ${isAdmin ? 'justify-between' : 'justify-center'}`}>
             <button
               onClick={() => onOpenPeerReview(player)}
@@ -188,11 +188,11 @@ const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => 
         {/* Badge de peer overall */}
         {peerOverall && (
           <div
-            className="absolute top-[52px] right-3 bg-fuchsia-700/60 border border-fuchsia-300/50 text-white rounded-xl px-2 py-1 flex items-center gap-1 shadow"
+            className="absolute top-[48px] right-3 bg-fuchsia-700/60 border border-fuchsia-300/50 text-white rounded-xl px-1.5 py-1 flex items-center gap-1 shadow"
             title={`Overall da Galera (${player.peerOverall.ratingsCount} votos)`}
           >
             <LucideStar className="w-4 h-4 text-yellow-300" />
-            <span className="text-sm font-bold">{peerOverall}</span>
+            <span className="text-xs font-bold">{peerOverall}</span>
           </div>
         )}
 
@@ -203,7 +203,7 @@ const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => 
             title="Overall do administrador"
           >
             <LucideStar className="w-4 h-4 text-cyan-200" />
-            <span className="text-sm font-bold">{adminOverall}</span>
+            <span className="text-xs font-bold">{adminOverall}</span>
           </div>
         )}
       </div>

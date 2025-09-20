@@ -108,7 +108,7 @@ function App() {
                 playerId: player.id,
                 onChange: (globalData) => {
                     if (!globalData) return;
-                    setPlayers(prev => prev.map(p => (p.id === player.id ? { ...p, ...globalData } : p)));
+                    setPlayers(prev => prev.map(p => (p.id === player.id ? { ...globalData, ...p } : p)));
                 },
             });
             currentMap.set(player.id, unsubscribe);
@@ -196,7 +196,7 @@ function App() {
             const mergedPlayers = groupPlayers.map((player) => {
                 const globalSnapshot = getCachedGlobalPlayer(player.id);
                 if (!globalSnapshot) return player;
-                const merged = { ...player, ...globalSnapshot };
+                const merged = { ...globalSnapshot, ...player };
                 if (player.adminOverall !== undefined) {
                     merged.adminOverall = player.adminOverall;
                 }
@@ -885,3 +885,4 @@ function App() {
         </div>
     );
 }
+

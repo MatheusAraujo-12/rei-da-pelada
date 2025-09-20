@@ -3,11 +3,17 @@ import { LucideX } from 'lucide-react';
 
 const EXCLUDED_SKILLS = new Set(['chute', 'cruzamento']);
 
+const clampSkillValue = (value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return 50;
+    return Math.min(99, Math.max(1, Math.round(numeric)));
+};
+
 const sanitizeSkills = (rawSkills = {}) => {
     const entries = Object.entries(rawSkills || {}).filter(([key]) => {
         const normalized = String(key || '').toLowerCase().trim();
         return !EXCLUDED_SKILLS.has(normalized);
-    });
+    }).map(([key, value]) => [key, clampSkillValue(value)]);
     return Object.fromEntries(entries);
 };
 
@@ -23,7 +29,7 @@ const PeerReviewModal = ({ isOpen, player, onClose, onSave }) => {
     if (!isOpen || !player) return null;
 
     const handleSkillChange = (skill, value) => {
-        setSkills(prev => ({ ...prev, [skill]: Number(value) }));
+        setSkills(prev => ({ ...prev, [skill]: clampSkillValue(value) }));
     };
 
     const handleSave = () => {
@@ -58,3 +64,4 @@ const PeerReviewModal = ({ isOpen, player, onClose, onSave }) => {
 };
 
 export default PeerReviewModal;
+

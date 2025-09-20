@@ -22,6 +22,7 @@ const ActiveMatch = ({ initialTeams, onMatchEnd, onTeamsUpdate, groupId, initial
     
     const [playerStats, setPlayerStats] = useState(initialPlayerStats);
     const [history, setHistory] = useState([]);
+    const [eventTimeline, setEventTimeline] = useState([]);
     
     // Estados dos Modais
     const [playerForAction, setPlayerForAction] = useState(null);
@@ -88,6 +89,7 @@ const ActiveMatch = ({ initialTeams, onMatchEnd, onTeamsUpdate, groupId, initial
                         setPlayerStats(normalizedStats);
                     }
                     if (Array.isArray(saved.history)) setHistory(saved.history);
+                    if (Array.isArray(saved.eventTimeline)) setEventTimeline(saved.eventTimeline);
                     if (saved.startedAt) startedAtRef.current = saved.startedAt;
                     // worker será configurado no efeito dedicado acima
                 }
@@ -103,16 +105,40 @@ const ActiveMatch = ({ initialTeams, onMatchEnd, onTeamsUpdate, groupId, initial
     useEffect(() => {
         if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
         saveTimerRef.current = setTimeout(() => {
-            const stateToSave = { allTeams, timeLeft, isPaused, score, playerStats, history, startedAt: startedAtRef.current };
+            const stateToSave = { allTeams, timeLeft, isPaused, score, playerStats, history, eventTimeline, startedAt: startedAtRef.current };
             try { localStorage.setItem(liveStateKey, JSON.stringify(stateToSave)); } catch {}
         }, 800);
         return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
-    }, [allTeams, timeLeft, isPaused, score, playerStats, history, liveStateKey]);
+    }, [allTeams, timeLeft, isPaused, score, playerStats, history, eventTimeline, liveStateKey]);
 
     // Efeito para atualizar os times se a prop externa mudar (após substituição)
     useEffect(() => {
         setAllTeams(initialTeams);
     }, [initialTeams]);
+
+    const findPlayerById = (playerId) => {
+        for (const team of allTeams) {
+            if (!Array.isArray(team)) continue;
+            const found = team.find((member) => member?.id === playerId);
+            if (found) return found;
+        }
+        return null;
+    };
+
+    const getCurrentMinuteStamp = () => {
+        const elapsed = Math.max(initialDurationSec - timeLeft, 0);
+        return Math.floor(elapsed / 60);
+    };
+
+    const recordTimelineEvent = (payload) => {
+        setEventTimeline((prev) => [
+            ...prev,
+            {
+                id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                ...payload,
+            },
+        ]);
+    };
 
     const handleTogglePause = () => {
         if (workerRef.current) {
@@ -137,6 +163,7 @@ const ActiveMatch = ({ initialTeams, onMatchEnd, onTeamsUpdate, groupId, initial
         setScore(lastState.score);
         setPlayerStats(lastState.playerStats);
         setHistory([...history]);
+        setEventTimeline((prev) => prev.slice(0, -1));
     };
 
     const handleGoal = () => {
@@ -154,9 +181,9 @@ const ActiveMatch = ({ initialTeams, onMatchEnd, onTeamsUpdate, groupId, initial
         }
         const { player, teamKey } = goalScorerInfo || playerForAction;
         const statToUpdate = stat || 'goals';
-        
+
         setHistory(prev => [...prev, { score: { ...score }, playerStats: JSON.parse(JSON.stringify(playerStats)) }]);
-        
+
         setPlayerStats(prev => {
             const newPlayerStats = { ...prev };
             const pStats = fillPlayerStats(newPlayerStats[player.id]);
@@ -171,7 +198,37 @@ const ActiveMatch = ({ initialTeams, onMatchEnd, onTeamsUpdate, groupId, initial
         if (statToUpdate === 'goals') {
             setScore(prev => ({ ...prev, [teamKey]: prev[teamKey] + 1 }));
         }
-        
+
+        const minuteStamp = getCurrentMinuteStamp();
+        const baseEvent = {
+            teamKey,
+            minute: minuteStamp,
+            playerId: player?.id,
+            playerName: player?.name || 'Jogador',
+        };
+
+        if (statToUpdate === 'goals') {
+            const assistName = assisterId ? (findPlayerById(assisterId)?.name || null) : null;
+            recordTimelineEvent({
+                type: 'goal',
+                assistName,
+                ...baseEvent,
+            });
+        } else {
+            const typeMap = {
+                assists: 'assist',
+                dribbles: 'dribble',
+                tackles: 'tackle',
+                failures: 'failure',
+                saves: 'save',
+            };
+            const normalizedType = typeMap[statToUpdate] || statToUpdate;
+            recordTimelineEvent({
+                type: normalizedType,
+                ...baseEvent,
+            });
+        }
+
         setIsAssistModalOpen(false);
         setGoalScorerInfo(null);
         setPlayerForAction(null);
@@ -184,21 +241,33 @@ const ActiveMatch = ({ initialTeams, onMatchEnd, onTeamsUpdate, groupId, initial
     };
 
     const handleConfirmSubstitution = (playerOut, playerIn) => {
+        let substitutionTeamKey = null;
         setAllTeams(currentTeams => {
             const newTeams = JSON.parse(JSON.stringify(currentTeams));
-            let posOut, posIn;
+            let posOut;
+            let posIn;
             newTeams.forEach((team, tIndex) => {
-                if(Array.isArray(team)) team.forEach((p, pIndex) => {
+                if (Array.isArray(team)) team.forEach((p, pIndex) => {
                     if (p?.id === playerOut.id) posOut = { tIndex, pIndex };
                     if (p?.id === playerIn.id) posIn = { tIndex, pIndex };
                 });
             });
+            if (posOut) substitutionTeamKey = posOut.tIndex === 0 ? 'teamA' : 'teamB';
             if (posOut && posIn) {
                 [newTeams[posOut.tIndex][posOut.pIndex], newTeams[posIn.tIndex][posIn.pIndex]] = [newTeams[posIn.tIndex][posIn.pIndex], newTeams[posOut.tIndex][posOut.pIndex]];
             }
             if (onTeamsUpdate) onTeamsUpdate(newTeams);
             return newTeams;
         });
+        if (substitutionTeamKey) {
+            recordTimelineEvent({
+                type: 'substitution',
+                minute: getCurrentMinuteStamp(),
+                teamKey: substitutionTeamKey,
+                playerOutName: playerOut.name,
+                playerInName: playerIn.name,
+            });
+        }
         setIsSubModalOpen(false);
         setPlayerToSubstitute(null);
     };
@@ -236,10 +305,11 @@ const ActiveMatch = ({ initialTeams, onMatchEnd, onTeamsUpdate, groupId, initial
                     const startedAtIso = new Date(startedAtRef.current).toISOString();
                     onMatchEnd({ teams: teamsInPlay, score, playerStats, startedAt: startedAtIso, endedAt: finishedAt });
                 }}
-                onPlayerAction={(player, teamKey) => setPlayerForAction({player, teamKey})}
+                onPlayerAction={(player, teamKey) => setPlayerForAction({ player, teamKey })}
                 onGoal={handleGoal}
                 onSelectAssister={handleSelectAssister}
                 onInitiateSubstitution={handleInitiateSubstitution}
+                timelineEvents={eventTimeline}
             />
         </>
     );
