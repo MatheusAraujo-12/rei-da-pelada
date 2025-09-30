@@ -41,21 +41,84 @@ const ActiveMatch = ({ initialTeams, onMatchEnd, onTeamsUpdate, groupId, initial
         return teamList.filter(p => p && p.id !== goalScorerInfo.player.id);
     }, [goalScorerInfo, allTeams]);
 
-    useEffect(() => {
-        const worker = new Worker('/timer.worker.js');
-        workerRef.current = worker;
 
-        worker.onmessage = (e) => {
-            if (e.data.type === 'tick') setTimeLeft(e.data.timeLeft);
+    useEffect(() => {
+        const basePublicUrl = process.env.PUBLIC_URL || '';
+        const normalizedPublicUrl = basePublicUrl.endsWith('/') ? basePublicUrl.slice(0, -1) : basePublicUrl;
+        const workerUrl = normalizedPublicUrl ? `${normalizedPublicUrl}/timer.worker.js` : '/timer.worker.js';
+        let workerInstance = null;
+
+        try {
+            workerInstance = new Worker(workerUrl);
+        } catch (creationError) {
+            console.error('Falha ao iniciar o cronometro com Web Worker:', creationError);
+        }
+
+        if (!workerInstance) {
+            let fallbackInterval = null;
+            let fallbackTimeLeft = 0;
+            const fallbackWorker = {
+                postMessage: ({ command, value }) => {
+                    if (command === 'start') {
+                        fallbackTimeLeft = typeof value === 'number' ? value : fallbackTimeLeft;
+                        if (fallbackInterval) clearInterval(fallbackInterval);
+                        fallbackInterval = setInterval(() => {
+                            if (fallbackTimeLeft > 0) {
+                                fallbackTimeLeft -= 1;
+                                setTimeLeft(fallbackTimeLeft);
+                            } else {
+                                clearInterval(fallbackInterval);
+                                fallbackInterval = null;
+                            }
+                        }, 1000);
+                    } else if (command === 'pause') {
+                        if (fallbackInterval) {
+                            clearInterval(fallbackInterval);
+                            fallbackInterval = null;
+                        }
+                    } else if (command === 'stop') {
+                        if (fallbackInterval) {
+                            clearInterval(fallbackInterval);
+                            fallbackInterval = null;
+                        }
+                        fallbackTimeLeft = 0;
+                        setTimeLeft(0);
+                    }
+                },
+                terminate: () => {
+                    if (fallbackInterval) {
+                        clearInterval(fallbackInterval);
+                        fallbackInterval = null;
+                    }
+                },
+            };
+            workerRef.current = fallbackWorker;
+            return () => {
+                fallbackWorker.terminate();
+                workerRef.current = null;
+            };
+        }
+
+        workerRef.current = workerInstance;
+
+        workerInstance.onmessage = (e) => {
+            if (e.data?.type === 'tick') setTimeLeft(e.data.timeLeft);
         };
+
+        workerInstance.onerror = (errorEvent) => {
+            console.error('Erro no cronometro (worker):', errorEvent);
+        };
+
         return () => {
-            if(workerRef.current) {
-                workerRef.current.postMessage({ command: 'stop' });
-                workerRef.current.terminate();
+            if (workerRef.current) {
+                try { workerRef.current.postMessage({ command: 'stop' }); } catch {}
+                if (workerRef.current.terminate) {
+                    workerRef.current.terminate();
+                }
+                workerRef.current = null;
             }
         };
     }, []); // Roda apenas uma vez para inicializar o worker
-
     // Dispara os comandos iniciais do worker uma única vez com o estado atual
     const workerStartedRef = useRef(false);
     useEffect(() => {
@@ -318,3 +381,4 @@ const ActiveMatch = ({ initialTeams, onMatchEnd, onTeamsUpdate, groupId, initial
 };
 
 export default ActiveMatch;
+
