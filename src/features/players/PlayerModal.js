@@ -23,7 +23,7 @@ const sanitizeAdminSkills = (rawSkills = {}, fallback = {}) => {
     return sanitized;
 };
 
-const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
+const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin, t }) => {
     const [name, setName] = useState('');
     const [age, setAge] = useState('');
     const [position, setPosition] = useState('Linha');
@@ -89,7 +89,7 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
 
     const handleSave = async () => {
         if (!name || !age) {
-            alert("Por favor, preencha pelo menos o nome e a idade.");
+            alert(t("Por favor, preencha pelo menos o nome e a idade."));
             return;
         }
         const playerData = {
@@ -124,7 +124,7 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
                 <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_bottom,#06b6d455,transparent_60%)]" />
                 <div className="relative space-y-6">
                     <div className="flex items-center justify-between">
-                        <h2 className="text-2xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#4338ca] via-[#a855f7] to-[#06b6d4]">{player ? 'Editar Jogador' : 'Adicionar Novo Jogador'}</h2>
+                        <h2 className="text-2xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-[#4338ca] via-[#a855f7] to-[#06b6d4]">{player ? t('Editar Jogador') : t('Adicionar Novo Jogador')}</h2>
                         <button onClick={onClose} className="p-2 rounded-full border border-[#28324d] bg-[#111a32]/80 hover:border-[#a855f7] hover:text-[#f8fafc] transition-colors"><LucideX className="w-5 h-5" /></button>
                     </div>
 
@@ -133,39 +133,39 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
                         <input type="file" className="hidden" accept="image/*" onChange={handleImageChange} />
                         <div className="w-32 h-32 rounded-full border border-[#28324d] bg-[#111a32]/80 flex items-center justify-center text-[#9aa7d7] shadow-[0_10px_30px_rgba(4,10,35,0.35)] hover:border-[#a855f7] transition">
                             {imagePreview ? (
-                                <img src={imagePreview} alt="Pré-visualização" className="w-full h-full rounded-full object-cover" />
+                                <img src={imagePreview} alt={t("Pré-visualização")} className="w-full h-full rounded-full object-cover" />
                             ) : ( <LucideCamera size={48} /> )}
                         </div>
                     </label>
                 </div>
 
                 <div className="space-y-4">
-                    <h3 className="text-lg font-semibold text-indigo-200">Dados do Jogador</h3>
+                    <h3 className="text-lg font-semibold text-indigo-200">{t('Dados do Jogador')}</h3>
                     <div>
-                        <label className="block text-sm font-medium text-[#9aa7d7] mb-1">Nome</label>
+                        <label className="block text-sm font-medium text-[#9aa7d7] mb-1">{t('Nome')}</label>
                         <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full rounded-lg border border-[#28324d] bg-[#111a32]/80 p-3 text-white focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#a855f7]" />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-[#9aa7d7] mb-1">Idade</label>
+                        <label className="block text-sm font-medium text-[#9aa7d7] mb-1">{t('Idade')}</label>
                         <input type="number" value={age} onChange={e => setAge(e.target.value)} className="w-full rounded-lg border border-[#28324d] bg-[#111a32]/80 p-3 text-white focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#a855f7]" />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-[#9aa7d7] mb-1">Posição geral</label>
+                        <label className="block text-sm font-medium text-[#9aa7d7] mb-1">{t('Posição geral')}</label>
                         <select value={position} onChange={e => setPosition(e.target.value)} className="w-full rounded-lg border border-[#28324d] bg-[#111a32]/80 p-3 text-white focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#a855f7]">
-                            <option>Linha</option>
-                            <option>Goleiro</option>
+                            <option>{t('Linha')}</option>
+                            <option>{t('Goleiro')}</option>
                         </select>
                     </div>
                     {position === 'Linha' && (
                         <div>
-                            <label className="block text-sm font-medium text-[#9aa7d7] mb-1">Posição detalhada</label>
+                            <label className="block text-sm font-medium text-[#9aa7d7] mb-1">{t('Posição detalhada')}</label>
                             <select
                                 value={detailedPosition}
                                 onChange={e => setDetailedPosition(e.target.value)}
                                 className="w-full rounded-lg border border-[#28324d] bg-[#111a32]/80 p-3 text-white focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#a855f7]"
                             >
                                 {['Atacante','Ponta','Meio-Campo','Volante','Lateral','Zagueiro'].map(opt => (
-                                    <option key={opt} value={opt}>{opt}</option>
+                                    <option key={opt} value={opt}>{t(opt)}</option>
                                 ))}
                             </select>
                         </div>
@@ -174,12 +174,12 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
                 {/* ✅ SECÇÃO DO OVERALL DO ADMIN RESTAURADA */}
                 {isAdmin && player && adminSkills && (
                     <div className="pt-6 mt-6 border-t border-[#28324d]">
-                        <h3 className="text-lg font-semibold text-[#cbd5f5] mb-4">Overall do administrador</h3>
+                        <h3 className="text-lg font-semibold text-[#cbd5f5] mb-4">{t('Overall do administrador')}</h3>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {Object.entries(adminSkills).map(([skill, value]) => (
                                 <div key={`admin-${skill}`} className="rounded-xl border border-[#28324d] bg-[#111a32]/60 p-3">
                                     <label className="capitalize flex items-center text-sm font-semibold text-[#9aa7d7] mb-2">{skill}</label>
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex items-center space-x-3">
                                         <input
                                             type="range"
                                             min="1" max="99"
@@ -196,7 +196,7 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
                 )}
 
                 <div className="pt-4 flex justify-end">
-                    <button onClick={handleSave} className="rounded-lg bg-gradient-to-r from-[#4338ca] via-[#a855f7] to-[#06b6d4] px-6 py-2 font-semibold text-white shadow-lg shadow-[#4338ca33] transition-transform hover:-translate-y-0.5">Salvar</button>
+                    <button onClick={handleSave} className="rounded-lg bg-gradient-to-r from-[#4338ca] via-[#a855f7] to-[#06b6d4] px-6 py-2 font-semibold text-white shadow-lg shadow-[#4338ca33] transition-transform hover:-translate-y-0.5">{t('Salvar')}</button>
                 </div>
             </div>
         </div>
@@ -205,4 +205,3 @@ const PlayerModal = ({ isOpen, onClose, onSave, player, isAdmin }) => {
 };
 
 export default PlayerModal;
-

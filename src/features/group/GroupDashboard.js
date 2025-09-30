@@ -4,7 +4,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { LucideUser, LucideClipboard, LucideShield, LucideAward, LucideImagePlus, LucideLoader2 } from 'lucide-react';
 import { db, storage } from '../../services/firebase';
 
-const GroupDashboard = ({ user, groupId, isAdmin, onSetAdminStatus, onCrestUpdated }) => {
+const GroupDashboard = ({ user, groupId, isAdmin, onSetAdminStatus, onCrestUpdated, t }) => {
     const [groupData, setGroupData] = useState(null);
     const [groupPlayers, setGroupPlayers] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -28,7 +28,7 @@ const GroupDashboard = ({ user, groupId, isAdmin, onSetAdminStatus, onCrestUpdat
             setGroupPlayers(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
             setLoading(false);
         }, (error) => {
-            console.error('Falha ao buscar jogadores do grupo:', error);
+            console.error(t('Falha ao buscar jogadores do grupo:'), error);
             setLoading(false);
         });
 
@@ -36,16 +36,16 @@ const GroupDashboard = ({ user, groupId, isAdmin, onSetAdminStatus, onCrestUpdat
             unsubGroup();
             unsubPlayers();
         };
-    }, [groupId]);
+    }, [groupId, t]);
 
     const crestInputId = useMemo(() => `group-crest-${groupId || 'unknown'}`, [groupId]);
 
     const handleCopyId = () => {
         if (!groupId) return;
         navigator.clipboard.writeText(groupId).then(() => {
-            alert('ID do grupo copiado!');
+            alert(t('ID do grupo copiado!'));
         }).catch((err) => {
-            console.error('Falha ao copiar ID:', err);
+            console.error(t('Falha ao copiar ID:'), err);
         });
     };
 
@@ -58,13 +58,13 @@ const GroupDashboard = ({ user, groupId, isAdmin, onSetAdminStatus, onCrestUpdat
         if (!file) return;
 
         if (!file.type.startsWith('image/')) {
-            setCrestError('Escolha um arquivo de imagem (png, jpg, jpeg).');
+            setCrestError(t('Escolha um arquivo de imagem (png, jpg, jpeg).'));
             event.target.value = '';
             return;
         }
         const maxBytes = 2.5 * 1024 * 1024;
         if (file.size > maxBytes) {
-            setCrestError('Escolha uma imagem de ate 2.5MB.');
+            setCrestError(t('Escolha uma imagem de ate 2.5MB.'));
             event.target.value = '';
             return;
         }
@@ -84,8 +84,8 @@ const GroupDashboard = ({ user, groupId, isAdmin, onSetAdminStatus, onCrestUpdat
                 onCrestUpdated(groupId, downloadURL);
             }
         } catch (error) {
-            console.error('Falha ao enviar escudo:', error);
-            setCrestError('Falha ao enviar o escudo. Tente novamente.');
+            console.error(t('Falha ao enviar escudo:'), error);
+            setCrestError(t('Falha ao enviar o escudo. Tente novamente.'));
         } finally {
             setUploadingCrest(false);
             event.target.value = '';
@@ -105,18 +105,18 @@ const GroupDashboard = ({ user, groupId, isAdmin, onSetAdminStatus, onCrestUpdat
                 onCrestUpdated(groupId, null);
             }
         } catch (error) {
-            console.error('Falha ao remover escudo:', error);
-            setCrestError('Falha ao remover o escudo. Tente novamente.');
+            console.error(t('Falha ao remover escudo:'), error);
+            setCrestError(t('Falha ao remover o escudo. Tente novamente.'));
         } finally {
             setUploadingCrest(false);
         }
     };
 
     if (loading) {
-        return <div className="text-center p-10 text-white">Carregando dados do grupo...</div>;
+        return <div className="text-center p-10 text-white">{t('Carregando dados do grupo...')}</div>;
     }
     if (!groupData) {
-        return <div className="text-center p-10 text-red-500">Grupo nao encontrado.</div>;
+        return <div className="text-center p-10 text-red-500">{t('Grupo nao encontrado.')}</div>;
     }
 
     const isOwner = (playerId) => groupData.createdBy === playerId;
@@ -131,7 +131,7 @@ const GroupDashboard = ({ user, groupId, isAdmin, onSetAdminStatus, onCrestUpdat
                 <div className="flex flex-col sm:flex-row sm:items-center gap-6">
                     <div className="relative w-28 h-28 rounded-3xl border border-[#28324d] bg-[#111a32]/80 flex items-center justify-center overflow-hidden shadow-[0_12px_32px_rgba(4,10,35,0.45)]">
                         {crestUrl ? (
-                            <img src={crestUrl} alt={`Escudo do grupo ${groupData.name}`} className="w-full h-full object-cover" />
+                            <img src={crestUrl} alt={`${t('Escudo do grupo')} ${groupData.name}`} className="w-full h-full object-cover" />
                         ) : (
                             <LucideShield className="w-14 h-14 text-[#9aa7d7]" />
                         )}
@@ -140,10 +140,10 @@ const GroupDashboard = ({ user, groupId, isAdmin, onSetAdminStatus, onCrestUpdat
                         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                             <div>
                                 <h2 className="text-3xl font-extrabold text-white">{groupData.name}</h2>
-                                <p className="mt-2 text-sm text-[#9aa7d7]">Compartilhe o ID para trazer novos jogadores.</p>
+                                <p className="mt-2 text-sm text-[#9aa7d7]">{t('Compartilhe o ID para trazer novos jogadores.')}</p>
                             </div>
                             <div className="flex items-center gap-2 text-sm text-[#cbd5f5]">
-                                <span className="rounded-full border border-[#28324d] bg-[#111a32]/80 px-3 py-1 font-semibold">{groupPlayers.length} membros</span>
+                                <span className="rounded-full border border-[#28324d] bg-[#111a32]/80 px-3 py-1 font-semibold">{groupPlayers.length} {t('membros')}</span>
                             </div>
                         </div>
                         {crestError && (
@@ -159,12 +159,12 @@ const GroupDashboard = ({ user, groupId, isAdmin, onSetAdminStatus, onCrestUpdat
                                     {uploadingCrest ? (
                                         <>
                                             <LucideLoader2 className="h-4 w-4 animate-spin" />
-                                            Enviando escudo...
+                                            {t('Enviando escudo...')}
                                         </>
                                     ) : (
                                         <>
                                             <LucideImagePlus className="h-4 w-4" />
-                                            Atualizar escudo
+                                            {t('Atualizar escudo')}
                                         </>
                                     )}
                                 </label>
@@ -174,7 +174,7 @@ const GroupDashboard = ({ user, groupId, isAdmin, onSetAdminStatus, onCrestUpdat
                                         className="rounded-lg border border-transparent bg-rose-600/80 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-rose-500"
                                         type="button"
                                     >
-                                        Remover escudo
+                                        {t('Remover escudo')}
                                     </button>
                                 )}
                             </div>
@@ -183,17 +183,17 @@ const GroupDashboard = ({ user, groupId, isAdmin, onSetAdminStatus, onCrestUpdat
                 </div>
 
                 <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wide text-[#7c8fbf]">ID de convite do grupo</label>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-[#7c8fbf]">{t('ID de convite do grupo')}</label>
                     <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-3">
                         <input type="text" readOnly value={groupId} className="w-full rounded-lg border border-[#28324d] bg-[#111a32]/80 px-4 py-3 text-[#f0f4ff]" />
-                        <button onClick={handleCopyId} className="inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[#4338ca] via-[#a855f7] to-[#06b6d4] px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-[#4338ca33] transition-transform hover:-translate-y-0.5" title="Copiar ID">
-                            <LucideClipboard className="h-4 w-4" /> Copiar ID
+                        <button onClick={handleCopyId} className="inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[#4338ca] via-[#a855f7] to-[#06b6d4] px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-[#4338ca33] transition-transform hover:-translate-y-0.5" title={t('Copiar ID')}>
+                            <LucideClipboard className="h-4 w-4" /> {t('Copiar ID')}
                         </button>
                     </div>
                 </div>
 
                 <div>
-                    <h3 className="text-2xl font-semibold text-indigo-100 mb-4">Membros do grupo</h3>
+                    <h3 className="text-2xl font-semibold text-indigo-100 mb-4">{t('Membros do grupo')}</h3>
                     <div className="space-y-3">
                         {groupPlayers.length > 0 ? (
                             groupPlayers.map((player) => (
@@ -201,9 +201,9 @@ const GroupDashboard = ({ user, groupId, isAdmin, onSetAdminStatus, onCrestUpdat
                                     <div className="flex items-center gap-3">
                                         {isPlayerAdmin(player.id) ? (
                                             isOwner(player.id) ? (
-                                                <LucideAward className="text-yellow-300 w-6 h-6" title="Dono do grupo" />
+                                                <LucideAward className="text-yellow-300 w-6 h-6" title={t('Dono do grupo')} />
                                             ) : (
-                                                <LucideShield className="text-cyan-300 w-6 h-6" title="Administrador" />
+                                                <LucideShield className="text-cyan-300 w-6 h-6" title={t('Administrador')} />
                                             )
                                         ) : (
                                             <LucideUser className="text-[#7c8fbf] w-6 h-6" />
@@ -214,11 +214,11 @@ const GroupDashboard = ({ user, groupId, isAdmin, onSetAdminStatus, onCrestUpdat
                                         <div>
                                             {isPlayerAdmin(player.id) ? (
                                                 <button onClick={() => onSetAdminStatus(player.id, false)} className="text-xs rounded-lg bg-rose-600/80 px-3 py-1.5 font-semibold text-white hover:bg-rose-500">
-                                                    Rebaixar
+                                                    {t('Rebaixar')}
                                                 </button>
                                             ) : (
                                                 <button onClick={() => onSetAdminStatus(player.id, true)} className="text-xs rounded-lg bg-emerald-600/80 px-3 py-1.5 font-semibold text-white hover:bg-emerald-500">
-                                                    Promover a admin
+                                                    {t('Promover a admin')}
                                                 </button>
                                             )}
                                         </div>
@@ -226,7 +226,7 @@ const GroupDashboard = ({ user, groupId, isAdmin, onSetAdminStatus, onCrestUpdat
                                 </div>
                             ))
                         ) : (
-                            <p className="text-[#7c8fbf]">Ainda nao ha jogadores neste grupo.</p>
+                            <p className="text-[#7c8fbf]">{t('Ainda nao ha jogadores neste grupo.')}</p>
                         )}
                     </div>
                 </div>

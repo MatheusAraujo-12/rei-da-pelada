@@ -3,7 +3,7 @@ import { collection, addDoc, doc, getDoc, updateDoc, arrayUnion, setDoc } from '
 import { LucidePlusCircle, LucideLogIn, LucideArrowLeft } from 'lucide-react';
 import { db } from '../../services/firebase';
 
-const GroupGate = ({ user, playerProfile, onGroupAssociated, onBackToDashboard }) => {
+const GroupGate = ({ user, playerProfile, onGroupAssociated, onBackToDashboard, t }) => {
     const [mode, setMode] = useState('select');
     const [groupName, setGroupName] = useState('');
     const [joinId, setJoinId] = useState('');
@@ -39,7 +39,7 @@ const GroupGate = ({ user, playerProfile, onGroupAssociated, onBackToDashboard }
 
         } catch (e) {
             console.error("Erro ao criar grupo:", e);
-            setError("Não foi possível criar o grupo. Verifique o console para mais detalhes.");
+            setError(t("Não foi possível criar o grupo. Verifique o console para mais detalhes."));
         } finally {
             setLoading(false);
         }
@@ -71,11 +71,11 @@ const GroupGate = ({ user, playerProfile, onGroupAssociated, onBackToDashboard }
                 const userDocSnap = await getDoc(userDocRef);
                 onGroupAssociated(userDocSnap.data().groupIds || [groupId]);
             } else {
-                setError("Grupo não encontrado. Verifique o ID.");
+                setError(t("Grupo não encontrado. Verifique o ID."));
             }
         } catch(e) {
             console.error("Erro ao entrar no grupo:", e);
-            setError("Ocorreu um erro ao tentar entrar no grupo. Verifique o console.");
+            setError(t("Ocorreu um erro ao tentar entrar no grupo. Verifique o console."));
         } finally {
             setLoading(false);
         }
@@ -87,16 +87,16 @@ const GroupGate = ({ user, playerProfile, onGroupAssociated, onBackToDashboard }
       return (
         <>
           <h2 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-[#4338ca] via-[#a855f7] to-[#06b6d4]">
-            Criar Novo Grupo
+            {t('Criar Novo Grupo')}
           </h2>
           <p className="text-sm text-[#9aa7d7] mb-6">
-            De um nome para o grupo e convide a galera com o ID gerado automaticamente.
+            {t('De um nome para o grupo e convide a galera com o ID gerado automaticamente.')}
           </p>
           <div className="space-y-3 text-left">
-            <label className="text-xs font-semibold uppercase tracking-wide text-[#7c8fbf]">Nome do grupo</label>
+            <label className="text-xs font-semibold uppercase tracking-wide text-[#7c8fbf]">{t('Nome do grupo')}</label>
             <input
               type="text"
-              placeholder="Nome do Grupo"
+              placeholder={t("Nome do Grupo")}
               value={groupName}
               onChange={(e) => setGroupName(e.target.value)}
               className="w-full rounded-lg border border-[#28324d] bg-[#111a32]/80 px-4 py-3 text-[#f8fafc] placeholder-[#7c8fbf] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#a855f7] transition"
@@ -108,13 +108,13 @@ const GroupGate = ({ user, playerProfile, onGroupAssociated, onBackToDashboard }
               disabled={loading}
               className="w-full rounded-lg bg-gradient-to-r from-[#4338ca] via-[#a855f7] to-[#06b6d4] py-3 font-semibold text-white shadow-lg shadow-[#4338ca33] transition-transform hover:-translate-y-0.5 disabled:opacity-60"
             >
-              {loading ? 'Criando...' : 'Confirmar'}
+              {loading ? t('Criando...') : t('Confirmar')}
             </button>
             <button
               onClick={() => setMode('select')}
               className="w-full rounded-lg border border-transparent bg-transparent py-3 text-sm font-semibold text-[#9aa7d7] transition-colors hover:text-[#f8fafc]"
             >
-              Voltar
+              {t('Voltar')}
             </button>
           </div>
         </>
@@ -123,16 +123,16 @@ const GroupGate = ({ user, playerProfile, onGroupAssociated, onBackToDashboard }
       return (
         <>
           <h2 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-[#4338ca] via-[#a855f7] to-[#06b6d4]">
-            Entrar em um Grupo
+            {t('Entrar em um Grupo')}
           </h2>
           <p className="text-sm text-[#9aa7d7] mb-6">
-            Cole o ID compartilhado pelo administrador para fazer parte da turma.
+            {t('Cole o ID compartilhado pelo administrador para fazer parte da turma.')}
           </p>
           <div className="space-y-3 text-left">
-            <label className="text-xs font-semibold uppercase tracking-wide text-[#7c8fbf]">ID do grupo</label>
+            <label className="text-xs font-semibold uppercase tracking-wide text-[#7c8fbf]">{t('ID do grupo')}</label>
             <input
               type="text"
-              placeholder="Cole o ID do Grupo"
+              placeholder={t("Cole o ID do Grupo")}
               value={joinId}
               onChange={(e) => setJoinId(e.target.value)}
               className="w-full rounded-lg border border-[#28324d] bg-[#111a32]/80 px-4 py-3 text-[#f8fafc] placeholder-[#7c8fbf] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#a855f7] transition"
@@ -144,13 +144,13 @@ const GroupGate = ({ user, playerProfile, onGroupAssociated, onBackToDashboard }
               disabled={loading}
               className="w-full rounded-lg bg-gradient-to-r from-[#4338ca] via-[#a855f7] to-[#06b6d4] py-3 font-semibold text-white shadow-lg shadow-[#4338ca33] transition-transform hover:-translate-y-0.5 disabled:opacity-60"
             >
-              {loading ? 'Entrando...' : 'Entrar'}
+              {loading ? t('Entrando...') : t('Entrar')}
             </button>
             <button
               onClick={() => setMode('select')}
               className="w-full rounded-lg border border-transparent bg-transparent py-3 text-sm font-semibold text-[#9aa7d7] transition-colors hover:text-[#f8fafc]"
             >
-              Voltar
+              {t('Voltar')}
             </button>
           </div>
         </>
@@ -159,10 +159,10 @@ const GroupGate = ({ user, playerProfile, onGroupAssociated, onBackToDashboard }
       return (
         <>
           <h2 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-[#4338ca] via-[#a855f7] to-[#06b6d4]">
-            Junte-se a uma pelada!
+            {t('Junte-se a uma pelada!')}
           </h2>
           <p className="text-[#9aa7d7] mb-8">
-            Crie um grupo para organizar suas partidas ou entre com um ID de convite ja existente.
+            {t('Crie um grupo para organizar suas partidas ou entre com um ID de convite ja existente.')}
           </p>
           <div className="grid gap-3">
             <button
@@ -170,14 +170,14 @@ const GroupGate = ({ user, playerProfile, onGroupAssociated, onBackToDashboard }
               className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[#4338ca] via-[#a855f7] to-[#06b6d4] py-3 font-semibold text-white shadow-lg shadow-[#4338ca33] transition-transform hover:-translate-y-0.5"
             >
               <LucidePlusCircle className="h-5 w-5" />
-              Criar grupo
+              {t('Criar grupo')}
             </button>
             <button
               onClick={() => setMode('join')}
               className="flex w-full items-center justify-center gap-2 rounded-lg border border-[#28324d] bg-[#111a32]/80 py-3 font-semibold text-[#f0f4ff] transition duration-150 hover:border-[#a855f7] hover:shadow-[0_12px_32px_rgba(6,182,212,0.2)]"
             >
               <LucideLogIn className="h-5 w-5" />
-              Entrar com ID
+              {t('Entrar com ID')}
             </button>
           </div>
         </>
@@ -197,7 +197,7 @@ const GroupGate = ({ user, playerProfile, onGroupAssociated, onBackToDashboard }
                 className="absolute left-4 top-4 flex items-center gap-2 rounded-full border border-[#28324d] bg-[#111a32]/80 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-[#9aa7d7] transition-colors hover:border-[#a855f7] hover:text-[#f8fafc]"
               >
                 <LucideArrowLeft className="h-4 w-4" />
-                Voltar
+                {t('Voltar')}
               </button>
             )}
             {error && (

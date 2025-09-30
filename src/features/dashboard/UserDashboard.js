@@ -1,5 +1,7 @@
-import React from 'react';
-import { LucideUser, LucideArrowRight, LucidePlusCircle, LucideLogOut, LucideDoorOpen, LucideEdit, LucideCheckCircle } from 'lucide-react';
+import React, { useState, useContext } from 'react';
+import { LucideUser, LucideArrowRight, LucidePlusCircle, LucideLogOut, LucideDoorOpen, LucideEdit, LucideCheckCircle, LucideSettings } from 'lucide-react';
+import UserSettingsPanel from '../settings/UserSettingsPanel';
+import { SettingsContext } from '../../context/SettingsContext';
 
 const STARFIELD_PARTICLES = Array.from({ length: 48 }, () => {
     const size = 2 + Math.random() * 2.4;
@@ -15,8 +17,15 @@ const STARFIELD_PARTICLES = Array.from({ length: 48 }, () => {
 });
 
 const UserDashboard = ({ playerProfile, groups = [], activeGroupId, onEnterGroup, onGoToGroupGate, onLogout, onLeaveGroup, onEditProfile }) => {
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const { preferences, setPreferences } = useContext(SettingsContext);
+
+    const handleOpenSettings = () => setIsSettingsOpen(true);
+    const handleCloseSettings = () => setIsSettingsOpen(false);
+
     return (
-        <div className="relative">
+        <>
+            <div className="relative">
             <div className="starfield" aria-hidden="true">
                 {STARFIELD_PARTICLES.map((particle, index) => (
                     <span
@@ -55,6 +64,9 @@ const UserDashboard = ({ playerProfile, groups = [], activeGroupId, onEnterGroup
                         <div className="flex items-center gap-3">
                             <button onClick={onEditProfile} className="rounded-lg bg-gradient-to-r from-[#4338ca] via-[#a855f7] to-[#06b6d4] px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-[#4338ca33] transition-transform hover:-translate-y-0.5 flex items-center gap-2">
                                 <LucideEdit size={16}/> Meu Perfil
+                            </button>
+                            <button onClick={handleOpenSettings} title="Configurações" className="rounded-full border border-[#28324d] bg-[#111a32]/80 p-3 text-[#f0f4ff] hover:border-[#a855f7] hover:text-[#a855f7] transition-colors">
+                                <LucideSettings className="w-5 h-5" />
                             </button>
                             <button onClick={onLogout} title="Sair do Aplicativo" className="rounded-full border border-[#28324d] bg-[#111a32]/80 p-3 text-[#f0f4ff] hover:border-[#f87171] hover:text-[#f87171] transition-colors">
                                 <LucideLogOut className="w-5 h-5" />
@@ -122,7 +134,14 @@ const UserDashboard = ({ playerProfile, groups = [], activeGroupId, onEnterGroup
                     </div>
                 </div>
             </div>
-        </div>
+            </div>
+            <UserSettingsPanel
+            isOpen={isSettingsOpen}
+            onClose={handleCloseSettings}
+            onApply={setPreferences}
+            preferences={preferences}
+            />
+        </>
     );
 };
 

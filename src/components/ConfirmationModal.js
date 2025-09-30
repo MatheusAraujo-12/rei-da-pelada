@@ -1,6 +1,6 @@
 import React from 'react';
 
-const ConfirmationModal = ({ isOpen, title, message, onConfirm, onClose }) => {
+const ConfirmationModal = ({ isOpen, title, message, onConfirm, onClose, t }) => {
     if (!isOpen) return null;
     
     return (
@@ -9,8 +9,8 @@ const ConfirmationModal = ({ isOpen, title, message, onConfirm, onClose }) => {
                 <h3 className="text-xl font-bold text-yellow-400 mb-4">{title}</h3>
                 <p className="text-gray-300 mb-6">{message}</p>
                 <div className="flex justify-end gap-4">
-                    <button onClick={onClose} className="py-2 px-4 rounded-lg bg-gray-600 hover:bg-gray-500 transition-colors">Cancelar</button>
-                    <button onClick={onConfirm} className="py-2 px-4 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors">Confirmar</button>
+                    <button onClick={onClose} className="py-2 px-4 rounded-lg bg-gray-600 hover:bg-gray-500 transition-colors">{t('Cancelar')}</button>
+                    <button onClick={onConfirm} className="py-2 px-4 rounded-lg bg-red-600 hover:bg-red-700 text-white transition-colors">{t('Confirmar')}</button>
                 </div>
             </div>
         </div>

@@ -1,20 +1,20 @@
 import React from 'react';
 import { LucideX, LucideGoal, LucideHandshake, LucideMove, LucideShield, LucideReplace, LucideFrown, LucideHand } from 'lucide-react';
 
-const PlayerActionModal = ({ isOpen, onClose, player, onStat, onSubstitute, onGoal }) => {
+const PlayerActionModal = ({ isOpen, onClose, player, onStat, onSubstitute, onGoal, t }) => {
     if (!isOpen || !player) return null;
 
     const actions = [
-        { label: 'Gol', icon: LucideGoal, action: onGoal, color: 'bg-green-600 hover:bg-green-500' },
-        { label: 'Assistencia', icon: LucideHandshake, action: () => onStat('assists'), color: 'bg-blue-600 hover:bg-blue-500' },
-        { label: 'Drible', icon: LucideMove, action: () => onStat('dribbles'), color: 'bg-amber-500 hover:bg-amber-400' },
-        { label: 'Desarme', icon: LucideShield, action: () => onStat('tackles'), color: 'bg-orange-600 hover:bg-orange-500' },
-        { label: 'Falha', icon: LucideFrown, action: () => onStat('failures'), color: 'bg-red-800 hover:bg-red-700' },
-        { label: 'Substituir', icon: LucideReplace, action: onSubstitute, color: 'bg-gray-600 hover:bg-gray-500' }
+        { label: t('Gol'), icon: LucideGoal, action: onGoal, color: 'bg-green-600 hover:bg-green-500' },
+        { label: t('Assistencia'), icon: LucideHandshake, action: () => onStat('assists'), color: 'bg-blue-600 hover:bg-blue-500' },
+        { label: t('Drible'), icon: LucideMove, action: () => onStat('dribbles'), color: 'bg-amber-500 hover:bg-amber-400' },
+        { label: t('Desarme'), icon: LucideShield, action: () => onStat('tackles'), color: 'bg-orange-600 hover:bg-orange-500' },
+        { label: t('Falha'), icon: LucideFrown, action: () => onStat('failures'), color: 'bg-red-800 hover:bg-red-700' },
+        { label: t('Substituir'), icon: LucideReplace, action: onSubstitute, color: 'bg-gray-600 hover:bg-gray-500' }
     ];
 
     if (player.position === 'Goleiro') {
-        actions.unshift({ label: 'Defesa', icon: LucideHand, action: () => onStat('saves'), color: 'bg-purple-600 hover:bg-purple-500' });
+        actions.unshift({ label: t('Defesa'), icon: LucideHand, action: () => onStat('saves'), color: 'bg-purple-600 hover:bg-purple-500' });
     }
 
     return (
@@ -45,4 +45,3 @@ const PlayerActionModal = ({ isOpen, onClose, player, onStat, onSubstitute, onGo
 };
 
 export default PlayerActionModal;
-

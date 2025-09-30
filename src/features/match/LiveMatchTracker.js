@@ -4,7 +4,7 @@ import ConfirmationModal from '../../components/ConfirmationModal';
 import PlayerActionModal from './PlayerActionModal';
 import AssistSelectorModal from './AssistSelectorModal';
 
-const PlayerPickerModal = ({ isOpen, onClose, teams, onSelect }) => {
+const PlayerPickerModal = ({ isOpen, onClose, teams, onSelect, t }) => {
     if (!isOpen) return null;
     const teamA = (teams?.teamA || []).filter(Boolean);
     const teamB = (teams?.teamB || []).filter(Boolean);
@@ -24,7 +24,7 @@ const PlayerPickerModal = ({ isOpen, onClose, teams, onSelect }) => {
                     ))}
                 </div>
             ) : (
-                <p className="text-xs text-slate-400">Nenhum jogador disponivel.</p>
+                <p className="text-xs text-slate-400">{t('Nenhum jogador disponivel.')}</p>
             )}
         </div>
     );
@@ -34,15 +34,15 @@ const PlayerPickerModal = ({ isOpen, onClose, teams, onSelect }) => {
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4">
             <div className="w-full max-w-xl rounded-2xl border border-indigo-500/40 bg-[#0b1220]/95 p-6 shadow-2xl">
                 <div className="mb-4 flex items-center justify-between">
-                    <h2 className="text-lg font-bold text-white">Selecionar jogador</h2>
+                    <h2 className="text-lg font-bold text-white">{t('Selecionar jogador')}</h2>
                     <button onClick={onClose} className="rounded-full border border-slate-600 p-2 text-slate-300 hover:text-white">
-                        <span className="sr-only">Fechar</span>
+                        <span className="sr-only">{t('Fechar')}</span>
                         <span aria-hidden="true">X</span>
                     </button>
                 </div>
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                    {renderTeamGroup(teamA, 'Time A', 'teamA')}
-                    {renderTeamGroup(teamB, 'Time B', 'teamB')}
+                    {renderTeamGroup(teamA, t('Time A'), 'teamA')}
+                    {renderTeamGroup(teamB, t('Time B'), 'teamB')}
                 </div>
             </div>
         </div>
@@ -68,6 +68,7 @@ const LiveMatchTracker = ({
     onGoal,
     onSelectAssister,
     timelineEvents = [],
+    t,
 }) => {
     const [showConfirm, setShowConfirm] = useState(false);
     const [isPlayerPickerOpen, setIsPlayerPickerOpen] = useState(false);
@@ -154,29 +155,29 @@ const LiveMatchTracker = ({
         switch (event.type) {
             case 'goal':
                 return event.assistName
-                    ? `${event.playerName} marcou (assistencia de ${event.assistName})`
-                    : `${event.playerName} marcou`;
+                    ? `${event.playerName} ${t('marcou (assistencia de')} ${event.assistName})`
+                    : `${event.playerName} ${t('marcou')}`;
             case 'assist':
-                return `${event.playerName} registrou uma assistencia`;
+                return `${event.playerName} ${t('registrou uma assistencia')}`;
             case 'dribble':
-                return `${event.playerName} realizou um drible`;
+                return `${event.playerName} ${t('realizou um drible')}`;
             case 'tackle':
-                return `${event.playerName} fez um desarme`;
+                return `${event.playerName} ${t('fez um desarme')}`;
             case 'failure':
-                return `${event.playerName} cometeu uma falha`;
+                return `${event.playerName} ${t('cometeu uma falha')}`;
             case 'save':
-                return `${event.playerName} fez uma defesa`;
+                return `${event.playerName} ${t('fez uma defesa')}`;
             case 'substitution':
-                return `${event.playerOutName} saiu para ${event.playerInName}`;
+                return `${event.playerOutName} ${t('saiu para')} ${event.playerInName}`;
             default:
-                return `${event.playerName} registrou ${event.type}`;
+                return `${event.playerName} ${t('registrou')} ${event.type}`;
         }
     };
 
     const formatMinuteLabel = (minute) => `${Math.max(minute, 0)}'`;
     const getTeamLabel = (teamKey) => {
-        if (teamKey === 'teamA') return 'Time A';
-        if (teamKey === 'teamB') return 'Time B';
+        if (teamKey === 'teamA') return t('Time A');
+        if (teamKey === 'teamB') return t('Time B');
         return '';
     };
 
@@ -219,6 +220,7 @@ const LiveMatchTracker = ({
                         onInitiateSubstitution(playerForAction.player);
                     }
                 }}
+                t={t}
             />
             
             <AssistSelectorModal 
@@ -226,14 +228,16 @@ const LiveMatchTracker = ({
                 onClose={() => onSelectAssister(null, null, true)}
                 teammates={teammates}
                 onSelectAssister={(assisterId) => onSelectAssister(assisterId, 'goals')}
+                t={t}
             />
 
             <ConfirmationModal 
                 isOpen={showConfirm} 
-                title="Confirmar Acrescimo" 
-                message="Deseja adicionar 1 minuto ao cronometro?" 
+                title={t("Confirmar Acrescimo")} 
+                message={t("Deseja adicionar 1 minuto ao cronometro?")} 
                 onConfirm={() => { onAddMinute(); setShowConfirm(false); }} 
                 onClose={() => setShowConfirm(false)} 
+                t={t}
             />
             
             <div className="space-y-6">
@@ -242,13 +246,13 @@ const LiveMatchTracker = ({
                         <h2 className="text-6xl font-mono tracking-tighter text-white">{formatTime(timeLeft)}</h2>
                         <div className="flex justify-center items-center gap-2 sm:gap-4 mt-2">
                             <button onClick={onTogglePause} className="p-2 sm:p-3 bg-gray-700/80 rounded-full hover:bg-indigo-400 transition-colors">{isPaused ? <LucidePlay /> : <LucidePause />}</button>
-                            <button onClick={() => setShowConfirm(true)} className="py-2 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs sm:text-sm font-semibold flex items-center gap-2"><LucidePlus /> Acrescimo</button>
-                            <button onClick={onUndo} disabled={history.length === 0} className="py-2 px-4 rounded-lg bg-gray-600 hover:bg-gray-500 text-xs sm:text-sm font-semibold flex items-center gap-2 disabled:opacity-50"><LucideUndo /> Desfazer</button>
+                            <button onClick={() => setShowConfirm(true)} className="py-2 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs sm:text-sm font-semibold flex items-center gap-2"><LucidePlus /> {t('Acrescimo')}</button>
+                            <button onClick={onUndo} disabled={history.length === 0} className="py-2 px-4 rounded-lg bg-gray-600 hover:bg-gray-500 text-xs sm:text-sm font-semibold flex items-center gap-2 disabled:opacity-50"><LucideUndo /> {t('Desfazer')}</button>
                         </div>
                     </div>
                     <h2 className="text-5xl font-black tracking-tighter">
                         <span className="text-white">{score.teamA}</span>
-                        <span className="text-indigo-300 mx-4">VS</span>
+                        <span className="text-indigo-300 mx-4">{t('VS')}</span>
                         <span className="text-white">{score.teamB}</span>
                     </h2>
                 </div>
@@ -282,15 +286,15 @@ const LiveMatchTracker = ({
                         style={{ animation: 'interactive-field-ball 3.4s ease-in-out infinite' }}
                     />
                     <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-indigo-100/90">
-                        <span className="text-[10px] uppercase tracking-[0.45em]">Campo Interativo</span>
-                        <span className="mt-1 text-xs font-semibold rounded-full bg-slate-900/40 px-3 py-1">Toque para registrar um evento</span>
+                        <span className="text-[10px] uppercase tracking-[0.45em]">{t('Campo Interativo')}</span>
+                        <span className="mt-1 text-xs font-semibold rounded-full bg-slate-900/40 px-3 py-1">{t('Toque para registrar um evento')}</span>
                     </div>
                 </div>
                 {timelineEvents.length > 0 && (
                     <div className="rounded-3xl border border-[#2f3c92]/60 bg-gradient-to-br from-[#0b1024]/90 via-[#0b1330]/92 to-[#040714]/96 p-5 shadow-[0_22px_48px_rgba(7,10,26,0.55)]">
                         <div className="flex items-center justify-between">
-                            <h3 className="text-[10px] font-semibold uppercase tracking-[0.45em] text-indigo-100/90">Eventos</h3>
-                            <span className="text-[10px] text-indigo-200/70">tempo real</span>
+                            <h3 className="text-[10px] font-semibold uppercase tracking-[0.45em] text-indigo-100/90">{t('Eventos')}</h3>
+                            <span className="text-[10px] text-indigo-200/70">{t('tempo real')}</span>
                         </div>
                         <div className="mt-4 max-h-56 space-y-3 overflow-y-auto pr-1">
                             {timelineEvents.map((event) => {
@@ -329,7 +333,7 @@ const LiveMatchTracker = ({
                 )}
                 <div className="text-center mt-6">
                     <button onClick={handleEndMatchClick} className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-8 rounded-lg text-lg">
-                        Encerrar Partida
+                        {t('Encerrar Partida')}
                     </button>
                 </div>
             </div>
@@ -338,11 +342,10 @@ const LiveMatchTracker = ({
                 onClose={handleClosePlayerPicker}
                 teams={teams}
                 onSelect={handleSelectPlayerFromPicker}
+                t={t}
             />
         </>
     );
 };
 
 export default LiveMatchTracker;
-
-

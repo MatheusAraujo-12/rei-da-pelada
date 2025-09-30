@@ -17,7 +17,7 @@ const sanitizeSkills = (rawSkills = {}) => {
     return Object.fromEntries(entries);
 };
 
-const PeerReviewModal = ({ isOpen, player, onClose, onSave }) => {
+const PeerReviewModal = ({ isOpen, player, onClose, onSave, t }) => {
     const [skills, setSkills] = useState({});
 
     useEffect(() => {
@@ -41,7 +41,7 @@ const PeerReviewModal = ({ isOpen, player, onClose, onSave }) => {
         <div className="fixed inset-0 bg-black bg-opacity-80 flex justify-center items-center z-50 p-4">
              <div className="bg-gradient-to-br from-gray-900 to-black rounded-2xl shadow-2xl p-6 w-full max-w-md max-h-full overflow-y-auto text-white border border-cyan-400/30">
                 <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold text-cyan-400">Avaliar {player.name}</h2>
+                    <h2 className="text-2xl font-bold text-cyan-400">{t('Avaliar')} {player.name}</h2>
                     <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-700 transition-colors"><LucideX className="w-6 h-6" /></button>
                 </div>
                 <div className="space-y-4">
@@ -56,7 +56,7 @@ const PeerReviewModal = ({ isOpen, player, onClose, onSave }) => {
                     ))}
                 </div>
                 <div className="mt-8 flex justify-end">
-                    <button onClick={handleSave} className="bg-cyan-500 hover:bg-cyan-600 text-black font-bold py-2 px-6 rounded-lg">Salvar Avaliacao</button>
+                    <button onClick={handleSave} className="bg-cyan-500 hover:bg-cyan-600 text-black font-bold py-2 px-6 rounded-lg">{t('Salvar Avaliacao')}</button>
                 </div>
              </div>
         </div>
@@ -64,4 +64,3 @@ const PeerReviewModal = ({ isOpen, player, onClose, onSave }) => {
 };
 
 export default PeerReviewModal;
-

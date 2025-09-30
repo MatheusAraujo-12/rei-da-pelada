@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from "firebase/firestore"; 
-import { auth, db } from '../../services/firebase'; // ✅ 'appId' foi removido desta linha
+import { auth, db } from '../../services/firebase';
 
-const AuthScreen = () => {
+const AuthScreen = ({ t }) => {
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -12,7 +12,7 @@ const AuthScreen = () => {
 
     const handleAuthAction = async () => {
         if (!email || !password) {
-            setError("Por favor, preencha o e-mail e a senha.");
+            setError(t("Por favor, preencha o e-mail e a senha."));
             return;
         }
         setLoading(true);
@@ -24,7 +24,7 @@ const AuthScreen = () => {
                 await signInWithEmailAndPassword(auth, email, password);
                 // O onAuthStateChanged no App.js cuidará do redirecionamento
             } catch (err) {
-                setError("Falha no login. Verifique suas credenciais.");
+                setError(t("Falha no login. Verifique suas credenciais."));
                 console.error("Erro de login:", err);
             }
         } else {
@@ -39,7 +39,7 @@ const AuthScreen = () => {
                 });
                 // O onAuthStateChanged no App.js cuidará do resto
             } catch (err) {
-                setError("Falha no registo. O e-mail pode já estar em uso.");
+                setError(t("Falha no registo. O e-mail pode já estar em uso."));
                 console.error("Erro de registo:", err);
             }
         }
@@ -50,7 +50,7 @@ const AuthScreen = () => {
         <div className="flex items-center justify-center min-h-screen">
             <div className="w-full max-w-md bg-gray-900/50 rounded-2xl p-8 border border-gray-700 text-white">
                 <h2 className="text-3xl font-bold text-indigo-300 mb-6 text-center">
-                    {isLogin ? 'Entrar' : 'Criar Conta'}
+                    {isLogin ? t('Entrar') : t('Criar Conta')}
                 </h2>
                 
                 {error && <p className="bg-red-800/50 text-red-300 p-3 rounded-lg text-center mb-4">{error}</p>}
@@ -58,14 +58,14 @@ const AuthScreen = () => {
                 <div className="space-y-4">
                     <input
                         type="email"
-                        placeholder="E-mail"
+                        placeholder={t("E-mail")}
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         className="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                     />
                     <input
                         type="password"
-                        placeholder="Senha"
+                        placeholder={t("Senha")}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         className="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
@@ -78,7 +78,7 @@ const AuthScreen = () => {
                         disabled={loading}
                         className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-6 rounded-lg disabled:opacity-50"
                     >
-                        {loading ? 'A processar...' : (isLogin ? 'Entrar' : 'Registar')}
+                        {loading ? t('A processar...') : (isLogin ? t('Entrar') : t('Registar'))}
                     </button>
                 </div>
 
@@ -90,7 +90,7 @@ const AuthScreen = () => {
                         }}
                         className="text-gray-400 hover:text-indigo-400"
                     >
-                        {isLogin ? 'Ainda não tem uma conta? Registe-se' : 'Já tem uma conta? Entre'}
+                        {isLogin ? t('Ainda não tem uma conta? Registe-se') : t('Já tem uma conta? Entre')}
                     </button>
                 </div>
             </div>

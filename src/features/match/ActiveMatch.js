@@ -5,7 +5,7 @@ import SubstitutionModal from './SubstitutionModal';
 const EMPTY_MATCH_PLAYER_STATS = { goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0, dribbles: 0 };
 const fillPlayerStats = (stats = {}) => ({ ...EMPTY_MATCH_PLAYER_STATS, ...stats });
 
-const ActiveMatch = ({ initialTeams, onMatchEnd, onTeamsUpdate, groupId, initialDurationSec = 10 * 60 }) => {
+const ActiveMatch = ({ initialTeams, onMatchEnd, onTeamsUpdate, groupId, initialDurationSec = 10 * 60, t }) => {
     const [allTeams, setAllTeams] = useState(initialTeams);
     const [timeLeft, setTimeLeft] = useState(initialDurationSec);
     const [isPaused, setIsPaused] = useState(true);
@@ -95,7 +95,7 @@ const ActiveMatch = ({ initialTeams, onMatchEnd, onTeamsUpdate, groupId, initial
                 }
             }
         } catch (e) {
-            console.error('Falha ao restaurar estado ao vivo:', e);
+            console.error(t('Falha ao restaurar estado ao vivo:'), e);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [liveStateKey]);
@@ -204,7 +204,7 @@ const ActiveMatch = ({ initialTeams, onMatchEnd, onTeamsUpdate, groupId, initial
             teamKey,
             minute: minuteStamp,
             playerId: player?.id,
-            playerName: player?.name || 'Jogador',
+            playerName: player?.name || t('Jogador'),
         };
 
         if (statToUpdate === 'goals') {
@@ -254,7 +254,7 @@ const ActiveMatch = ({ initialTeams, onMatchEnd, onTeamsUpdate, groupId, initial
             });
             if (posOut) substitutionTeamKey = posOut.tIndex === 0 ? 'teamA' : 'teamB';
             if (posOut && posIn) {
-                [newTeams[posOut.tIndex][posOut.pIndex], newTeams[posIn.tIndex][posIn.pIndex]] = [newTeams[posIn.tIndex][posIn.pIndex], newTeams[posOut.tIndex][posOut.pIndex]];
+                [newTeams[posOut.tIndex][posOut.pIndex], newTeams[posIn.tIndex][posIn.pIndex]] = [newTeams[posIn.tIndex][posIn.pIndex], newTeams[posOut.tIndex][posIn.pIndex]];
             }
             if (onTeamsUpdate) onTeamsUpdate(newTeams);
             return newTeams;
@@ -285,6 +285,7 @@ const ActiveMatch = ({ initialTeams, onMatchEnd, onTeamsUpdate, groupId, initial
                 playerOut={playerToSubstitute} 
                 availableSubs={allTeams.slice(2).flat().filter(p => p)} 
                 onConfirm={handleConfirmSubstitution}
+                t={t}
             />
             <LiveMatchTracker 
                 teams={teamsInPlay}
@@ -310,6 +311,7 @@ const ActiveMatch = ({ initialTeams, onMatchEnd, onTeamsUpdate, groupId, initial
                 onSelectAssister={handleSelectAssister}
                 onInitiateSubstitution={handleInitiateSubstitution}
                 timelineEvents={eventTimeline}
+                t={t}
             />
         </>
     );

@@ -67,7 +67,7 @@ const buildSkillList = (selfOverall) => {
 
   return fallbackSkillLabels.map(label => ({ label, value: 0 }));
 };
-const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => {
+const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin, t }) => {
   const isGoalkeeper = (player.position || '').trim() === 'Goleiro';
   const baseSkills = isGoalkeeper ? GK_DEFAULT_SKILLS : LINE_DEFAULT_SKILLS;
   const mergedSkills = React.useMemo(() => ({ ...baseSkills, ...(player.selfOverall || {}) }), [baseSkills, player.selfOverall]);
@@ -161,21 +161,21 @@ const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => 
               onClick={() => onOpenPeerReview(player)}
               className={`flex-1 rounded-lg bg-gradient-to-r from-[#4338ca] via-[#a855f7] to-[#06b6d4] py-2 px-3 text-sm font-semibold text-white shadow-lg shadow-[#4338ca33] transition-transform hover:-translate-y-0.5 ${isAdmin ? '' : 'max-w-full'}`}
             >
-              Avaliar
+              {t('Avaliar')}
             </button>
             {isAdmin && (
               <div className="flex shrink-0 gap-2">
                 <button
                   onClick={() => onEdit(player)}
                   className="rounded-lg bg-blue-600 p-2 text-white shadow transition hover:bg-blue-500"
-                  title="Editar Jogador"
+                  title={t("Editar Jogador")}
                 >
                   <LucideEdit size={16} />
                 </button>
                 <button
                   onClick={() => onDelete(player)}
                   className="rounded-lg bg-rose-600 p-2 text-white shadow transition hover:bg-rose-500"
-                  title="Apagar Jogador"
+                  title={t("Apagar Jogador")}
                 >
                   <LucideTrash2 size={16} />
                 </button>
@@ -189,7 +189,7 @@ const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => 
         {peerOverall && (
           <div
             className="absolute top-[52px] right-3 bg-fuchsia-700/60 border border-fuchsia-300/50 text-white rounded-xl px-2 py-1 flex items-center gap-1 shadow"
-            title={`Overall da Galera (${player.peerOverall.ratingsCount} votos)`}
+            title={`${t('Overall da Galera')} (${player.peerOverall.ratingsCount} ${t('votos')})`}
           >
             <LucideStar className="w-4 h-4 text-yellow-300" />
             <span className="text-sm font-bold">{peerOverall}</span>
@@ -200,7 +200,7 @@ const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => 
         {adminOverall && (
           <div
             className="absolute top-[110px] right-3 bg-cyan-700/60 border border-cyan-300/50 text-white rounded-xl px-2 py-1 flex items-center gap-1 shadow"
-            title="Overall do administrador"
+            title={t("Overall do administrador")}
           >
             <LucideStar className="w-4 h-4 text-cyan-200" />
             <span className="text-sm font-bold">{adminOverall}</span>
@@ -212,6 +212,3 @@ const PlayerCard = ({ player, onEdit, onDelete, onOpenPeerReview, isAdmin }) => 
 };
 
 export default PlayerCard;
-
-
-

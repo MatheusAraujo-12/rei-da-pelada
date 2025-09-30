@@ -3,7 +3,7 @@ import { LucideEdit, LucideShieldCheck, LucideUndo, LucideX, LucideUsers, Lucide
 import { calculateOverall } from '../../utils/helpers';
 import ActiveMatch from './ActiveMatch';
 
-const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
+const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, t }) => {
     const localStorageKey = `reiDaPeladaConfig-${groupId}`;
     const sessionStateKey = `sessionState-${groupId}`;
 
@@ -375,6 +375,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd }) => {
             onTeamsUpdate={(updated) => setAllTeams(updated)}
             groupId={groupId}
             initialDurationSec={Math.max(1, Number(matchDurationMin) || 10) * 60}
+            t={t}
         />
     }
 

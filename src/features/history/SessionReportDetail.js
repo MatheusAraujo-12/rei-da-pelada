@@ -21,6 +21,7 @@ const SessionReportDetail = ({ session, onBack }) => {
   const [loading, setLoading] = useState(true);
   const [isVotingOpen, setIsVotingOpen] = useState(false);
   const [feedback, setFeedback] = useState([]);
+  const [nowTimestamp, setNowTimestamp] = useState(() => Date.now());
 
   useEffect(() => {
     const fetchMatches = async () => {
@@ -67,6 +68,18 @@ const SessionReportDetail = ({ session, onBack }) => {
       return () => unsub();
     } catch (e) { console.error('Erro ao carregar feedback da sessão:', e); }
   }, [session?.groupId, session?.id]);
+  useEffect(() => {
+    const tick = () => setNowTimestamp(Date.now());
+    const intervalId = setInterval(tick, 60000);
+    return () => clearInterval(intervalId);
+  }, []);
+
+  const currentUserUid = auth.currentUser?.uid || null;
+
+  const hasCurrentUserVoted = useMemo(() => {
+    if (!currentUserUid) return false;
+    return feedback.some(entry => entry?.id === currentUserUid);
+  }, [feedback, currentUserUid]);
 
   const calculatedStats = useMemo(() => {
     const stats = {};
@@ -157,16 +170,96 @@ const SessionReportDetail = ({ session, onBack }) => {
       else if (c === topCount && c > 0) topMvpIds.push(pid);
     });
     const mvpNames = topMvpIds.map(id => participants.find(p => p.id === id)?.name || id);
+    const mvpDetails = topMvpIds.map(id => participants.find(p => p.id === id)).filter(Boolean);
     const totalMvpVotes = Object.values(mvpCounts).reduce((a,b)=>a+b,0);
-    return { avgList, mvpNames, mvpCounts, totalMvpVotes };
+    return { avgList, mvpNames, mvpCounts, totalMvpVotes, mvpDetails };
   }, [feedback, participants]);
+
+  const sessionReferenceDate = useMemo(() => {
+    if (!session) return null;
+    const parseDate = (value) => {
+      if (!value) return null;
+      const dateValue = new Date(value);
+      if (Number.isNaN(dateValue.getTime())) return null;
+      return dateValue;
+    };
+
+    if (session?.endedAt) {
+      const parsed = parseDate(session.endedAt);
+      if (parsed) return parsed;
+    }
+    if (session?.date?.seconds) {
+      return new Date(session.date.seconds * 1000);
+    }
+    if (session?.date instanceof Date && !Number.isNaN(session.date.getTime())) {
+      return session.date;
+    }
+    if (typeof session?.date === 'string') {
+      const parsed = parseDate(session.date);
+      if (parsed) return parsed;
+    }
+
+    if (Array.isArray(matchesDetails) && matchesDetails.length > 0) {
+      const endedValues = matchesDetails
+        .map((match) => parseDate(match?.endedAt))
+        .filter(Boolean)
+        .map((date) => date.getTime());
+      if (endedValues.length > 0) {
+        return new Date(Math.max(...endedValues));
+      }
+    }
+    return null;
+  }, [session, matchesDetails]);
+
+  const votingDeadline = useMemo(() => {
+    if (!sessionReferenceDate) return null;
+    return new Date(sessionReferenceDate.getTime() + 24 * 60 * 60 * 1000);
+  }, [sessionReferenceDate]);
+
+  const isVotingDeadlinePassed = useMemo(() => {
+    if (!votingDeadline) return false;
+    return nowTimestamp > votingDeadline.getTime();
+  }, [votingDeadline, nowTimestamp]);
+
+  const votingRemainingMs = useMemo(() => {
+    if (!votingDeadline) return null;
+    return Math.max(0, votingDeadline.getTime() - nowTimestamp);
+  }, [votingDeadline, nowTimestamp]);
+
+  const votingCountdownText = useMemo(() => {
+    if (!votingDeadline) return null;
+    if (isVotingDeadlinePassed) return 'Votacao encerrada';
+    const totalMinutes = Math.ceil(votingRemainingMs / 60000);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (hours > 0) {
+      return `Prazo para votar: ${hours}h ${minutes.toString().padStart(2, '0')}min`;
+    }
+    return `Prazo para votar: ${minutes}min`;
+  }, [votingDeadline, isVotingDeadlinePassed, votingRemainingMs]);
 
   const handleSubmitVoting = async ({ ratings, mvpId }) => {
     try {
+      if (isVotingDeadlinePassed) {
+        alert('O prazo de 24 horas para votar foi encerrado.');
+        setIsVotingOpen(false);
+        return;
+      }
       const uid = auth.currentUser?.uid;
       if (!uid) { alert('É necessário estar autenticado para votar.'); return; }
       if (!session?.groupId || !session?.id) { alert('Sessão inválida para votação.'); return; }
+      if (hasCurrentUserVoted) {
+        alert('Voce ja votou nesta sessao.');
+        setIsVotingOpen(false);
+        return;
+      }
       const ref = doc(db, `groups/${session.groupId}/sessions/${session.id}/feedback`, uid);
+      const existingFeedback = await getDoc(ref);
+      if (existingFeedback.exists()) {
+        alert('Voce ja votou nesta sessao.');
+        setIsVotingOpen(false);
+        return;
+      }
       await setDoc(ref, { ratings: ratings || {}, mvp: mvpId || null, createdAt: serverTimestamp() }, { merge: true });
       if (session?.groupId) {
         try {
@@ -184,6 +277,22 @@ const SessionReportDetail = ({ session, onBack }) => {
     }
   };
   
+  const handleOpenVoting = () => {
+    if (isVotingDeadlinePassed) {
+      alert('O prazo de 24 horas para votar foi encerrado.');
+      return;
+    }
+    if (!currentUserUid) {
+      alert('A% necessA?rio estar autenticado para votar.');
+      return;
+    }
+    if (hasCurrentUserVoted) {
+      alert('Voce ja votou nesta sessao.');
+      return;
+    }
+    setIsVotingOpen(true);
+  };
+
   const shareReport = async () => {
     try {
       const images = await generateReportImages({ returnDataUrl: true });
@@ -471,12 +580,18 @@ const SessionReportDetail = ({ session, onBack }) => {
 
       <div className="flex flex-wrap items-center justify-center gap-4">
         <button
-          onClick={() => setIsVotingOpen(true)}
-          disabled={loading}
+          onClick={handleOpenVoting}
+          disabled={loading || isVotingDeadlinePassed || hasCurrentUserVoted}
           className="rounded-lg bg-gradient-to-r from-[#4338ca] via-[#5b4ae5] to-[#a855f7] px-5 py-2 font-semibold text-white shadow-lg shadow-[#4338ca33] transition-colors hover:from-[#4c3edb] hover:to-[#b779f3] disabled:opacity-60"
         >
           Votar
         </button>
+        {votingCountdownText && (
+          <p className="w-full text-center text-xs text-[#9aa7d7]">{votingCountdownText}{votingDeadline && !isVotingDeadlinePassed ? ` (encerra em ${votingDeadline.toLocaleString('pt-BR')})` : ''}</p>
+        )}
+        {hasCurrentUserVoted && (
+          <p className="w-full text-center text-xs text-[#9aa7d7]">Voce ja votou nesta sessao.</p>
+        )}
         <button
           onClick={shareReport}
           disabled={loading}
@@ -641,3 +756,5 @@ const SessionReportDetail = ({ session, onBack }) => {
 
 
 export default SessionReportDetail;
+
+
