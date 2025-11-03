@@ -412,7 +412,7 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
             {/* Floating toggle for bench panel */}
             <button
                 onClick={() => setShowBench(v => !v)}
-                className="fixed bottom-6 left-6 z-40 rounded-full text-white px-4 py-3 shadow-lg bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 hover:from-indigo-500 hover:via-violet-500 hover:to-fuchsia-500 ring-1 ring-inset ring-violet-400/40"
+                className="fixed bottom-24 right-4 md:bottom-6 md:left-6 md:right-auto z-40 rounded-full text-white px-4 py-3 shadow-lg bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 hover:from-indigo-500 hover:via-violet-500 hover:to-fuchsia-500 ring-1 ring-inset ring-violet-400/40"
                 title="Reservas"
             >
                 {`Reservas (${benchPlayers.length})`}
@@ -421,7 +421,7 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
             {/* Floating toggle for queue panel */}
             <button
                 onClick={() => setShowQueue(v => !v)}
-                className="fixed bottom-6 left-40 z-40 rounded-full text-white px-4 py-3 shadow-lg bg-gradient-to-br from-violet-600 via-fuchsia-600 to-pink-600 hover:from-violet-500 hover:via-fuchsia-500 hover:to-pink-500 ring-1 ring-inset ring-fuchsia-400/40"
+                className="fixed bottom-10 right-4 md:bottom-6 md:left-40 md:right-auto z-40 rounded-full text-white px-4 py-3 shadow-lg bg-gradient-to-br from-violet-600 via-fuchsia-600 to-pink-600 hover:from-violet-500 hover:via-fuchsia-500 hover:to-pink-500 ring-1 ring-inset ring-fuchsia-400/40"
                 title="Fila"
             >
                 {`Fila (${waitingTeams.length})`}
