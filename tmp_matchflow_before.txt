@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { LucideEdit, LucideShieldCheck, LucideUndo, LucideX, LucideUsers, LucideShuffle, LucidePlus } from 'lucide-react';
-import Times, { autoBuildTeams } from './Times';
+import { calculateOverall } from '../../utils/helpers';
 import ActiveMatch from './ActiveMatch';
 
 const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, t }) => {
@@ -42,9 +42,12 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, t }) => {
                     ? prevTeams.map(t => Array.isArray(t) ? [...t] : [])
                     : Array.from({ length: benchIndex }, () => []);
 
-                // Ensure we always have at least `benchIndex` fixed team slots (A, B, C.. up to N)
+                // Ensure we always have at least `benchIndex` fixed teams slots
                 const fixedTeams = cloned.slice(0, benchIndex);
                 while (fixedTeams.length < benchIndex) fixedTeams.push([]);
+
+                // Waiting queue (teams after the fixed teams; bench will be inserted between fixed teams and waiting queue)
+                const waiting = cloned.slice(benchIndex);
 
                 // Compute bench as players not present in any fixed team
                 const assignedIds = new Set(
@@ -55,10 +58,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, t }) => {
                 );
                 const desiredBench = players.filter(p => p && !assignedIds.has(p.id));
 
-                // Waiting queue should exclude the previous bench at benchIndex
-                const waitingTail = cloned.slice(benchIndex + 1);
-
-                return [...fixedTeams, desiredBench, ...waitingTail];
+                return [...fixedTeams, desiredBench, ...waiting];
             });
         }
     }, [players, step, allTeams, availablePlayersForSetup, numberOfTeams]);
@@ -148,13 +148,33 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, t }) => {
     };
 
     const handleAutoDrawTeams = (availablePlayers) => {
-        const finalTeams = autoBuildTeams({
-            players: availablePlayers,
-            numberOfTeams,
-            playersPerTeam,
-            drawType
+        const playersWithOverall = availablePlayers.map(p => {
+            let overall;
+            if (drawType === 'admin' && p.adminOverall) overall = calculateOverall(p.adminOverall);
+            else if (drawType === 'peer' && p.peerOverall) overall = calculateOverall(p.peerOverall.avgSkills);
+            else overall = calculateOverall(p.selfOverall);
+            return { ...p, overall };
         });
-        finishSessionSetup(finalTeams, availablePlayers);
+        const posOrder = { 'Goleiro': 1, 'Defensor': 2, 'Volante': 3, 'Meio-Campo': 4, 'Ponta': 5, 'Atacante': 6 };
+        playersWithOverall.sort((a, b) => (posOrder[a.detailedPosition] || 99) - (posOrder[b.detailedPosition] || 99) || b.overall - a.overall);
+        if (playersPerTeam && playersPerTeam > 0) {
+            const baseTeams = Array.from({ length: numberOfTeams }, () => ({ players: [] }));
+            for (const player of playersWithOverall) {
+                const spot = baseTeams.find(t => t.players.length < playersPerTeam);
+                if (spot) spot.players.push(player);
+                // overflow players are left unassigned and will appear as reservas
+            }
+            const finalTeams = baseTeams.map(t => t.players);
+            finishSessionSetup(finalTeams, availablePlayers);
+        } else {
+            let teams = Array.from({ length: numberOfTeams }, () => ({ players: [] }));
+            playersWithOverall.forEach(player => {
+                teams.sort((a, b) => a.players.length - b.players.length);
+                teams[0].players.push(player);
+            });
+            const finalTeams = teams.map(t => t.players);
+            finishSessionSetup(finalTeams, availablePlayers);
+        }
     };
 
     const handleAssignPlayer = (playerToAssign, toTeamIndex) => {
@@ -422,26 +442,6 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, t }) => {
         />
     }
 
-    if (step === 'manual_setup') {
-        return (
-            <div className="bg-gray-900/50 rounded-2xl p-4 sm:p-6 border border-indigo-800">
-                <h2 className="text-2xl font-bold text-indigo-300 mb-4">Montagem Manual dos Times</h2>
-                <Times
-                    players={availablePlayersForSetup}
-                    numberOfTeams={numberOfTeams}
-                    playersPerTeam={playersPerTeam}
-                    mode="manual"
-                    teams={allTeams}
-                    onChange={setAllTeams}
-                    t={t}
-                />
-                <div className="text-center mt-6">
-                    <button onClick={handleConfirmManualTeams} className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-lg text-lg">Confirmar Times e Iniciar</button>
-                </div>
-            </div>
-        );
-    }
-
     if (step === 'pre_game' || step === 'post_game') {
         const teamA = allTeams[0] || [];
         const teamB = allTeams[1] || [];
@@ -475,13 +475,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, t }) => {
                     {isEditModeActive ? 'Modo de Edição' : (step === 'post_game' ? 'Fim da Partida' : 'Próxima Partida')}
                 </h2>
                 <p className="text-gray-400 mb-6">{isEditModeActive ? 'Organize os jogadores e os próximos times.' : 'Visualize os times ou inicie a Próxima partida.'}</p>
-                                {step === 'pre_game' && (matchHistory || []).length === 0 && (
-                    <div className="flex justify-center mb-4">
-                        <button onClick={() => { try { localStorage.removeItem(sessionStateKey); } catch {} setIsEditModeActive(false); setAllTeams([]); setMatchHistory([]); setSessionPlayerStats({}); setWinnerStreak({ teamId: null, count: 0 }); setStep('config'); }} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-6 rounded-lg">
-                            Voltar para Configurar
-                        </button>
-                    </div>
-                )}<div className="flex justify-center gap-4 mb-6">
+                <div className="flex justify-center gap-4 mb-6">
                     {!isEditModeActive ? (<button onClick={() => setIsEditModeActive(true)} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg flex items-center gap-2"><LucideEdit className="w-4 h-4"/>Editar Partida</button>) : (<button onClick={() => setIsEditModeActive(false)} className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-6 rounded-lg flex items-center gap-2"><LucideShieldCheck className="w-4 h-4"/>Salvar Alterações</button>)}
                 </div>
                 <div className="flex flex-col md:flex-row gap-4 mb-6 justify-center items-start">
@@ -743,9 +737,3 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, t }) => {
 };
 
 export default MatchFlow;
-
-
-
-
-
-

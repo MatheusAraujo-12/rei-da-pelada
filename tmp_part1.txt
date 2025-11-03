@@ -1,0 +1,77 @@
+import React, { useState } from 'react';
+import { LucidePlay, LucidePause, LucidePlus, LucideUndo, LucideGoal, LucideHandshake, LucideShield, LucideAlertTriangle, LucideArrowLeftRight, LucideMove, LucideHand, LucideSparkles } from 'lucide-react';
+import ConfirmationModal from '../../components/ConfirmationModal';
+import PlayerActionModal from './PlayerActionModal';
+import AssistSelectorModal from './AssistSelectorModal';
+
+const PlayerPickerModal = ({ isOpen, onClose, teams, onSelect, t }) => {
+    if (!isOpen) return null;
+    const teamA = (teams?.teamA || []).filter(Boolean);
+    const teamB = (teams?.teamB || []).filter(Boolean);
+    const renderTeamGroup = (players, label, teamKey) => (
+        <div className="space-y-2">
+            <h3 className="text-sm font-semibold uppercase tracking-[0.3em] text-indigo-300">{label}</h3>
+            {players.length > 0 ? (
+                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                    {players.map((player) => (
+                        <button
+                            key={`${teamKey}-${player.id}`}
+                            onClick={() => onSelect(player, teamKey)}
+                            className="w-full rounded-lg border border-indigo-500/30 bg-indigo-900/40 px-3 py-2 text-left text-sm font-semibold text-white hover:border-indigo-400 hover:bg-indigo-800/60 transition-colors"
+                        >
+                            {player.name}
+                        </button>
+                    ))}
+                </div>
+            ) : (
+                <p className="text-xs text-slate-400">{t('Nenhum jogador disponivel.')}</p>
+            )}
+        </div>
+    );
+
+
+    return (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4">
+            <div className="w-full max-w-xl rounded-2xl border border-indigo-500/40 bg-[#0b1220]/95 p-6 shadow-2xl">
+                <div className="mb-4 flex items-center justify-between">
+                    <h2 className="text-lg font-bold text-white">{t('Selecionar jogador')}</h2>
+                    <button onClick={onClose} className="rounded-full border border-slate-600 p-2 text-slate-300 hover:text-white">
+                        <span className="sr-only">{t('Fechar')}</span>
+                        <span aria-hidden="true">X</span>
+                    </button>
+                </div>
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                    {renderTeamGroup(teamA, t('Time A'), 'teamA')}
+                    {renderTeamGroup(teamB, t('Time B'), 'teamB')}
+                </div>
+            </div>
+        </div>
+    );
+};
+// Substituicao controlada pelo componente pai (ActiveMatch)
+const LiveMatchTracker = ({
+    teams,
+    score,
+    timeLeft,
+    isPaused,
+    history = [],
+    playerStats,
+    playerForAction,
+    isAssistModalOpen,
+    teammates,
+    onInitiateSubstitution,
+    onTogglePause,
+    onAddMinute,
+    onUndo,
+    onEndMatch,
+    onPlayerAction,
+    onGoal,
+    onSelectAssister,
+    timelineEvents = [],
+    t,
+}) => {
+    const [showConfirm, setShowConfirm] = useState(false);
+    const [isPlayerPickerOpen, setIsPlayerPickerOpen] = useState(false);
+    const fieldStripes = React.useMemo(() => Array.from({ length: 6 }), []);
+
+    

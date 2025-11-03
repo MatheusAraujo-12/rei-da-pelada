@@ -864,6 +864,16 @@ function App() {
                     </div>
                 )}
                 <main>{mainComponent}</main>
+                {currentView === 'match' && isAdminOfActiveGroup && (
+                    <button
+                        onClick={openAddModal}
+                        className="fixed bottom-6 right-6 z-50 rounded-full text-white px-5 py-4 flex items-center gap-2 transition-all duration-200 bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 hover:from-indigo-500 hover:via-violet-500 hover:to-fuchsia-500 shadow-[0_10px_25px_rgba(88,28,135,0.45)] ring-1 ring-inset ring-violet-400/40"
+                        title={t('Adicionar Novo Jogador')}
+                    >
+                        <span className="font-bold text-sm hidden sm:inline">{t('Adicionar Novo Jogador')}</span>
+                        <span className="sm:hidden font-bold text-xl">＋</span>
+                    </button>
+                )}
             </>
         );
     };

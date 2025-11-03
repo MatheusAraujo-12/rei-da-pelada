@@ -3,7 +3,7 @@ import LiveMatchTracker from './LiveMatchTracker';
 import SubstitutionModal from './SubstitutionModal';
 import ReservePanel from './ReservePanel';
 
-const EMPTY_MATCH_PLAYER_STATS = { goals: 0, ownGoals: 0, assists: 0, tackles: 0, saves: 0, failures: 0, dribbles: 0 };
+const EMPTY_MATCH_PLAYER_STATS = { goals: 0, assists: 0, tackles: 0, saves: 0, failures: 0, dribbles: 0 };
 const fillPlayerStats = (stats = {}) => ({ ...EMPTY_MATCH_PLAYER_STATS, ...stats });
 
 const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsChange, groupId, initialDurationSec = 10 * 60, t }) => {
@@ -238,9 +238,6 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
 
         if (statToUpdate === 'goals') {
             setScore(prev => ({ ...prev, [teamKey]: prev[teamKey] + 1 }));
-        } else if (statToUpdate === 'ownGoals') {
-            const oppKey = teamKey === 'teamA' ? 'teamB' : 'teamA';
-            setScore(prev => ({ ...prev, [oppKey]: prev[oppKey] + 1 }));
         }
 
         const minuteStamp = getCurrentMinuteStamp();
@@ -256,11 +253,6 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
             recordTimelineEvent({
                 type: 'goal',
                 assistName,
-                ...baseEvent,
-            });
-        } else if (statToUpdate === 'ownGoals') {
-            recordTimelineEvent({
-                type: 'ownGoal',
                 ...baseEvent,
             });
         } else {
@@ -466,9 +458,9 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
                     onClose={() => setShowBench(false)}
                     reserves={benchPlayers}
                     teamLabels={(allTeams || []).map((_, idx) => (
-                        idx === 0 ? t('Time A') : idx === 1 ? t('Time B') : idx === benchIndex ? 'Reservas' : `Fila ${idx - 2}`
+                        idx === 0 ? t('Time A') : idx === 1 ? t('Time B') : idx === 2 ? 'Reservas' : `Fila ${idx - 2}`
                     ))}
-                    excludeIndices={[benchIndex]}
+                    excludeIndices={[2]}
                     onAddToTeam={handleAddPlayerToTeam}
                     title="Jogadores disponíveis"
                 />
@@ -521,8 +513,3 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
 };
 
 export default ActiveMatch;
-
-
-
-
-

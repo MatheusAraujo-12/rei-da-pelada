@@ -6,6 +6,7 @@ const PlayerActionModal = ({ isOpen, onClose, player, onStat, onSubstitute, onGo
 
     const actions = [
         { label: t('Gol'), icon: LucideGoal, action: onGoal, color: 'bg-green-600 hover:bg-green-500' },
+        { label: t('Gol Contra'), icon: LucideGoal, action: () => onStat('ownGoals'), color: 'bg-red-700 hover:bg-red-600' },
         { label: t('Assistencia'), icon: LucideHandshake, action: () => onStat('assists'), color: 'bg-blue-600 hover:bg-blue-500' },
         { label: t('Drible'), icon: LucideMove, action: () => onStat('dribbles'), color: 'bg-amber-500 hover:bg-amber-400' },
         { label: t('Desarme'), icon: LucideShield, action: () => onStat('tackles'), color: 'bg-orange-600 hover:bg-orange-500' },
