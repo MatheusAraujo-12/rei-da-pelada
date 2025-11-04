@@ -3,7 +3,7 @@ import { LucideEdit, LucideShieldCheck, LucideUndo, LucideX, LucideUsers, Lucide
 import Times, { autoBuildTeams } from './Times';
 import ActiveMatch from './ActiveMatch';
 
-const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, t }) => {
+const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, onCreatePlayer, t }) => {
     const localStorageKey = `reiDaPeladaConfig-${groupId}`;
     const sessionStateKey = `sessionState-${groupId}`;
 
@@ -418,6 +418,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, t }) => {
             onTeamsChange={setAllTeams}
             groupId={groupId}
             initialDurationSec={Math.max(1, Number(matchDurationMin) || 10) * 60}
+            onCreatePlayer={onCreatePlayer}
             t={t}
         />
     }
@@ -481,7 +482,13 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, t }) => {
                             Voltar para Configurar
                         </button>
                     </div>
-                )}<div className="flex justify-center gap-4 mb-6">
+                )}
+                <div className="flex justify-center gap-4 mb-6">
+                    {onCreatePlayer && (
+                        <button onClick={onCreatePlayer} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg">
+                            {t('Adicionar Jogador')}
+                        </button>
+                    )}
                     {!isEditModeActive ? (<button onClick={() => setIsEditModeActive(true)} className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg flex items-center gap-2"><LucideEdit className="w-4 h-4"/>Editar Partida</button>) : (<button onClick={() => setIsEditModeActive(false)} className="bg-green-600 hover:bg-green-500 text-white font-bold py-2 px-6 rounded-lg flex items-center gap-2"><LucideShieldCheck className="w-4 h-4"/>Salvar Alterações</button>)}
                 </div>
                 <div className="flex flex-col md:flex-row gap-4 mb-6 justify-center items-start">
@@ -743,6 +750,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, t }) => {
 };
 
 export default MatchFlow;
+
 
 
 

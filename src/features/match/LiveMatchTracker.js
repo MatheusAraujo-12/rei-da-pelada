@@ -68,9 +68,14 @@ const LiveMatchTracker = ({
     onGoal,
     onSelectAssister,
     timelineEvents = [],
+    openCreatePlayer = () => {},
+    openBench = () => {},
+    openQueue = () => {},
+    disableFab = false,
     t,
 }) => {
     const [showConfirm, setShowConfirm] = useState(false);
+    const [showFabMenu, setShowFabMenu] = useState(false);
     const [isPlayerPickerOpen, setIsPlayerPickerOpen] = useState(false);
     const fieldStripes = React.useMemo(() => Array.from({ length: 6 }), []);
 
@@ -342,10 +347,44 @@ const LiveMatchTracker = ({
                         </div>
                     </div>
                 )}
-                <div className="text-center mt-6">
+                <div className="mt-6 flex items-center justify-center gap-3">
                     <button onClick={handleEndMatchClick} className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-8 rounded-lg text-lg">
                         {t('Encerrar Partida')}
                     </button>
+                    {!disableFab && (
+                    <div className="relative">
+                        <button
+                            onClick={() => setShowFabMenu(v => !v)}
+                            className="rounded-lg h-12 px-4 min-w-[3rem] flex items-center justify-center text-white text-2xl shadow-lg bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 hover:from-indigo-500 hover:via-violet-500 hover:to-fuchsia-500 ring-1 ring-inset ring-violet-400/40"
+                            aria-label="Abrir menu"
+                            title={showFabMenu ? t('Fechar menu') : t('Abrir menu')}
+                        >
+                            {showFabMenu ? '×' : '+'}
+                        </button>
+                        {showFabMenu && (
+                            <div className="absolute bottom-14 right-0 flex flex-col items-end gap-2">
+                                <button
+                                    onClick={() => { openCreatePlayer(); setShowFabMenu(false); }}
+                                    className="rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-2 shadow"
+                                >
+                                    {t('Adicionar Novo Jogador')}
+                                </button>
+                                <button
+                                    onClick={() => { openQueue(); setShowFabMenu(false); }}
+                                    className="rounded-lg bg-pink-600 hover:bg-pink-500 text-white text-xs font-semibold px-3 py-2 shadow"
+                                >
+                                    {t('Lista de espera')}
+                                </button>
+                                <button
+                                    onClick={() => { openBench(); setShowFabMenu(false); }}
+                                    className="rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold px-3 py-2 shadow"
+                                >
+                                    {t('Reservas')}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                    )}
                 </div>
             </div>
             <PlayerPickerModal

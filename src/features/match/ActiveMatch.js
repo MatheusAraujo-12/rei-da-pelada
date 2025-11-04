@@ -6,7 +6,7 @@ import ReservePanel from './ReservePanel';
 const EMPTY_MATCH_PLAYER_STATS = { goals: 0, ownGoals: 0, assists: 0, tackles: 0, saves: 0, failures: 0, dribbles: 0 };
 const fillPlayerStats = (stats = {}) => ({ ...EMPTY_MATCH_PLAYER_STATS, ...stats });
 
-const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsChange, groupId, initialDurationSec = 10 * 60, t }) => {
+const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsChange, groupId, initialDurationSec = 10 * 60, onCreatePlayer, t }) => {
     const [timeLeft, setTimeLeft] = useState(initialDurationSec);
     const [isPaused, setIsPaused] = useState(true);
     const [score, setScore] = useState({ teamA: 0, teamB: 0 });
@@ -22,6 +22,7 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
     const [showBench, setShowBench] = useState(false);
     const [showQueue, setShowQueue] = useState(false);
     const [playerToSubstitute, setPlayerToSubstitute] = useState(null);
+    const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
 
     const workerRef = useRef(null);
     const startedAtRef = useRef(Date.now());
@@ -406,26 +407,13 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
                 onSelectAssister={handleSelectAssister}
                 onInitiateSubstitution={handleInitiateSubstitution}
                 timelineEvents={eventTimeline}
+                openCreatePlayer={onCreatePlayer}
+                openBench={() => setShowBench(true)}
+                openQueue={() => setShowQueue(true)}
+                disableFab={isQuickAddOpen}
                 t={t}
             />
 
-            {/* Floating toggle for bench panel */}
-            <button
-                onClick={() => setShowBench(v => !v)}
-                className="fixed bottom-24 right-4 md:bottom-6 md:left-6 md:right-auto z-40 rounded-full text-white px-4 py-3 shadow-lg bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 hover:from-indigo-500 hover:via-violet-500 hover:to-fuchsia-500 ring-1 ring-inset ring-violet-400/40"
-                title="Reservas"
-            >
-                {`Reservas (${benchPlayers.length})`}
-            </button>
-
-            {/* Floating toggle for queue panel */}
-            <button
-                onClick={() => setShowQueue(v => !v)}
-                className="fixed bottom-10 right-4 md:bottom-6 md:left-40 md:right-auto z-40 rounded-full text-white px-4 py-3 shadow-lg bg-gradient-to-br from-violet-600 via-fuchsia-600 to-pink-600 hover:from-violet-500 hover:via-fuchsia-500 hover:to-pink-500 ring-1 ring-inset ring-fuchsia-400/40"
-                title="Fila"
-            >
-                {`Fila (${waitingTeams.length})`}
-            </button>
 
             {/* Bench side panel */}
             {showBench && (
@@ -513,6 +501,33 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
                         {waitingTeams.length <= 1 && (
                             <p className="text-xs text-slate-400">Sem mais equipes na fila.</p>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* Quick Add Modal from bench */}
+            {isQuickAddOpen && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
+                    <div className="w-full max-w-lg rounded-2xl border border-indigo-500/40 bg-[#0b1220]/95 p-5 shadow-2xl">
+                        <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-sm font-bold text-indigo-200">Adicionar jogador ao time</h3>
+                            <button onClick={() => setIsQuickAddOpen(false)} className="text-slate-300 hover:text-white">×</button>
+                        </div>
+                        <div className="space-y-2 max-h-80 overflow-y-auto">
+                            {benchPlayers.length === 0 ? (
+                                <p className="text-xs text-slate-400">Nenhum jogador disponível nas reservas.</p>
+                            ) : (
+                                benchPlayers.map((p) => (
+                                    <div key={p.id} className="flex items-center justify-between gap-2 rounded-lg border border-indigo-500/20 bg-indigo-900/30 px-3 py-2">
+                                        <span className="text-sm font-semibold text-white truncate">{p.name}</span>
+                                        <div className="flex items-center gap-2">
+                                            <button onClick={() => { handleAddPlayerToTeam(p, 0); }} className="text-xs bg-gray-700 hover:bg-indigo-500 text-white px-2 py-1 rounded-lg">{t('Time A')}</button>
+                                            <button onClick={() => { handleAddPlayerToTeam(p, 1); }} className="text-xs bg-gray-700 hover:bg-indigo-500 text-white px-2 py-1 rounded-lg">{t('Time B')}</button>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

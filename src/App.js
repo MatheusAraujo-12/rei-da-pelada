@@ -785,7 +785,7 @@ function App() {
                 mainComponent = <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">{isAdminOfActiveGroup && <button onClick={openAddModal} className="w-full max-w-[280px] mx-auto h-[400px] bg-gray-800/20 border-4 border-dashed border-gray-700 rounded-2xl flex flex-col items-center justify-center text-gray-500 hover:border-yellow-400 hover:text-indigo-300 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-yellow-500"><LucideUserPlus className="w-20 h-20" /><span className="mt-4 text-lg font-semibold">{t('Adicionar Jogador')}</span></button>}{players.map(p => <PlayerCard key={p.id} player={p} onEdit={openEditModal} onDelete={setPlayerToDelete} onOpenPeerReview={setPeerReviewPlayer} isAdmin={isAdminOfActiveGroup} t={t} />)}</div>;
                 break;
             case 'match':
-                mainComponent = isAdminOfActiveGroup ? <MatchFlow players={players} groupId={activeGroupId} onMatchEnd={handleMatchEnd} onSessionEnd={handleSessionEnd} t={t} /> : <div>{t('Apenas administradores podem iniciar uma partida.')}</div>;
+                mainComponent = isAdminOfActiveGroup ? <MatchFlow players={players} groupId={activeGroupId} onMatchEnd={handleMatchEnd} onSessionEnd={handleSessionEnd} onCreatePlayer={openAddModal} t={t} /> : <div>{t('Apenas administradores podem iniciar uma partida.')}</div>;
                 break;
             case 'sessions':
                 mainComponent = viewingSession ? (
@@ -864,16 +864,7 @@ function App() {
                     </div>
                 )}
                 <main>{mainComponent}</main>
-                {currentView === 'match' && isAdminOfActiveGroup && (
-                    <button
-                        onClick={openAddModal}
-                        className="fixed bottom-6 right-6 z-50 rounded-full text-white px-5 py-4 flex items-center gap-2 transition-all duration-200 bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 hover:from-indigo-500 hover:via-violet-500 hover:to-fuchsia-500 shadow-[0_10px_25px_rgba(88,28,135,0.45)] ring-1 ring-inset ring-violet-400/40"
-                        title={t('Adicionar Novo Jogador')}
-                    >
-                        <span className="font-bold text-sm hidden sm:inline">{t('Adicionar Novo Jogador')}</span>
-                        <span className="sm:hidden font-bold text-xl">＋</span>
-                    </button>
-                )}
+                {/* Botão flutuante de "Adicionar Novo Jogador" removido no modo partida para evitar duplicidade com FAB e ações de pré/pós-jogo */}
             </>
         );
     };
