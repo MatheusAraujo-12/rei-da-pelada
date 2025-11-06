@@ -587,10 +587,14 @@ function App() {
                         <th>#</th><th>Time A</th><th>Placar</th><th>Time B</th>
                     </tr></thead><tbody>`);
                     matches.forEach((m, idx) => {
-                        let scoreA = 0, scoreB = 0;
-                        if (m?.playerStats && m?.teams) {
-                            (m.teams.teamA || []).forEach((p) => { scoreA += (m.playerStats[p.id]?.goals || 0); });
-                            (m.teams.teamB || []).forEach((p) => { scoreB += (m.playerStats[p.id]?.goals || 0); });
+                        let scoreA = Number(m?.score?.teamA);
+                        let scoreB = Number(m?.score?.teamB);
+                        if (!Number.isFinite(scoreA) || !Number.isFinite(scoreB)) {
+                            scoreA = 0; scoreB = 0;
+                            if (m?.playerStats && m?.teams) {
+                                (m.teams.teamA || []).forEach((p) => { scoreA += (m.playerStats[p.id]?.goals || 0); });
+                                (m.teams.teamB || []).forEach((p) => { scoreB += (m.playerStats[p.id]?.goals || 0); });
+                            }
                         }
                         const teamAList = (m.teams?.teamA || []).map((p) => p?.name || '—').join(', ');
                         const teamBList = (m.teams?.teamB || []).map((p) => p?.name || '—').join(', ');
@@ -601,7 +605,32 @@ function App() {
                             <td>${teamBList}</td>
                         </tr>`);
                     });
-                    htmlParts.push(`</tbody></table>`);
+                        htmlParts.push(`</tbody></table>`);
+
+                    // Eventos por partida (se disponíveis)
+                    matches.forEach((m, idx) => {
+                        const events = Array.isArray(m?.events) ? m.events : [];
+                        if (events.length === 0) return;
+                        const eventRows = events.map(ev => {
+                            const minute = Math.max(Number(ev.minute || 0), 0);
+                            const teamLabel = ev.teamKey === 'teamA' ? 'Time A' : (ev.teamKey === 'teamB' ? 'Time B' : '');
+                            let desc = '';
+                            switch (ev.type) {
+                                case 'goal': desc = ev.assistName ? `${ev.playerName} marcou (assistencia de ${ev.assistName})` : `${ev.playerName} marcou`; break;
+                                case 'ownGoal': desc = `${ev.playerName} marcou contra`; break;
+                                case 'assist': desc = `${ev.playerName} registrou uma assistencia`; break;
+                                case 'dribble': desc = `${ev.playerName} realizou um drible`; break;
+                                case 'tackle': desc = `${ev.playerName} fez um desarme`; break;
+                                case 'failure': desc = `${ev.playerName} cometeu uma falha`; break;
+                                case 'save': desc = `${ev.playerName} fez uma defesa`; break;
+                                case 'substitution': desc = `${ev.playerOutName} saiu para ${ev.playerInName}`; break;
+                                default: desc = `${ev.playerName || ''} registrou ${ev.type}`; break;
+                            }
+                            return `<tr><td style="width:40px;text-align:center;">${minute}'</td><td style="width:80px;">${teamLabel}</td><td>${desc}</td></tr>`;
+                        }).join('');
+                        htmlParts.push(`<div class="muted" style="margin-top:6px;">Eventos da partida #${idx + 1}</div>`);
+                        htmlParts.push(`<table><thead><tr><th style=\"width:40px;\">Min</th><th style=\"width:80px;\">Time</th><th>Evento</th></tr></thead><tbody>${eventRows}</tbody></table>`);
+                    });
                 }
                 htmlParts.push(`</div>`);
             }
@@ -665,12 +694,16 @@ function App() {
                     const teamB = m?.teams?.teamB || [];
                     const teamAIds = teamA.map(p => p?.id);
                     const teamBIds = teamB.map(p => p?.id);
-                    let scoreA = 0, scoreB = 0;
-                    if (m?.playerStats) {
-                        for (const pid of Object.keys(m.playerStats)) {
-                            const st = m.playerStats[pid] || {};
-                            if (typeof st.goals === 'number') {
-                                if (teamAIds.includes(pid)) scoreA += st.goals; else if (teamBIds.includes(pid)) scoreB += st.goals;
+                    let scoreA = Number(m?.score?.teamA);
+                    let scoreB = Number(m?.score?.teamB);
+                    if (!Number.isFinite(scoreA) || !Number.isFinite(scoreB)) {
+                        scoreA = 0; scoreB = 0;
+                        if (m?.playerStats) {
+                            for (const pid of Object.keys(m.playerStats)) {
+                                const st = m.playerStats[pid] || {};
+                                if (typeof st.goals === 'number') {
+                                    if (teamAIds.includes(pid)) scoreA += st.goals; else if (teamBIds.includes(pid)) scoreB += st.goals;
+                                }
                             }
                         }
                     }

@@ -306,13 +306,15 @@ const LiveMatchTracker = ({
                         <span className="mt-1 text-xs font-semibold rounded-full bg-slate-900/40 px-3 py-1">{t('Toque para registrar um evento')}</span>
                     </div>
                 </div>
-                {timelineEvents.length > 0 && (
-                    <div className="rounded-3xl border border-[#2f3c92]/60 bg-gradient-to-br from-[#0b1024]/90 via-[#0b1330]/92 to-[#040714]/96 p-5 shadow-[0_22px_48px_rgba(7,10,26,0.55)]">
+                <div className="rounded-3xl border border-[#2f3c92]/60 bg-gradient-to-br from-[#0b1024]/90 via-[#0b1330]/92 to-[#040714]/96 p-5 shadow-[0_22px_48px_rgba(7,10,26,0.55)]">
                         <div className="flex items-center justify-between">
                             <h3 className="text-[10px] font-semibold uppercase tracking-[0.45em] text-indigo-100/90">{t('Eventos')}</h3>
                             <span className="text-[10px] text-indigo-200/70">{t('tempo real')}</span>
                         </div>
                         <div className="mt-4 max-h-56 space-y-3 overflow-y-auto pr-1">
+                            {timelineEvents.length === 0 && (
+                                <div className="text-xs text-indigo-200/70">{t('Nenhum evento registrado ainda.')}</div>
+                            )}
                             {timelineEvents.map((event) => {
                                 const { Icon, iconClass, iconWrapperClass, chipClass, accentBarClass, glowClass } = getEventVisual(event.type);
                                 return (
@@ -346,7 +348,6 @@ const LiveMatchTracker = ({
                             })}
                         </div>
                     </div>
-                )}
                 <div className="mt-6 flex items-center justify-center gap-3">
                     <button onClick={handleEndMatchClick} className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-8 rounded-lg text-lg">
                         {t('Encerrar Partida')}

@@ -8,15 +8,14 @@ const MatchHistory = ({ matches, onEditMatch, onDeleteMatch }) => {
             <div className="space-y-4">
                 {matches.map(match => {
                     // ✅ Lógica para calcular o placar e determinar o vencedor em tempo real
-                    let scoreA = 0;
-                    let scoreB = 0;
-                    if(match.playerStats) {
-                        match.teams.teamA.forEach(p => {
-                            scoreA += match.playerStats[p.id]?.goals || 0;
-                        });
-                        match.teams.teamB.forEach(p => {
-                            scoreB += match.playerStats[p.id]?.goals || 0;
-                        });
+                    let scoreA = Number(match?.score?.teamA);
+                    let scoreB = Number(match?.score?.teamB);
+                    if (!Number.isFinite(scoreA) || !Number.isFinite(scoreB)) {
+                        scoreA = 0; scoreB = 0;
+                        if (match.playerStats) {
+                            match.teams.teamA.forEach(p => { scoreA += match.playerStats[p.id]?.goals || 0; });
+                            match.teams.teamB.forEach(p => { scoreB += match.playerStats[p.id]?.goals || 0; });
+                        }
                     }
                     
                     const winner = scoreA > scoreB ? 'Time A' : (scoreB > scoreA ? 'Time B' : 'Empate');

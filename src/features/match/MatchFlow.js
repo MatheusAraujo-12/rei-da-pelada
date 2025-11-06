@@ -53,7 +53,8 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, onCreatePlayer,
                         .map(p => p?.id)
                         .filter(Boolean)
                 );
-                const desiredBench = players.filter(p => p && !assignedIds.has(p.id));
+                // Only allow pre-selected players to be in the session
+                const desiredBench = players.filter(p => p && selectedPlayerIds.has(p.id) && !assignedIds.has(p.id));
 
                 // Waiting queue should exclude the previous bench at benchIndex
                 const waitingTail = cloned.slice(benchIndex + 1);
@@ -61,7 +62,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, onCreatePlayer,
                 return [...fixedTeams, desiredBench, ...waitingTail];
             });
         }
-    }, [players, step, allTeams, availablePlayersForSetup, numberOfTeams]);
+    }, [players, step, allTeams, availablePlayersForSetup, numberOfTeams, selectedPlayerIds]);
 
     useEffect(() => {
         try {
@@ -451,7 +452,8 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, onCreatePlayer,
             ? [...allTeams.slice(2, benchIndex), ...allTeams.slice(benchIndex + 1)]
             : allTeams.slice(2);
         const assignedIds = new Set(allTeams.flat().filter(Boolean).map(p => p.id));
-        const benchPlayers = (players || []).filter(p => p && !assignedIds.has(p.id));
+        // Show only selected (session) players in the bench list
+        const benchPlayers = (players || []).filter(p => p && selectedPlayerIds.has(p.id) && !assignedIds.has(p.id));
 
         const handleAddFromBenchToTeam = (player, teamKey) => {
             if (!player || !teamKey) return;

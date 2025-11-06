@@ -253,12 +253,23 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
         };
 
         if (statToUpdate === 'goals') {
-            const assistName = assisterId ? (findPlayerById(assisterId)?.name || null) : null;
+            const assister = assisterId ? findPlayerById(assisterId) : null;
+            const assistName = assister ? (assister.name || null) : null;
             recordTimelineEvent({
                 type: 'goal',
                 assistName,
                 ...baseEvent,
             });
+            if (assister) {
+                // Also log an explicit assist event entry
+                recordTimelineEvent({
+                    type: 'assist',
+                    teamKey,
+                    minute: minuteStamp,
+                    playerId: assister.id,
+                    playerName: assister.name || t('Jogador'),
+                });
+            }
         } else if (statToUpdate === 'ownGoals') {
             recordTimelineEvent({
                 type: 'ownGoal',
@@ -340,22 +351,9 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
     }, [allTeams, benchIndex]);
 
     const availableSubsForPlayer = React.useMemo(() => {
-        if (!playerToSubstitute) return benchPlayers;
-        let teamIndexOfOut = null;
-        (allTeams || []).forEach((team, tIndex) => {
-            if (!Array.isArray(team)) return;
-            if (team.some(p => p?.id === playerToSubstitute.id)) teamIndexOfOut = tIndex;
-        });
-        const pool = [];
-        (allTeams || []).forEach((team, tIndex) => {
-            if (!Array.isArray(team)) return;
-            if (tIndex === teamIndexOfOut) return; // skip same team
-            team.forEach(p => { if (p && p.id !== playerToSubstitute.id) pool.push(p); });
-        });
-        // Deduplicate by id
-        const seen = new Set();
-        return pool.filter(p => (p?.id && !seen.has(p.id) && seen.add(p.id)));
-    }, [allTeams, playerToSubstitute, benchPlayers]);
+        // Restrict substitutions to bench players only to avoid cross-team duplication
+        return benchPlayers;
+    }, [benchPlayers]);
 
     const handleAddPlayerToTeam = (player, targetIndex) => {
         if (!player || typeof targetIndex !== 'number') return;
@@ -400,7 +398,20 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
                     try { localStorage.removeItem(liveStateKey); } catch {}
                     const finishedAt = new Date().toISOString();
                     const startedAtIso = new Date(startedAtRef.current).toISOString();
-                    onMatchEnd({ teams: teamsInPlay, score, playerStats, startedAt: startedAtIso, endedAt: finishedAt });
+                    const finalTeams = {
+                        teamA: [...(teamsInPlay.teamA || [])],
+                        teamB: [...(teamsInPlay.teamB || [])],
+                    };
+                    const finalStats = JSON.parse(JSON.stringify(playerStats || {}));
+                    const finalEvents = JSON.parse(JSON.stringify(eventTimeline || []));
+                    onMatchEnd({
+                        teams: finalTeams,
+                        score: { ...score },
+                        playerStats: finalStats,
+                        events: finalEvents,
+                        startedAt: startedAtIso,
+                        endedAt: finishedAt,
+                    });
                 }}
                 onPlayerAction={(player, teamKey) => setPlayerForAction({ player, teamKey })}
                 onGoal={handleGoal}

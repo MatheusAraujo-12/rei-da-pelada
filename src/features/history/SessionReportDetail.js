@@ -16,7 +16,7 @@ const championsTheme = {
   textMuted: '#94a3b8',
 };
 
-const SessionReportDetail = ({ session, onBack }) => {
+const SessionReportDetail = ({ session, onBack, t = (s) => s }) => {
   const [matchesDetails, setMatchesDetails] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isVotingOpen, setIsVotingOpen] = useState(false);
@@ -97,14 +97,17 @@ const SessionReportDetail = ({ session, onBack }) => {
       const teamBPlayers = match?.teams?.teamB || [];
       const teamAIds = teamAPlayers.map(p => p?.id);
       const teamBIds = teamBPlayers.map(p => p?.id);
-
-      let scoreA = 0;
-      let scoreB = 0;
       const playerStats = match?.playerStats || {};
-      for (const pId in playerStats) {
-        const ps = playerStats[pId] || {};
-        if (teamAIds.includes(pId)) scoreA += ps.goals || 0;
-        else if (teamBIds.includes(pId)) scoreB += ps.goals || 0;
+
+      let scoreA = Number(match?.score?.teamA);
+      let scoreB = Number(match?.score?.teamB);
+      if (!Number.isFinite(scoreA) || !Number.isFinite(scoreB)) {
+        scoreA = 0; scoreB = 0;
+        for (const pId in playerStats) {
+          const ps = playerStats[pId] || {};
+          if (teamAIds.includes(pId)) scoreA += ps.goals || 0;
+          else if (teamBIds.includes(pId)) scoreB += ps.goals || 0;
+        }
       }
 
       if (scoreA > scoreB) {
@@ -220,6 +223,99 @@ const SessionReportDetail = ({ session, onBack }) => {
     if (!votingDeadline) return false;
     return nowTimestamp > votingDeadline.getTime();
   }, [votingDeadline, nowTimestamp]);
+
+  const handlePrintSessionReport = async () => {
+    try {
+      const htmlParts = [];
+      htmlParts.push(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8" />
+        <title>Relatório da Sessão</title>
+        <style>
+          body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; padding: 24px; }
+          h1 { margin: 0 0 12px; }
+          h2 { margin: 24px 0 8px; }
+          table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
+          th, td { border: 1px solid #ddd; padding: 8px; font-size: 12px; }
+          th { background: #f4f4f4; text-align: left; }
+          .muted { color: #666; font-size: 12px; }
+          .section { page-break-inside: avoid; margin-bottom: 18px; }
+          @media print { button { display: none; } }
+        </style></head><body>`);
+
+      const titleDate = sessionDate || new Date().toLocaleDateString('pt-BR');
+      htmlParts.push(`<h1>Relatório da sessão de ${titleDate}</h1>`);
+
+      const matches = Array.isArray(matchesDetails) ? matchesDetails : [];
+      htmlParts.push(`<div class="muted">Partidas: ${matches.length}</div>`);
+      if (matches.length === 0) {
+        htmlParts.push(`<p class="muted">Sem partidas registradas nesta sessão.</p>`);
+      } else {
+        // Tabela dos placares
+        htmlParts.push(`<div class="section">`);
+        htmlParts.push(`<table><thead><tr><th>#</th><th>Time A</th><th>Placar</th><th>Time B</th></tr></thead><tbody>`);
+        matches.forEach((m, idx) => {
+          let scoreA = Number(m?.score?.teamA);
+          let scoreB = Number(m?.score?.teamB);
+          if (!Number.isFinite(scoreA) || !Number.isFinite(scoreB)) {
+            scoreA = 0; scoreB = 0;
+            const ps = m?.playerStats || {};
+            (m?.teams?.teamA || []).forEach(p => { scoreA += ps[p.id]?.goals || 0; });
+            (m?.teams?.teamB || []).forEach(p => { scoreB += ps[p.id]?.goals || 0; });
+          }
+          const teamAList = (m?.teams?.teamA || []).map(p => p?.name || '').join(', ');
+          const teamBList = (m?.teams?.teamB || []).map(p => p?.name || '').join(', ');
+          htmlParts.push(`<tr>
+            <td>${idx + 1}</td>
+            <td>${teamAList}</td>
+            <td style="text-align:center; font-weight:600;">${scoreA} x ${scoreB}</td>
+            <td>${teamBList}</td>
+          </tr>`);
+        });
+        htmlParts.push(`</tbody></table>`);
+        htmlParts.push(`</div>`);
+
+        // Eventos por partida
+        matches.forEach((m, idx) => {
+          const events = Array.isArray(m?.events) ? m.events : [];
+          if (events.length === 0) return;
+          const rows = events.map(ev => {
+            const minute = Math.max(Number(ev.minute || 0), 0);
+            const teamLabel = ev.teamKey === 'teamA' ? 'Time A' : (ev.teamKey === 'teamB' ? 'Time B' : '');
+            let desc = '';
+            switch (ev.type) {
+              case 'goal': desc = ev.assistName ? `${ev.playerName} marcou (assistencia de ${ev.assistName})` : `${ev.playerName} marcou`; break;
+              case 'ownGoal': desc = `${ev.playerName} marcou contra`; break;
+              case 'assist': desc = `${ev.playerName} registrou uma assistencia`; break;
+              case 'dribble': desc = `${ev.playerName} realizou um drible`; break;
+              case 'tackle': desc = `${ev.playerName} fez um desarme`; break;
+              case 'failure': desc = `${ev.playerName} cometeu uma falha`; break;
+              case 'save': desc = `${ev.playerName} fez uma defesa`; break;
+              case 'substitution': desc = `${ev.playerOutName} saiu para ${ev.playerInName}`; break;
+              default: desc = `${ev.playerName || ''} registrou ${ev.type}`; break;
+            }
+            return `<tr><td style="width:40px;text-align:center;">${minute}'</td><td style="width:80px;">${teamLabel}</td><td>${desc}</td></tr>`;
+          }).join('');
+          htmlParts.push(`<div class="section">`);
+          htmlParts.push(`<h2>Eventos da partida #${idx + 1}</h2>`);
+          htmlParts.push(`<table><thead><tr><th style="width:40px;">Min</th><th style="width:80px;">Time</th><th>Evento</th></tr></thead><tbody>${rows}</tbody></table>`);
+          htmlParts.push(`</div>`);
+        });
+      }
+
+      htmlParts.push(`<div style="margin-top:24px;"><button onclick="window.print()">Imprimir</button></div>`);
+      htmlParts.push(`</body></html>`);
+
+      const printWin = window.open('', '_blank');
+      if (!printWin) { alert('Bloqueador de pop-up ativo. Permita pop-ups para imprimir.'); return; }
+      printWin.document.open();
+      printWin.document.write(htmlParts.join(''));
+      printWin.document.close();
+      printWin.focus();
+      setTimeout(() => { try { printWin.print(); } catch {} }, 300);
+    } catch (e) {
+      console.error('Falha ao imprimir relatório da sessão:', e);
+      alert('Não foi possível gerar o relatório da sessão.');
+    }
+  };
 
   const votingRemainingMs = useMemo(() => {
     if (!votingDeadline) return null;
@@ -708,16 +804,46 @@ const SessionReportDetail = ({ session, onBack }) => {
       {session.matchIds && session.matchIds.length > 0 && (
         <div className="space-y-4">
           <h3 className="text-3xl font-bold text-[#e0e7ff] text-center">Resultados das partidas</h3>
-          <div className="space-y-3 max-h-60 overflow-y-auto p-1">
+          <div className="space-y-3 max-h-96 overflow-y-auto p-1">
             {loading ? (
               <p className="text-center text-[#9aa7d7]">Carregando partidas...</p>
             ) : (
               matchesDetails.map((match, index) => {
-                let scoreA = 0;
-                let scoreB = 0;
+                let scoreA = Number(match?.score?.teamA);
+                let scoreB = Number(match?.score?.teamB);
                 const playerStats = match?.playerStats || {};
-                (match?.teams?.teamA || []).forEach(p => { scoreA += playerStats[p.id]?.goals || 0; });
-                (match?.teams?.teamB || []).forEach(p => { scoreB += playerStats[p.id]?.goals || 0; });
+                if (!Number.isFinite(scoreA) || !Number.isFinite(scoreB)) {
+                  scoreA = 0; scoreB = 0;
+                  (match?.teams?.teamA || []).forEach(p => { scoreA += playerStats[p.id]?.goals || 0; });
+                  (match?.teams?.teamB || []).forEach(p => { scoreB += playerStats[p.id]?.goals || 0; });
+                }
+
+                const events = Array.isArray(match?.events) ? match.events : [];
+                const teamLabel = (k) => (k === 'teamA' ? 'Time A' : k === 'teamB' ? 'Time B' : '');
+                const describe = (ev) => {
+                  switch (ev.type) {
+                    case 'goal':
+                      return ev.assistName
+                        ? `${ev.playerName} ${t('marcou (assistencia de')} ${ev.assistName})`
+                        : `${ev.playerName} ${t('marcou')}`;
+                    case 'ownGoal':
+                      return `${ev.playerName} ${t('marcou contra')}`;
+                    case 'assist':
+                      return `${ev.playerName} ${t('registrou uma assistencia')}`;
+                    case 'dribble':
+                      return `${ev.playerName} ${t('realizou um drible')}`;
+                    case 'tackle':
+                      return `${ev.playerName} ${t('fez um desarme')}`;
+                    case 'failure':
+                      return `${ev.playerName} ${t('cometeu uma falha')}`;
+                    case 'save':
+                      return `${ev.playerName} ${t('fez uma defesa')}`;
+                    case 'substitution':
+                      return `${ev.playerOutName} ${t('saiu para')} ${ev.playerInName}`;
+                    default:
+                      return `${ev.playerName || ''} ${t('registrou')} ${ev.type}`;
+                  }
+                };
                 return (
                   <div key={match.id || index} className="rounded-lg border border-[#28324d] bg-gradient-to-br from-[#101a31]/85 via-[#111a32]/70 to-[#0b1228]/90 p-3 text-center shadow-[0_12px_32px_rgba(6,182,212,0.18)]">
                     <p className="text-sm uppercase tracking-wide text-[#9aa7d7]">Partida {index + 1}</p>
@@ -726,6 +852,22 @@ const SessionReportDetail = ({ session, onBack }) => {
                       vs
                       <span className="mx-2 text-2xl text-[#b8c2ff]">{scoreB}</span> Time B
                     </p>
+                    <div className="mt-3 text-left">
+                      <h4 className="text-xs uppercase tracking-[0.35em] text-[#9aa7d7]">{t('Eventos')}</h4>
+                      {events.length === 0 ? (
+                        <div className="text-[11px] text-[#7c8fbf]">{t('Nenhum evento registrado ainda.')}</div>
+                      ) : (
+                        <ul className="mt-2 space-y-1">
+                          {events.map((ev) => (
+                            <li key={ev.id} className="text-[12px] text-[#dbe2ff]">
+                              <span className="text-[#9aa7d7] mr-2">{`${Math.max(ev.minute||0,0)}'`}</span>
+                              {teamLabel(ev.teamKey) && <span className="mr-2 text-[#a6b3e6]">{teamLabel(ev.teamKey)}</span>}
+                              <span>{describe(ev)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
                   </div>
                 );
               })
@@ -734,7 +876,13 @@ const SessionReportDetail = ({ session, onBack }) => {
         </div>
       )}
 
-      <div className="text-center">
+      <div className="text-center flex items-center justify-center gap-3">
+        <button
+          onClick={handlePrintSessionReport}
+          className="rounded-lg bg-gradient-to-r from-[#06b6d4] via-[#4338ca] to-[#a855f7] px-6 py-2 font-semibold text-white shadow-lg shadow-[#06b6d433] transition-transform hover:-translate-y-0.5"
+        >
+          Imprimir Relatório da Sessão
+        </button>
         <button
           onClick={onBack}
           className="rounded-lg bg-gradient-to-r from-[#4338ca] via-[#a855f7] to-[#06b6d4] px-6 py-2 font-semibold text-white shadow-lg shadow-[#4338ca33] transition-transform hover:-translate-y-0.5"
@@ -756,5 +904,6 @@ const SessionReportDetail = ({ session, onBack }) => {
 
 
 export default SessionReportDetail;
+
 
 
