@@ -1,77 +1,260 @@
-import React, { useState } from 'react';
-import { LucidePlay, LucidePause, LucidePlus, LucideUndo, LucideGoal, LucideHandshake, LucideShield, LucideAlertTriangle, LucideArrowLeftRight, LucideMove, LucideHand, LucideSparkles } from 'lucide-react';
-import ConfirmationModal from '../../components/ConfirmationModal';
-import PlayerActionModal from './PlayerActionModal';
-import AssistSelectorModal from './AssistSelectorModal';
+    return feedback.some(entry => entry?.id === currentUserUid);
+  }, [feedback, currentUserUid]);
 
-const PlayerPickerModal = ({ isOpen, onClose, teams, onSelect, t }) => {
-    if (!isOpen) return null;
-    const teamA = (teams?.teamA || []).filter(Boolean);
-    const teamB = (teams?.teamB || []).filter(Boolean);
-    const renderTeamGroup = (players, label, teamKey) => (
-        <div className="space-y-2">
-            <h3 className="text-sm font-semibold uppercase tracking-[0.3em] text-indigo-300">{label}</h3>
-            {players.length > 0 ? (
-                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                    {players.map((player) => (
-                        <button
-                            key={`${teamKey}-${player.id}`}
-                            onClick={() => onSelect(player, teamKey)}
-                            className="w-full rounded-lg border border-indigo-500/30 bg-indigo-900/40 px-3 py-2 text-left text-sm font-semibold text-white hover:border-indigo-400 hover:bg-indigo-800/60 transition-colors"
-                        >
-                            {player.name}
-                        </button>
-                    ))}
-                </div>
-            ) : (
-                <p className="text-xs text-slate-400">{t('Nenhum jogador disponivel.')}</p>
-            )}
-        </div>
-    );
+  const calculatedStats = useMemo(() => {
+    // Consolida estatísticas por jogador a partir de session.stats e matchesDetails
+    const result = {};
+    const seedPlayer = (id, name) => {
+      if (!id) return;
+      if (!result[id]) result[id] = {
+        id,
+        name: name || 'Desconhecido',
+        wins: 0, draws: 0, losses: 0,
+        goals: 0, ownGoals: 0, assists: 0, dribbles: 0, tackles: 0, saves: 0, failures: 0,
+      };
+      if (name && (!result[id].name || result[id].name === 'Desconhecido')) result[id].name = name;
+    };
 
+    // Semeia pelo que vier na sessão (ids dos participantes)
+    if (Array.isArray(session?.players)) session.players.forEach((pid) => seedPlayer(pid));
 
-    return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4">
-            <div className="w-full max-w-xl rounded-2xl border border-indigo-500/40 bg-[#0b1220]/95 p-6 shadow-2xl">
-                <div className="mb-4 flex items-center justify-between">
-                    <h2 className="text-lg font-bold text-white">{t('Selecionar jogador')}</h2>
-                    <button onClick={onClose} className="rounded-full border border-slate-600 p-2 text-slate-300 hover:text-white">
-                        <span className="sr-only">{t('Fechar')}</span>
-                        <span aria-hidden="true">X</span>
-                    </button>
-                </div>
-                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                    {renderTeamGroup(teamA, t('Time A'), 'teamA')}
-                    {renderTeamGroup(teamB, t('Time B'), 'teamB')}
-                </div>
-            </div>
-        </div>
-    );
-};
-// Substituicao controlada pelo componente pai (ActiveMatch)
-const LiveMatchTracker = ({
-    teams,
-    score,
-    timeLeft,
-    isPaused,
-    history = [],
-    playerStats,
-    playerForAction,
-    isAssistModalOpen,
-    teammates,
-    onInitiateSubstitution,
-    onTogglePause,
-    onAddMinute,
-    onUndo,
-    onEndMatch,
-    onPlayerAction,
-    onGoal,
-    onSelectAssister,
-    timelineEvents = [],
-    t,
-}) => {
-    const [showConfirm, setShowConfirm] = useState(false);
-    const [isPlayerPickerOpen, setIsPlayerPickerOpen] = useState(false);
-    const fieldStripes = React.useMemo(() => Array.from({ length: 6 }), []);
+    // Semeia por jogadores que aparecem nas partidas
+    matchesDetails.forEach((m) => {
+      (m?.teams?.teamA || []).forEach((p) => seedPlayer(p?.id, p?.name));
+      (m?.teams?.teamB || []).forEach((p) => seedPlayer(p?.id, p?.name));
+    });
 
-    
+    // Se existir um snapshot de stats salvo na sessão, mescla como base
+    if (session?.stats && typeof session.stats === 'object') {
+      Object.entries(session.stats).forEach(([pid, s]) => {
+        seedPlayer(pid, s?.name);
+        const t = result[pid];
+        t.wins += Number(s?.wins || 0);
+        t.draws += Number(s?.draws || 0);
+        t.losses += Number(s?.losses || 0);
+        t.goals += Number(s?.goals || 0);
+        t.ownGoals += Number(s?.ownGoals || 0);
+        t.assists += Number(s?.assists || 0);
+        t.dribbles += Number(s?.dribbles || 0);
+        t.tackles += Number(s?.tackles || 0);
+        t.saves += Number(s?.saves || 0);
+        t.failures += Number(s?.failures || 0);
+      });
+    }
+
+    // Consolida a partir das partidas (playerStats preferido; fallback: events)
+    matchesDetails.forEach((match) => {
+      const teamA = match?.teams?.teamA || [];
+      const teamB = match?.teams?.teamB || [];
+      // Deduplica ids para evitar contar W/E/D mais de uma vez em caso de duplicatas
+      const teamAIds = Array.from(new Set(teamA.map((p) => p?.id).filter(Boolean)));
+      const teamBIds = Array.from(new Set(teamB.map((p) => p?.id).filter(Boolean)));
+      const pstats = match?.playerStats || {};
+
+      // Resultado da partida para W/D/L: use resultsPerPlayer quando existir;
+      // caso contrário, use score salvo; evite recalcular por gols para não distorcer.
+      const resultsPerPlayer = match?.resultsPerPlayer;
+      if (resultsPerPlayer && typeof resultsPerPlayer === 'object') {
+        Object.entries(resultsPerPlayer).forEach(([pid, res]) => {
+          if (!result[pid]) return;
+          if (res === 'win') result[pid].wins += 1;
+          else if (res === 'loss') result[pid].losses += 1;
+          else result[pid].draws += 1;
+        });
+      } else {
+        const scoreA = Number(match?.score?.teamA);
+        const scoreB = Number(match?.score?.teamB);
+        if (Number.isFinite(scoreA) && Number.isFinite(scoreB)) {
+          if (scoreA > scoreB) {
+            teamAIds.forEach((id) => { if (result[id]) result[id].wins += 1; });
+            teamBIds.forEach((id) => { if (result[id]) result[id].losses += 1; });
+          } else if (scoreB > scoreA) {
+            teamBIds.forEach((id) => { if (result[id]) result[id].wins += 1; });
+            teamAIds.forEach((id) => { if (result[id]) result[id].losses += 1; });
+          } else {
+            teamAIds.forEach((id) => { if (result[id]) result[id].draws += 1; });
+            teamBIds.forEach((id) => { if (result[id]) result[id].draws += 1; });
+          }
+        } else {
+          // Sem score confiável: considere empate para não distorcer.
+          teamAIds.forEach((id) => { if (result[id]) result[id].draws += 1; });
+          teamBIds.forEach((id) => { if (result[id]) result[id].draws += 1; });
+        }
+      }
+
+      if (Object.keys(pstats).length > 0) {
+        Object.entries(pstats).forEach(([pid, ps]) => {
+          if (!result[pid]) return;
+          const nameInMatch = [...teamA, ...teamB].find((p) => p?.id === pid)?.name;
+          if (nameInMatch) result[pid].name = nameInMatch;
+          result[pid].goals += Number(ps?.goals || 0);
+          result[pid].ownGoals += Number(ps?.ownGoals || 0);
+          result[pid].assists += Number(ps?.assists || 0);
+          result[pid].dribbles += Number(ps?.dribbles || 0);
+          result[pid].tackles += Number(ps?.tackles || 0);
+          result[pid].saves += Number(ps?.saves || 0);
+          result[pid].failures += Number(ps?.failures || 0);
+        });
+      } else {
+        const events = Array.isArray(match?.events) ? match.events : [];
+        events.forEach((ev) => {
+          const pid = ev?.playerId;
+          if (!pid || !result[pid]) return;
+          const nameInMatch = [...teamA, ...teamB].find((p) => p?.id === pid)?.name;
+          if (nameInMatch) result[pid].name = nameInMatch;
+          switch (ev?.type) {
+            case 'goal': result[pid].goals += 1; break;
+            case 'ownGoal': result[pid].ownGoals += 1; break;
+            case 'assist': result[pid].assists += 1; break;
+            case 'dribble': result[pid].dribbles += 1; break;
+            case 'tackle': result[pid].tackles += 1; break;
+            case 'save': result[pid].saves += 1; break;
+            case 'failure': result[pid].failures += 1; break;
+            default: break;
+          }
+        });
+      }
+    });
+
+    return Object.values(result).sort((a, b) => (b.wins - a.wins) || (b.goals - a.goals) || (b.assists - a.assists));
+  }, [session?.players, session?.stats, matchesDetails]);
+
+  const sessionDate = session?.date?.seconds
+    ? new Date(session.date.seconds * 1000).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
+    : '';
+
+  const participants = useMemo(() => {
+    const map = new Map();
+    matchesDetails.forEach(m => {
+      (m?.teams?.teamA || []).forEach(p => { if (p?.id) map.set(p.id, p); });
+      (m?.teams?.teamB || []).forEach(p => { if (p?.id) map.set(p.id, p); });
+    });
+    return Array.from(map.values());
+  }, [matchesDetails]);
+
+  // Agrega médias das notas e MVP consolidado
+  const votingSummary = useMemo(() => {
+    const sum = {}; const cnt = {}; const mvpCounts = {};
+    (feedback || []).forEach(fb => {
+      const ratings = fb.ratings || {};
+      Object.keys(ratings).forEach(pid => {
+        const v = Number(ratings[pid]);
+        if (Number.isFinite(v)) { sum[pid] = (sum[pid] || 0) + v; cnt[pid] = (cnt[pid] || 0) + 1; }
+      });
+      if (fb.mvp) mvpCounts[fb.mvp] = (mvpCounts[fb.mvp] || 0) + 1;
+    });
+    const avgList = Object.keys(sum).map(pid => {
+      const pInfo = participants.find(p => p.id === pid);
+      return { id: pid, name: pInfo?.name || pid, avg: sum[pid] / (cnt[pid] || 1), votes: cnt[pid] || 0 };
+    }).sort((a,b) => (b.avg - a.avg) || (b.votes - a.votes));
+    let topMvpIds = [];
+    let topCount = 0;
+    Object.entries(mvpCounts).forEach(([pid, c]) => {
+      if (c > topCount) { topCount = c; topMvpIds = [pid]; }
+      else if (c === topCount && c > 0) topMvpIds.push(pid);
+    });
+    const mvpNames = topMvpIds.map(id => participants.find(p => p.id === id)?.name || id);
+    const mvpDetails = topMvpIds.map(id => participants.find(p => p.id === id)).filter(Boolean);
+    const totalMvpVotes = Object.values(mvpCounts).reduce((a,b)=>a+b,0);
+    return { avgList, mvpNames, mvpCounts, totalMvpVotes, mvpDetails };
+  }, [feedback, participants]);
+
+  const sessionReferenceDate = useMemo(() => {
+    if (!session) return null;
+    const parseDate = (value) => {
+      if (!value) return null;
+      const dateValue = new Date(value);
+      if (Number.isNaN(dateValue.getTime())) return null;
+      return dateValue;
+    };
+
+    if (session?.endedAt) {
+      const parsed = parseDate(session.endedAt);
+      if (parsed) return parsed;
+    }
+    if (session?.date?.seconds) {
+      return new Date(session.date.seconds * 1000);
+    }
+    if (session?.date instanceof Date && !Number.isNaN(session.date.getTime())) {
+      return session.date;
+    }
+    if (typeof session?.date === 'string') {
+      const parsed = parseDate(session.date);
+      if (parsed) return parsed;
+    }
+
+    if (Array.isArray(matchesDetails) && matchesDetails.length > 0) {
+      const endedValues = matchesDetails
+        .map((match) => parseDate(match?.endedAt))
+        .filter(Boolean)
+        .map((date) => date.getTime());
+      if (endedValues.length > 0) {
+        return new Date(Math.max(...endedValues));
+      }
+    }
+    return null;
+  }, [session, matchesDetails]);
+
+  const votingDeadline = useMemo(() => {
+    if (!sessionReferenceDate) return null;
+    return new Date(sessionReferenceDate.getTime() + 24 * 60 * 60 * 1000);
+  }, [sessionReferenceDate]);
+
+  const isVotingDeadlinePassed = useMemo(() => {
+    if (!votingDeadline) return false;
+    return nowTimestamp > votingDeadline.getTime();
+  }, [votingDeadline, nowTimestamp]);
+
+  const handlePrintSessionReport = async () => {
+    try {
+      const htmlParts = [];
+      htmlParts.push(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8" />
+        <title>Relatório da Sessão</title>
+        <style>
+          body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; padding: 24px; }
+          h1 { margin: 0 0 12px; }
+          h2 { margin: 24px 0 8px; }
+          table { border-collapse: collapse; width: 100%; margin: 8px 0 16px; }
+          th, td { border: 1px solid #ddd; padding: 8px; font-size: 12px; }
+          th { background: #f4f4f4; text-align: left; }
+          .muted { color: #666; font-size: 12px; }
+          .section { page-break-inside: avoid; margin-bottom: 18px; }
+          @media print { button { display: none; } }
+        </style></head><body>`);
+
+      const titleDate = sessionDate || new Date().toLocaleDateString('pt-BR');
+      htmlParts.push(`<h1>Relatório da sessão de ${titleDate}</h1>`);
+
+      const matches = Array.isArray(matchesDetails) ? matchesDetails : [];
+      htmlParts.push(`<div class="muted">Partidas: ${matches.length}</div>`);
+      if (matches.length === 0) {
+        htmlParts.push(`<p class="muted">Sem partidas registradas nesta sessão.</p>`);
+      } else {
+        // Tabela dos placares
+        htmlParts.push(`<div class="section">`);
+        htmlParts.push(`<table><thead><tr><th>#</th><th>Time A</th><th>Placar</th><th>Time B</th></tr></thead><tbody>`);
+        matches.forEach((m, idx) => {
+          let scoreA = Number(m?.score?.teamA);
+          let scoreB = Number(m?.score?.teamB);
+          if (!Number.isFinite(scoreA) || !Number.isFinite(scoreB)) {
+            scoreA = 0; scoreB = 0;
+            const ps = m?.playerStats || {};
+            (m?.teams?.teamA || []).forEach(p => { scoreA += ps[p.id]?.goals || 0; });
+            (m?.teams?.teamB || []).forEach(p => { scoreB += ps[p.id]?.goals || 0; });
+          }
+          const teamAList = (m?.teams?.teamA || []).map(p => p?.name || '').join(', ');
+          const teamBList = (m?.teams?.teamB || []).map(p => p?.name || '').join(', ');
+          htmlParts.push(`<tr>
+            <td>${idx + 1}</td>
+            <td>${teamAList}</td>
+            <td style="text-align:center; font-weight:600;">${scoreA} x ${scoreB}</td>
+            <td>${teamBList}</td>
+          </tr>`);
+        });
+        htmlParts.push(`</tbody></table>`);
+        htmlParts.push(`</div>`);
+
+        // Eventos por partida
+        matches.forEach((m, idx) => {
+          const events = Array.isArray(m?.events) ? m.events : [];
+          if (events.length === 0) return;

@@ -1,0 +1,20 @@
+                    matches.forEach((m, idx) => {
+                        let scoreA = Number(m?.score?.teamA);
+                        let scoreB = Number(m?.score?.teamB);
+                        if (!Number.isFinite(scoreA) || !Number.isFinite(scoreB)) {
+                            scoreA = 0; scoreB = 0;
+                            if (m?.playerStats && m?.teams) {
+                                (m.teams.teamA || []).forEach((p) => { scoreA += (m.playerStats[p.id]?.goals || 0); });
+                                (m.teams.teamB || []).forEach((p) => { scoreB += (m.playerStats[p.id]?.goals || 0); });
+                            }
+                        }
+                        const teamAList = (m.teams?.teamA || []).map((p) => p?.name || '—').join(', ');
+                        const teamBList = (m.teams?.teamB || []).map((p) => p?.name || '—').join(', ');
+                        htmlParts.push(`<tr>
+                            <td>${idx + 1}</td>
+                            <td>${teamAList}</td>
+                            <td style=\"text-align:center; font-weight:600;\">${scoreA} x ${scoreB}</td>
+                            <td>${teamBList}</td>
+                        </tr>`);
+                    });
+                        htmlParts.push(`</tbody></table>`);

@@ -3,6 +3,11 @@ import { LucideEdit, LucideShieldCheck, LucideUndo, LucideX, LucideUsers, Lucide
 import Times, { autoBuildTeams } from './Times';
 import ActiveMatch from './ActiveMatch';
 
+// Deep clone helper (usa structuredClone quando disponível)
+const deepClone = (obj) => {
+    try { if (typeof structuredClone === 'function') return structuredClone(obj); } catch {}
+    return JSON.parse(JSON.stringify(obj));
+};
 const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, onCreatePlayer, t }) => {
     const localStorageKey = `reiDaPeladaConfig-${groupId}`;
     const sessionStateKey = `sessionState-${groupId}`;
@@ -200,7 +205,19 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, onCreatePlayer,
         }
         const initialStats = {};
         availablePlayers.forEach(p => {
-            initialStats[p.id] = { name: p.name, wins: 0, draws: 0, losses: 0, goals: 0, assists: 0, dribbles: 0, tackles: 0, saves: 0, failures: 0 };
+            initialStats[p.id] = {
+                name: p.name,
+                wins: 0,
+                draws: 0,
+                losses: 0,
+                goals: 0,
+                ownGoals: 0,
+                assists: 0,
+                dribbles: 0,
+                tackles: 0,
+                saves: 0,
+                failures: 0,
+            };
         });
         setSessionPlayerStats(initialStats);
         setAllTeams(finalTeams);
@@ -219,27 +236,77 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, onCreatePlayer,
             savedMatch = await onMatchEnd(matchResult);
         } catch (e) {
             console.error('Falha ao salvar partida externamente:', e);
+            alert(t('Nao foi possivel salvar esta partida na nuvem. Ela ficara apenas nesta sessao ate que a conexao seja restabelecida.'));
         }
-        const toStore = savedMatch || { ...matchResult, id: String(Date.now()), endedAt: new Date().toISOString() };
-        setMatchHistory(prev => [...prev, toStore]);
+        if (!savedMatch) {
+            const fallbackMatch = { ...matchResult, id: String(Date.now()), endedAt: new Date().toISOString() };
+            setMatchHistory(prev => [...prev, fallbackMatch]);
+        }
         setSessionPlayerStats(prevStats => {
-            const newStats = JSON.parse(JSON.stringify(prevStats));
-            for (const playerId in matchResult.playerStats) {
-                if (newStats[playerId]) {
-                    for (const stat in matchResult.playerStats[playerId]) {
-                        newStats[playerId][stat] = (newStats[playerId][stat] || 0) + matchResult.playerStats[playerId][stat];
-                    }
+            const newStats = deepClone(prevStats);
+            const baseEntry = (name) => ({
+                name: name || 'Desconhecido',
+                wins: 0,
+                draws: 0,
+                losses: 0,
+                goals: 0,
+                ownGoals: 0,
+                assists: 0,
+                dribbles: 0,
+                tackles: 0,
+                saves: 0,
+                failures: 0,
+            });
+            const ensureEntry = (player) => {
+                if (!player?.id) return null;
+                if (!newStats[player.id]) {
+                    newStats[player.id] = baseEntry(player.name);
+                } else if (player.name && (!newStats[player.id].name || newStats[player.id].name === 'Desconhecido')) {
+                    newStats[player.id].name = player.name;
                 }
+                return newStats[player.id];
+            };
+            const { teamA = [], teamB = [] } = matchResult.teams;
+            [...teamA, ...teamB].forEach(ensureEntry);
+
+            const findPlayerName = (playerId) => {
+                const found = [...teamA, ...teamB].find(p => p?.id === playerId);
+                return found?.name || 'Desconhecido';
+            };
+
+            if (matchResult.playerStats && typeof matchResult.playerStats === 'object') {
+                Object.entries(matchResult.playerStats).forEach(([playerId, statMap]) => {
+                    if (!playerId) return;
+                    if (!newStats[playerId]) newStats[playerId] = baseEntry(findPlayerName(playerId));
+                    const target = newStats[playerId];
+                    Object.entries(statMap || {}).forEach(([statKey, value]) => {
+                        const prevVal = Number(target[statKey] || 0);
+                        const addVal = Number(value || 0);
+                        target[statKey] = prevVal + addVal;
+                    });
+                });
             }
-            const { teamA, teamB } = matchResult.teams;
+
             if (matchResult.score.teamA === matchResult.score.teamB) {
-                teamA.forEach(p => { if(p && newStats[p.id]) newStats[p.id].draws++; });
-                teamB.forEach(p => { if(p && newStats[p.id]) newStats[p.id].draws++; });
+                teamA.forEach(p => {
+                    const entry = ensureEntry(p);
+                    if (entry) entry.draws = Number(entry.draws || 0) + 1;
+                });
+                teamB.forEach(p => {
+                    const entry = ensureEntry(p);
+                    if (entry) entry.draws = Number(entry.draws || 0) + 1;
+                });
             } else {
                 const winnerTeam = matchResult.score.teamA > matchResult.score.teamB ? teamA : teamB;
                 const loserTeam = winnerTeam === teamA ? teamB : teamA;
-                winnerTeam.forEach(p => { if(p && newStats[p.id]) newStats[p.id].wins++; });
-                loserTeam.forEach(p => { if(p && newStats[p.id]) newStats[p.id].losses++; });
+                winnerTeam.forEach(p => {
+                    const entry = ensureEntry(p);
+                    if (entry) entry.wins = Number(entry.wins || 0) + 1;
+                });
+                loserTeam.forEach(p => {
+                    const entry = ensureEntry(p);
+                    if (entry) entry.losses = Number(entry.losses || 0) + 1;
+                });
             }
             return newStats;
         });
@@ -321,7 +388,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, onCreatePlayer,
     
     const handleMovePlayer = (playerToMove, fromTeamIndex, toTeamIndex) => {
         setAllTeams(currentTeams => {
-            const newTeams = JSON.parse(JSON.stringify(currentTeams.map(t => t || [])));
+            const newTeams = deepClone(currentTeams.map(t => t || []));
             const fromTeam = newTeams[fromTeamIndex];
             const toTeam = newTeams[toTeamIndex];
             if (!fromTeam) return currentTeams;
@@ -337,7 +404,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, onCreatePlayer,
 
     const handleRemovePlayer = (playerToRemove, fromTeamIndex) => {
         setAllTeams(currentTeams => {
-            let newTeams = JSON.parse(JSON.stringify(currentTeams));
+            let newTeams = deepClone(currentTeams);
             const fromTeam = newTeams[fromTeamIndex];
             if (!fromTeam) return currentTeams;
             const updatedTeam = fromTeam.filter(p => p.id !== playerToRemove.id);
@@ -458,7 +525,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, onCreatePlayer,
         const handleAddFromBenchToTeam = (player, teamKey) => {
             if (!player || !teamKey) return;
             setAllTeams(prevTeams => {
-                const newTeams = JSON.parse(JSON.stringify(prevTeams && prevTeams.length > 0 ? prevTeams : [[], []]));
+                const newTeams = deepClone(prevTeams && prevTeams.length > 0 ? prevTeams : [[], []]);
                 const letter = String(teamKey).toUpperCase();
                 const targetIndex = Math.max(0, (letter.charCodeAt(0) - 65) | 0);
                 // Remove from any team if present

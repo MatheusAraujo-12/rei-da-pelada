@@ -82,61 +82,130 @@ const SessionReportDetail = ({ session, onBack, t = (s) => s }) => {
   }, [feedback, currentUserUid]);
 
   const calculatedStats = useMemo(() => {
-    const stats = {};
-    if (!session?.players || matchesDetails.length === 0) return [];
-
-    (session.players || []).forEach(playerId => {
-      stats[playerId] = {
-        name: 'Desconhecido', wins: 0, draws: 0, losses: 0,
-        goals: 0, assists: 0, dribbles: 0, tackles: 0, saves: 0, failures: 0,
+    // Consolida estatísticas por jogador a partir de session.stats e matchesDetails
+    const result = {};
+    const hasMatches = Array.isArray(matchesDetails) && matchesDetails.length > 0;
+    const seedPlayer = (id, name) => {
+      if (!id) return;
+      if (!result[id]) result[id] = {
+        id,
+        name: name || 'Desconhecido',
+        wins: 0, draws: 0, losses: 0,
+        goals: 0, ownGoals: 0, assists: 0, dribbles: 0, tackles: 0, saves: 0, failures: 0,
       };
+      if (name && (!result[id].name || result[id].name === 'Desconhecido')) result[id].name = name;
+    };
+
+    // Semeia pelo que vier na sessão (ids dos participantes)
+    if (Array.isArray(session?.players)) session.players.forEach((pid) => seedPlayer(pid));
+
+    // Semeia por jogadores que aparecem nas partidas
+    matchesDetails.forEach((m) => {
+      (m?.teams?.teamA || []).forEach((p) => seedPlayer(p?.id, p?.name));
+      (m?.teams?.teamB || []).forEach((p) => seedPlayer(p?.id, p?.name));
     });
 
-    matchesDetails.forEach(match => {
-      const teamAPlayers = match?.teams?.teamA || [];
-      const teamBPlayers = match?.teams?.teamB || [];
-      const teamAIds = teamAPlayers.map(p => p?.id);
-      const teamBIds = teamBPlayers.map(p => p?.id);
-      const playerStats = match?.playerStats || {};
+    // Se existir um snapshot de stats salvo na sessão, mescla como base
+    if (!hasMatches && session?.stats && typeof session.stats === 'object') {
+      Object.entries(session.stats).forEach(([pid, s]) => {
+        seedPlayer(pid, s?.name);
+        const t = result[pid];
+        t.wins += Number(s?.wins || 0);
+        t.draws += Number(s?.draws || 0);
+        t.losses += Number(s?.losses || 0);
+        t.goals += Number(s?.goals || 0);
+        t.ownGoals += Number(s?.ownGoals || 0);
+        t.assists += Number(s?.assists || 0);
+        t.dribbles += Number(s?.dribbles || 0);
+        t.tackles += Number(s?.tackles || 0);
+        t.saves += Number(s?.saves || 0);
+        t.failures += Number(s?.failures || 0);
+      });
+    }
 
-      let scoreA = Number(match?.score?.teamA);
-      let scoreB = Number(match?.score?.teamB);
-      if (!Number.isFinite(scoreA) || !Number.isFinite(scoreB)) {
-        scoreA = 0; scoreB = 0;
-        for (const pId in playerStats) {
-          const ps = playerStats[pId] || {};
-          if (teamAIds.includes(pId)) scoreA += ps.goals || 0;
-          else if (teamBIds.includes(pId)) scoreB += ps.goals || 0;
+    // Consolida a partir das partidas (playerStats preferido; fallback: events)
+    matchesDetails.forEach((match) => {
+      const teamA = match?.teams?.teamA || [];
+      const teamB = match?.teams?.teamB || [];
+      // Deduplica ids para evitar contar W/E/D mais de uma vez em caso de duplicatas
+      const teamAIds = Array.from(new Set(teamA.map((p) => p?.id).filter(Boolean)));
+      const teamBIds = Array.from(new Set(teamB.map((p) => p?.id).filter(Boolean)));
+      const pstats = match?.playerStats || {};
+      // Ensure we seed players present only in playerStats (for matches antigos sem equipes completas)
+      Object.keys(pstats).forEach((pid) => {
+        if (!pid) return;
+        if (result[pid]) return;
+        const nameInMatch = [...teamA, ...teamB].find((p) => p?.id === pid)?.name;
+        seedPlayer(pid, nameInMatch || pstats[pid]?.name || pid);
+      });
+
+      // Resultado da partida para W/D/L: use resultsPerPlayer quando existir;
+      // caso contrário, use score salvo; evite recalcular por gols para não distorcer.
+      const resultsPerPlayer = match?.resultsPerPlayer;
+      if (resultsPerPlayer && typeof resultsPerPlayer === 'object') {
+        Object.entries(resultsPerPlayer).forEach(([pid, res]) => {
+          if (!result[pid]) return;
+          if (res === 'win') result[pid].wins += 1;
+          else if (res === 'loss') result[pid].losses += 1;
+          else result[pid].draws += 1;
+        });
+      } else {
+        const scoreA = Number(match?.score?.teamA);
+        const scoreB = Number(match?.score?.teamB);
+        if (Number.isFinite(scoreA) && Number.isFinite(scoreB)) {
+          if (scoreA > scoreB) {
+            teamAIds.forEach((id) => { if (result[id]) result[id].wins += 1; });
+            teamBIds.forEach((id) => { if (result[id]) result[id].losses += 1; });
+          } else if (scoreB > scoreA) {
+            teamBIds.forEach((id) => { if (result[id]) result[id].wins += 1; });
+            teamAIds.forEach((id) => { if (result[id]) result[id].losses += 1; });
+          } else {
+            teamAIds.forEach((id) => { if (result[id]) result[id].draws += 1; });
+            teamBIds.forEach((id) => { if (result[id]) result[id].draws += 1; });
+          }
+        } else {
+          // Sem score confiável: considere empate para não distorcer.
+          teamAIds.forEach((id) => { if (result[id]) result[id].draws += 1; });
+          teamBIds.forEach((id) => { if (result[id]) result[id].draws += 1; });
         }
       }
 
-      if (scoreA > scoreB) {
-        teamAIds.forEach(id => { if (stats[id]) stats[id].wins++; });
-        teamBIds.forEach(id => { if (stats[id]) stats[id].losses++; });
-      } else if (scoreB > scoreA) {
-        teamBIds.forEach(id => { if (stats[id]) stats[id].wins++; });
-        teamAIds.forEach(id => { if (stats[id]) stats[id].losses++; });
+      if (Object.keys(pstats).length > 0) {
+        Object.entries(pstats).forEach(([pid, ps]) => {
+          if (!result[pid]) return;
+          const nameInMatch = [...teamA, ...teamB].find((p) => p?.id === pid)?.name;
+          if (nameInMatch) result[pid].name = nameInMatch;
+          result[pid].goals += Number(ps?.goals || 0);
+          result[pid].ownGoals += Number(ps?.ownGoals || 0);
+          result[pid].assists += Number(ps?.assists || 0);
+          result[pid].dribbles += Number(ps?.dribbles || 0);
+          result[pid].tackles += Number(ps?.tackles || 0);
+          result[pid].saves += Number(ps?.saves || 0);
+          result[pid].failures += Number(ps?.failures || 0);
+        });
       } else {
-        teamAIds.forEach(id => { if (stats[id]) stats[id].draws++; });
-        teamBIds.forEach(id => { if (stats[id]) stats[id].draws++; });
-      }
-
-      for (const pId in playerStats) {
-        if (!stats[pId]) continue;
-        const inMatch = [...teamAPlayers, ...teamBPlayers].find(p => p?.id === pId);
-        if (inMatch) stats[pId].name = inMatch.name;
-        const ps = playerStats[pId] || {};
-        stats[pId].goals += ps.goals || 0;
-        stats[pId].assists += ps.assists || 0;
-        stats[pId].dribbles += ps.dribbles || 0;
-        stats[pId].tackles += ps.tackles || 0;
-        stats[pId].saves += ps.saves || 0;
-        stats[pId].failures += ps.failures || 0;
+        const events = Array.isArray(match?.events) ? match.events : [];
+        events.forEach((ev) => {
+          const pid = ev?.playerId;
+          if (!pid || !result[pid]) return;
+          const nameInMatch = [...teamA, ...teamB].find((p) => p?.id === pid)?.name;
+          if (nameInMatch) result[pid].name = nameInMatch;
+          switch (ev?.type) {
+            case 'goal': result[pid].goals += 1; break;
+            case 'ownGoal': result[pid].ownGoals += 1; break;
+            case 'assist': result[pid].assists += 1; break;
+            case 'dribble': result[pid].dribbles += 1; break;
+            case 'tackle': result[pid].tackles += 1; break;
+            case 'save': result[pid].saves += 1; break;
+            case 'failure': result[pid].failures += 1; break;
+            default: break;
+          }
+        });
       }
     });
 
-    return Object.values(stats).sort((a, b) => (b.wins - a.wins) || (b.goals - a.goals));
-  }, [matchesDetails, session?.players]);
+    return Object.values(result).sort((a, b) => (b.wins - a.wins) || (b.goals - a.goals) || (b.assists - a.assists));
+  }, [session?.players, session?.stats, matchesDetails]);
 
   const sessionDate = session?.date?.seconds
     ? new Date(session.date.seconds * 1000).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })
@@ -261,8 +330,48 @@ const SessionReportDetail = ({ session, onBack, t = (s) => s }) => {
             (m?.teams?.teamA || []).forEach(p => { scoreA += ps[p.id]?.goals || 0; });
             (m?.teams?.teamB || []).forEach(p => { scoreB += ps[p.id]?.goals || 0; });
           }
-          const teamAList = (m?.teams?.teamA || []).map(p => p?.name || '').join(', ');
-          const teamBList = (m?.teams?.teamB || []).map(p => p?.name || '').join(', ');
+          const summarize = (ps) => {
+            if (!ps) return '';
+            const parts = [];
+            if (Number(ps.goals)) parts.push(`G:${ps.goals}`);
+            if (Number(ps.assists)) parts.push(`A:${ps.assists}`);
+            if (Number(ps.tackles)) parts.push(`DSR:${ps.tackles}`);
+            if (Number(ps.saves)) parts.push(`DEF:${ps.saves}`);
+            if (Number(ps.dribbles)) parts.push(`DRB:${ps.dribbles}`);
+            if (Number(ps.failures)) parts.push(`ERR:${ps.failures}`);
+            if (Number(ps.ownGoals)) parts.push(`GC:${ps.ownGoals}`);
+            return parts.length ? ` (${parts.join(', ')})` : '';
+          };
+          const psMap = m?.playerStats || {};
+          const events = Array.isArray(m?.events) ? m.events : [];
+          const deriveFromEvents = (pid) => {
+            const base = { goals:0, assists:0, tackles:0, saves:0, dribbles:0, failures:0, ownGoals:0 };
+            events.forEach(ev => {
+              if (ev?.playerId !== pid) return;
+              switch (ev.type) {
+                case 'goal': base.goals += 1; break;
+                case 'assist': base.assists += 1; break;
+                case 'tackle': base.tackles += 1; break;
+                case 'save': base.saves += 1; break;
+                case 'dribble': base.dribbles += 1; break;
+                case 'failure': base.failures += 1; break;
+                case 'ownGoal': base.ownGoals += 1; break;
+                default: break;
+              }
+            });
+            return base;
+          };
+          const statFor = (pid) => psMap[pid] || deriveFromEvents(pid);
+          const teamAList = (m?.teams?.teamA || []).map(p => {
+            const name = p?.name || '';
+            const s = statFor(p?.id);
+            return `${name}${summarize(s)}`;
+          }).join(', ');
+          const teamBList = (m?.teams?.teamB || []).map(p => {
+            const name = p?.name || '';
+            const s = statFor(p?.id);
+            return `${name}${summarize(s)}`;
+          }).join(', ');
           htmlParts.push(`<tr>
             <td>${idx + 1}</td>
             <td>${teamAList}</td>
@@ -300,6 +409,35 @@ const SessionReportDetail = ({ session, onBack, t = (s) => s }) => {
           htmlParts.push(`</div>`);
         });
       }
+
+      // Estatísticas agregadas por jogador (tabela)
+      const playersAgg = Array.isArray(calculatedStats) ? calculatedStats : [];
+      htmlParts.push(`<div class="section">`);
+      htmlParts.push(`<h2>Estatísticas individuais</h2>`);
+      if (playersAgg.length === 0) {
+        htmlParts.push(`<p class="muted">Sem estatísticas registradas.</p>`);
+      } else {
+        htmlParts.push(`<table><thead><tr>
+          <th>Jogador</th><th>V</th><th>E</th><th>D</th><th>Gols</th><th>Contra</th><th>Assist.</th><th>Dribles</th><th>Desarmes</th><th>Defesas</th><th>Falhas</th>
+        </tr></thead><tbody>`);
+        playersAgg.forEach(p => {
+          htmlParts.push(`<tr>
+            <td>${p.name || '-'}</td>
+            <td style="text-align:center;">${p.wins || 0}</td>
+            <td style="text-align:center;">${p.draws || 0}</td>
+            <td style="text-align:center;">${p.losses || 0}</td>
+            <td style="text-align:center;">${p.goals || 0}</td>
+            <td style="text-align:center;">${p.ownGoals || 0}</td>
+            <td style="text-align:center;">${p.assists || 0}</td>
+            <td style="text-align:center;">${p.dribbles || 0}</td>
+            <td style="text-align:center;">${p.tackles || 0}</td>
+            <td style="text-align:center;">${p.saves || 0}</td>
+            <td style="text-align:center;">${p.failures || 0}</td>
+          </tr>`);
+        });
+        htmlParts.push(`</tbody></table>`);
+      }
+      htmlParts.push(`</div>`);
 
       htmlParts.push(`<div style="margin-top:24px;"><button onclick="window.print()">Imprimir</button></div>`);
       htmlParts.push(`</body></html>`);
@@ -379,7 +517,7 @@ const SessionReportDetail = ({ session, onBack, t = (s) => s }) => {
       return;
     }
     if (!currentUserUid) {
-      alert('A% necessA?rio estar autenticado para votar.');
+      alert('É necessário estar autenticado para votar.');
       return;
     }
     if (hasCurrentUserVoted) {
@@ -470,7 +608,7 @@ const SessionReportDetail = ({ session, onBack, t = (s) => s }) => {
       const drawHeader = (ctx, subtitle) => {
         ctx.fillStyle = championsTheme.textPrimary;
         ctx.font = 'bold 48px system-ui,Segoe UI,Arial';
-        ctx.fillText('Relatorio da Sessao', pad, pad + 48);
+        ctx.fillText('Relatorio da Sessão', pad, pad + 48);
         ctx.fillStyle = championsTheme.textMuted;
         ctx.font = '22px system-ui,Segoe UI,Arial';
         if (sessionDate) ctx.fillText(sessionDate, pad, pad + 82);
@@ -491,16 +629,17 @@ const SessionReportDetail = ({ session, onBack, t = (s) => s }) => {
         statsCtx.fillText('Sem estatisticas registradas.', pad, pad + 232);
       } else {
         const columns = [
-          { key: 'name', label: 'Jogador', width: 360, align: 'left' },
-          { key: 'wins', label: 'V', width: 80, align: 'center' },
-          { key: 'draws', label: 'E', width: 80, align: 'center' },
-          { key: 'losses', label: 'D', width: 80, align: 'center' },
-          { key: 'goals', label: 'G', width: 80, align: 'center' },
-          { key: 'assists', label: 'A', width: 80, align: 'center' },
-          { key: 'dribbles', label: 'Dr', width: 80, align: 'center' },
-          { key: 'tackles', label: 'Ds', width: 80, align: 'center' },
-          { key: 'saves', label: 'Df', width: 80, align: 'center' },
-          { key: 'failures', label: 'F', width: 80, align: 'center' },
+          { key: 'name', label: 'Jogador', width: 340, align: 'left' },
+          { key: 'wins', label: 'V', width: 70, align: 'center' },
+          { key: 'draws', label: 'E', width: 70, align: 'center' },
+          { key: 'losses', label: 'D', width: 70, align: 'center' },
+          { key: 'goals', label: 'G', width: 70, align: 'center' },
+          { key: 'ownGoals', label: 'GC', width: 70, align: 'center' },
+          { key: 'assists', label: 'A', width: 70, align: 'center' },
+          { key: 'dribbles', label: 'Dr', width: 70, align: 'center' },
+          { key: 'tackles', label: 'Ds', width: 70, align: 'center' },
+          { key: 'saves', label: 'Df', width: 70, align: 'center' },
+          { key: 'failures', label: 'F', width: 70, align: 'center' },
         ];
 
         const tableX = pad;
@@ -546,7 +685,9 @@ const SessionReportDetail = ({ session, onBack, t = (s) => s }) => {
             player.draws ?? 0,
             player.losses ?? 0,
             player.goals ?? 0,
+            player.ownGoals ?? 0,
             player.assists ?? 0,
+            player.dribbles ?? 0,
             player.tackles ?? 0,
             player.saves ?? 0,
             player.failures ?? 0,
@@ -723,7 +864,7 @@ const SessionReportDetail = ({ session, onBack, t = (s) => s }) => {
               <p className="text-center text-[#7c8fbf]">Sem estatisticas registradas.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left min-w-[760px]">
+                <table className="w-full text-left min-w-[860px]">
                   <thead className="bg-gradient-to-r from-[#4338ca]/60 via-[#a855f7]/55 to-[#06b6d4]/60 text-[#f8fafc] uppercase text-sm">
                     <tr>
                       <th className="p-3 text-left">Jogador</th>
@@ -731,6 +872,7 @@ const SessionReportDetail = ({ session, onBack, t = (s) => s }) => {
                       <th className="p-3 text-center">E</th>
                       <th className="p-3 text-center">D</th>
                       <th className="p-3 text-center">Gols</th>
+                      <th className="p-3 text-center">Contra</th>
                       <th className="p-3 text-center">Assist.</th>
                       <th className="p-3 text-center">Dribles</th>
                       <th className="p-3 text-center">Desarmes</th>
@@ -739,13 +881,14 @@ const SessionReportDetail = ({ session, onBack, t = (s) => s }) => {
                     </tr>
                   </thead>
                   <tbody className="bg-[#131d36]/60">
-                    {calculatedStats.map(player => (
-                      <tr key={player.name} className="border-b border-[#27334e]/60">
+                    {calculatedStats.map((player) => (
+                      <tr key={player.id || player.name} className="border-b border-[#27334e]/60">
                         <td className="p-3 font-semibold text-lg text-white">{player.name}</td>
                         <td className="p-3 text-center text-emerald-300 font-bold">{player.wins ?? 0}</td>
                         <td className="p-3 text-center text-[#cbd5f5] font-bold">{player.draws ?? 0}</td>
                         <td className="p-3 text-center text-rose-300 font-bold">{player.losses ?? 0}</td>
                         <td className="p-3 text-center text-[#b8c2ff]">{player.goals ?? 0}</td>
+                        <td className="p-3 text-center text-[#fca5a5]">{player.ownGoals ?? 0}</td>
                         <td className="p-3 text-center text-[#b8c2ff]">{player.assists ?? 0}</td>
                         <td className="p-3 text-center text-[#b8c2ff]">{player.dribbles ?? 0}</td>
                         <td className="p-3 text-center text-[#8fd3ff]">{player.tackles ?? 0}</td>
@@ -814,8 +957,16 @@ const SessionReportDetail = ({ session, onBack, t = (s) => s }) => {
                 const playerStats = match?.playerStats || {};
                 if (!Number.isFinite(scoreA) || !Number.isFinite(scoreB)) {
                   scoreA = 0; scoreB = 0;
-                  (match?.teams?.teamA || []).forEach(p => { scoreA += playerStats[p.id]?.goals || 0; });
-                  (match?.teams?.teamB || []).forEach(p => { scoreB += playerStats[p.id]?.goals || 0; });
+                  (match?.teams?.teamA || []).forEach(p => {
+                    const ps = playerStats[p.id] || {};
+                    scoreA += ps.goals || 0;
+                    scoreB += ps.ownGoals || 0;
+                  });
+                  (match?.teams?.teamB || []).forEach(p => {
+                    const ps = playerStats[p.id] || {};
+                    scoreB += ps.goals || 0;
+                    scoreA += ps.ownGoals || 0;
+                  });
                 }
 
                 const events = Array.isArray(match?.events) ? match.events : [];
@@ -844,6 +995,36 @@ const SessionReportDetail = ({ session, onBack, t = (s) => s }) => {
                       return `${ev.playerName || ''} ${t('registrou')} ${ev.type}`;
                   }
                 };
+                const summarize = (ps) => {
+                  if (!ps) return '';
+                  const parts = [];
+                  if (Number(ps.goals)) parts.push(`G:${ps.goals}`);
+                  if (Number(ps.assists)) parts.push(`A:${ps.assists}`);
+                  if (Number(ps.tackles)) parts.push(`DSR:${ps.tackles}`);
+                  if (Number(ps.saves)) parts.push(`DEF:${ps.saves}`);
+                  if (Number(ps.dribbles)) parts.push(`DRB:${ps.dribbles}`);
+                  if (Number(ps.failures)) parts.push(`ERR:${ps.failures}`);
+                  if (Number(ps.ownGoals)) parts.push(`GC:${ps.ownGoals}`);
+                  return parts.length ? ` (${parts.join(', ')})` : '';
+                };
+                const deriveFromEvents = (pid) => {
+                  const base = { goals:0, assists:0, tackles:0, saves:0, dribbles:0, failures:0, ownGoals:0 };
+                  events.forEach(ev => {
+                    if (ev?.playerId !== pid) return;
+                    switch (ev.type) {
+                      case 'goal': base.goals += 1; break;
+                      case 'assist': base.assists += 1; break;
+                      case 'tackle': base.tackles += 1; break;
+                      case 'save': base.saves += 1; break;
+                      case 'dribble': base.dribbles += 1; break;
+                      case 'failure': base.failures += 1; break;
+                      case 'ownGoal': base.ownGoals += 1; break;
+                      default: break;
+                    }
+                  });
+                  return base;
+                };
+                const statFor = (pid) => playerStats[pid] || deriveFromEvents(pid);
                 return (
                   <div key={match.id || index} className="rounded-lg border border-[#28324d] bg-gradient-to-br from-[#101a31]/85 via-[#111a32]/70 to-[#0b1228]/90 p-3 text-center shadow-[0_12px_32px_rgba(6,182,212,0.18)]">
                     <p className="text-sm uppercase tracking-wide text-[#9aa7d7]">Partida {index + 1}</p>
@@ -852,6 +1033,30 @@ const SessionReportDetail = ({ session, onBack, t = (s) => s }) => {
                       vs
                       <span className="mx-2 text-2xl text-[#b8c2ff]">{scoreB}</span> Time B
                     </p>
+                    <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
+                      <div>
+                        <h5 className="text-xs uppercase tracking-[0.35em] text-[#9aa7d7] mb-1">{t('Time A')}</h5>
+                        <ul className="space-y-1">
+                          {(match?.teams?.teamA || []).map((p) => (
+                            <li key={`A-${p?.id}`} className="text-[12px] text-[#dbe2ff]">
+                              <span className="font-semibold text-white mr-1">{p?.name}</span>
+                              <span className="text-[#a6b3e6]">{summarize(statFor(p?.id))}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <h5 className="text-xs uppercase tracking-[0.35em] text-[#9aa7d7] mb-1">{t('Time B')}</h5>
+                        <ul className="space-y-1">
+                          {(match?.teams?.teamB || []).map((p) => (
+                            <li key={`B-${p?.id}`} className="text-[12px] text-[#dbe2ff]">
+                              <span className="font-semibold text-white mr-1">{p?.name}</span>
+                              <span className="text-[#a6b3e6]">{summarize(statFor(p?.id))}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
                     <div className="mt-3 text-left">
                       <h4 className="text-xs uppercase tracking-[0.35em] text-[#9aa7d7]">{t('Eventos')}</h4>
                       {events.length === 0 ? (
@@ -904,6 +1109,3 @@ const SessionReportDetail = ({ session, onBack, t = (s) => s }) => {
 
 
 export default SessionReportDetail;
-
-
-

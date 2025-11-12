@@ -3,8 +3,58 @@ import LiveMatchTracker from './LiveMatchTracker';
 import SubstitutionModal from './SubstitutionModal';
 import ReservePanel from './ReservePanel';
 
-const EMPTY_MATCH_PLAYER_STATS = { goals: 0, ownGoals: 0, assists: 0, tackles: 0, saves: 0, failures: 0, dribbles: 0 };
-const fillPlayerStats = (stats = {}) => ({ ...EMPTY_MATCH_PLAYER_STATS, ...stats });
+const deepClone = (obj) => {
+    try { if (typeof structuredClone === 'function') return structuredClone(obj); } catch {}
+    return JSON.parse(JSON.stringify(obj));
+};
+const createEmptyPlayerStats = () => ({
+    goals: 0,
+    ownGoals: 0,
+    assists: 0,
+    dribbles: 0,
+    tackles: 0,
+    saves: 0,
+    failures: 0,
+});
+const fillPlayerStats = (stats = {}) => ({ ...createEmptyPlayerStats(), ...stats });
+const deriveStatsFromTimeline = (timeline = []) => {
+    const derived = {};
+    const ensure = (playerId) => {
+        if (!playerId) return null;
+        if (!derived[playerId]) derived[playerId] = createEmptyPlayerStats();
+        return derived[playerId];
+    };
+    timeline.forEach((event) => {
+        const target = ensure(event?.playerId);
+        if (!target) return;
+        switch (event.type) {
+            case 'goal':
+                target.goals += 1;
+                break;
+            case 'ownGoal':
+                target.ownGoals += 1;
+                break;
+            case 'assist':
+                target.assists += 1;
+                break;
+            case 'dribble':
+                target.dribbles += 1;
+                break;
+            case 'tackle':
+                target.tackles += 1;
+                break;
+            case 'save':
+                target.saves += 1;
+                break;
+            case 'failure':
+                target.failures += 1;
+                break;
+            default:
+                break;
+        }
+    });
+    return derived;
+};
 
 const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsChange, groupId, initialDurationSec = 10 * 60, onCreatePlayer, t }) => {
     const [timeLeft, setTimeLeft] = useState(initialDurationSec);
@@ -26,6 +76,7 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
 
     const workerRef = useRef(null);
     const startedAtRef = useRef(Date.now());
+    const participantsRef = useRef({ teamA: new Map(), teamB: new Map() });
     const liveStateKey = useMemo(() => `liveMatchState-${groupId || 'default'}`, [groupId]);
 
     const teammates = useMemo(() => {
@@ -34,6 +85,10 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
         return teamList.filter(p => p && p.id !== goalScorerInfo.player.id);
     }, [goalScorerInfo, allTeams]);
 
+    const teamsInPlay = useMemo(() => ({
+        teamA: allTeams[0] || [],
+        teamB: allTeams[1] || []
+    }), [allTeams]);
 
     useEffect(() => {
         const basePublicUrl = process.env.PUBLIC_URL || '';
@@ -139,7 +194,7 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
             } else {
                 const stats = {};
                 allTeams.flat().forEach(p => {
-                    if (p) stats[p.id] = { ...EMPTY_MATCH_PLAYER_STATS };
+                    if (p) stats[p.id] = createEmptyPlayerStats();
                 });
                 setPlayerStats(stats);
             }
@@ -224,7 +279,7 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
         const { player, teamKey } = goalScorerInfo || playerForAction;
         const statToUpdate = stat || 'goals';
 
-        setHistory(prev => [...prev, { score: { ...score }, playerStats: JSON.parse(JSON.stringify(playerStats)) }]);
+        setHistory(prev => [...prev, { score: { ...score }, playerStats: deepClone(playerStats) }]);
 
         setPlayerStats(prev => {
             const newPlayerStats = { ...prev };
@@ -303,7 +358,7 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
 
     const handleConfirmSubstitution = (playerOut, playerIn) => {
         let substitutionTeamKey = null;
-        const newTeams = JSON.parse(JSON.stringify(allTeams));
+        const newTeams = deepClone(allTeams);
         let posOut;
         let posIn;
 
@@ -339,10 +394,23 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
         setPlayerToSubstitute(null);
     };
 
-    const teamsInPlay = {
-        teamA: allTeams[0] || [],
-        teamB: allTeams[1] || []
-    };
+    useEffect(() => {
+        const registerPlayer = (player, targetKey) => {
+            if (!player?.id) return;
+            const current = participantsRef.current;
+            const oppositeKey = targetKey === 'teamA' ? 'teamB' : 'teamA';
+            current[oppositeKey].delete(player.id);
+            current[targetKey].set(player.id, player);
+        };
+        (teamsInPlay.teamA || []).forEach(player => registerPlayer(player, 'teamA'));
+        (teamsInPlay.teamB || []).forEach(player => registerPlayer(player, 'teamB'));
+    }, [teamsInPlay]);
+
+    useEffect(() => {
+        return () => {
+            participantsRef.current = { teamA: new Map(), teamB: new Map() };
+        };
+    }, []);
 
     const benchIndex = Math.max(2, Number(numberOfTeams) || 2);
     const benchPlayers = (allTeams[benchIndex] || []).filter(p => p);
@@ -357,7 +425,7 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
 
     const handleAddPlayerToTeam = (player, targetIndex) => {
         if (!player || typeof targetIndex !== 'number') return;
-        const newTeams = JSON.parse(JSON.stringify(allTeams));
+        const newTeams = deepClone(allTeams);
 
         // Remove player from any team/bench they might be in
         newTeams.forEach((team, tIndex) => {
@@ -399,19 +467,38 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
                     const finishedAt = new Date().toISOString();
                     const startedAtIso = new Date(startedAtRef.current).toISOString();
                     const finalTeams = {
-                        teamA: [...(teamsInPlay.teamA || [])],
-                        teamB: [...(teamsInPlay.teamB || [])],
+                        teamA: Array.from(participantsRef.current.teamA.values()),
+                        teamB: Array.from(participantsRef.current.teamB.values()),
                     };
-                    const finalStats = JSON.parse(JSON.stringify(playerStats || {}));
-                    const finalEvents = JSON.parse(JSON.stringify(eventTimeline || []));
+                    const hasRecordedStats = Object.values(playerStats || {}).some((entry) => {
+                        if (!entry) return false;
+                        return Object.values(entry).some((value) => Number(value || 0) > 0);
+                    });
+                    const finalStats = hasRecordedStats
+                        ? deepClone(playerStats || {})
+                        : deriveStatsFromTimeline(eventTimeline || []);
+                    const finalEvents = deepClone(eventTimeline || []);
+                    const resultsPerPlayer = (() => {
+                        const map = {};
+                        const a = finalTeams.teamA || [];
+                        const b = finalTeams.teamB || [];
+                        const aScore = Number(score?.teamA || 0);
+                        const bScore = Number(score?.teamB || 0);
+                        const winnerKey = aScore > bScore ? 'teamA' : (bScore > aScore ? 'teamB' : null);
+                        a.forEach(p => { if (!p?.id) return; map[p.id] = winnerKey === 'teamA' ? 'win' : (winnerKey === 'teamB' ? 'loss' : 'draw'); });
+                        b.forEach(p => { if (!p?.id) return; map[p.id] = winnerKey === 'teamB' ? 'win' : (winnerKey === 'teamA' ? 'loss' : 'draw'); });
+                        return map;
+                    })();
                     onMatchEnd({
                         teams: finalTeams,
                         score: { ...score },
                         playerStats: finalStats,
                         events: finalEvents,
+                        resultsPerPlayer,
                         startedAt: startedAtIso,
                         endedAt: finishedAt,
                     });
+                    participantsRef.current = { teamA: new Map(), teamB: new Map() };
                 }}
                 onPlayerAction={(player, teamKey) => setPlayerForAction({ player, teamKey })}
                 onGoal={handleGoal}

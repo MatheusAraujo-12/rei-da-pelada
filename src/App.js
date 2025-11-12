@@ -685,7 +685,7 @@ function App() {
             // Agrega estatísticas do dia
             const stats = {};
             const ensurePlayer = (id, name) => {
-                if (!stats[id]) stats[id] = { name: name || 'Desconhecido', wins: 0, draws: 0, losses: 0, goals: 0, assists: 0, dribbles: 0, tackles: 0 };
+                if (!stats[id]) stats[id] = { name: name || 'Desconhecido', wins: 0, draws: 0, losses: 0, goals: 0, ownGoals: 0, assists: 0, dribbles: 0, tackles: 0, saves: 0, failures: 0 };
                 if (name && (!stats[id].name || stats[id].name === 'Desconhecido')) stats[id].name = name;
             };
             for (const { matches } of sessionsWithMatches) {
@@ -707,15 +707,17 @@ function App() {
                             }
                         }
                     }
+                    const teamAIdsU = Array.from(new Set(teamA.map(p => p?.id).filter(Boolean)));
+                    const teamBIdsU = Array.from(new Set(teamB.map(p => p?.id).filter(Boolean)));
                     if (scoreA > scoreB) {
-                        teamA.forEach(p => { ensurePlayer(p.id, p.name); stats[p.id].wins++; });
-                        teamB.forEach(p => { ensurePlayer(p.id, p.name); stats[p.id].losses++; });
+                        teamAIdsU.forEach(id => { ensurePlayer(id, (teamA.find(p=>p.id===id)||{}).name); stats[id].wins++; });
+                        teamBIdsU.forEach(id => { ensurePlayer(id, (teamB.find(p=>p.id===id)||{}).name); stats[id].losses++; });
                     } else if (scoreB > scoreA) {
-                        teamB.forEach(p => { ensurePlayer(p.id, p.name); stats[p.id].wins++; });
-                        teamA.forEach(p => { ensurePlayer(p.id, p.name); stats[p.id].losses++; });
+                        teamBIdsU.forEach(id => { ensurePlayer(id, (teamB.find(p=>p.id===id)||{}).name); stats[id].wins++; });
+                        teamAIdsU.forEach(id => { ensurePlayer(id, (teamA.find(p=>p.id===id)||{}).name); stats[id].losses++; });
                     } else {
-                        teamA.forEach(p => { ensurePlayer(p.id, p.name); stats[p.id].draws++; });
-                        teamB.forEach(p => { ensurePlayer(p.id, p.name); stats[p.id].draws++; });
+                        teamAIdsU.forEach(id => { ensurePlayer(id, (teamA.find(p=>p.id===id)||{}).name); stats[id].draws++; });
+                        teamBIdsU.forEach(id => { ensurePlayer(id, (teamB.find(p=>p.id===id)||{}).name); stats[id].draws++; });
                     }
                     if (m?.playerStats) {
                         for (const pid of Object.keys(m.playerStats)) {
@@ -723,9 +725,12 @@ function App() {
                             const pInfo = [...teamA, ...teamB].find(pp => pp?.id === pid);
                             ensurePlayer(pid, pInfo?.name);
                             stats[pid].goals += Number(st.goals || 0);
+                            stats[pid].ownGoals += Number(st.ownGoals || 0);
                             stats[pid].assists += Number(st.assists || 0);
                             stats[pid].dribbles += Number(st.dribbles || 0);
                             stats[pid].tackles += Number(st.tackles || 0);
+                            stats[pid].saves += Number(st.saves || 0);
+                            stats[pid].failures += Number(st.failures || 0);
                         }
                     }
                 }
@@ -749,7 +754,7 @@ function App() {
                 htmlParts.push('<p>Sem partidas registradas hoje.</p>');
             } else {
                 htmlParts.push(`<table><thead><tr>
-                    <th>Jogador</th><th>V</th><th>E</th><th>D</th><th>Gols</th><th>Assist.</th><th>Dribles</th><th>Desarmes</th>
+                    <th>Jogador</th><th>V</th><th>E</th><th>D</th><th>Gols</th><th>Contra</th><th>Assist.</th><th>Dribles</th><th>Desarmes</th><th>Defesas</th><th>Falhas</th>
                 </tr></thead><tbody>`);
                 ranking.forEach(p => {
                     htmlParts.push(`<tr>
@@ -758,9 +763,12 @@ function App() {
                         <td style="text-align:center;">${p.draws}</td>
                         <td style="text-align:center;">${p.losses}</td>
                         <td style="text-align:center;">${p.goals}</td>
+                        <td style="text-align:center;">${p.ownGoals}</td>
                         <td style="text-align:center;">${p.assists}</td>
                         <td style="text-align:center;">${p.dribbles}</td>
                         <td style="text-align:center;">${p.tackles}</td>
+                        <td style="text-align:center;">${p.saves}</td>
+                        <td style="text-align:center;">${p.failures}</td>
                     </tr>`);
                 });
                 htmlParts.push(`</tbody></table>`);
