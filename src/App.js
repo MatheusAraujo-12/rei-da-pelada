@@ -126,6 +126,7 @@ function App() {
         const unsubscribe = onAuthStateChanged(auth, (u) => {
             if (u) {
                 setUser(u);
+                setCurrentView('dashboard');
             } else {
                 setUser(null);
                 setPlayerProfile(null);
@@ -175,7 +176,7 @@ function App() {
         };
     }, [user, activeGroupId]);
 
-    // Efeito para carregar dados do grupo ativo
+    // Efeito para carregar dados do grupo ativo (status/admin e jogadores)
     useEffect(() => {
         if (!user || !activeGroupId) {
             clearGlobalPlayerSubscriptions();
@@ -207,20 +208,38 @@ function App() {
             setPlayers(mergedPlayers);
         });
 
-        const matchesColRef = collection(db, `groups/${activeGroupId}/matches`);
-        const mSub = onSnapshot(query(matchesColRef, orderBy('date', 'desc')), s => setMatches(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-        
-        const sessionsColRef = collection(db, `groups/${activeGroupId}/sessions`);
-        const qSessions = query(sessionsColRef, orderBy('date', 'desc'));
-        const sSub = onSnapshot(qSessions, s => setSavedSessions(s.docs.map(d => ({ id: d.id, ...d.data() }))));
         return () => {
             unsubGroup();
             unsubPlayers();
-            mSub();
-            sSub();
             clearGlobalPlayerSubscriptions();
         };
     }, [user, activeGroupId]);
+
+    // Dados de partidas: carregue sob demanda conforme tela
+    useEffect(() => {
+        if (!user || !activeGroupId) {
+            setMatches([]);
+            return;
+        }
+        const needsMatches = ['history', 'hall_of_fame', 'match'].includes(currentView);
+        if (!needsMatches) return;
+        const matchesColRef = collection(db, `groups/${activeGroupId}/matches`);
+        const mSub = onSnapshot(query(matchesColRef, orderBy('date', 'desc')), s => setMatches(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+        return () => mSub();
+    }, [user, activeGroupId, currentView]);
+
+    // Dados de sessões: só carrega quando a aba de sessões está aberta
+    useEffect(() => {
+        if (!user || !activeGroupId) {
+            setSavedSessions([]);
+            return;
+        }
+        if (currentView !== 'sessions') return;
+        const sessionsColRef = collection(db, `groups/${activeGroupId}/sessions`);
+        const qSessions = query(sessionsColRef, orderBy('date', 'desc'));
+        const sSub = onSnapshot(qSessions, s => setSavedSessions(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+        return () => sSub();
+    }, [user, activeGroupId, currentView]);
     
     // Funções de manipulação
     
@@ -438,15 +457,19 @@ function App() {
 
     const confirmDeleteMatch = async () => {
         if(!activeGroupId || !matchToDelete || !isAdminOfActiveGroup) return;
-        try { await deleteDoc(doc(db, `groups/${activeGroupId}/matches`, matchToDelete.id)); } 
-        catch(e) { console.error("Erro ao apagar partida:", e); } 
+        const list = Array.isArray(matchToDelete) ? matchToDelete : [matchToDelete];
+        try {
+            await Promise.all(list.map(m => deleteDoc(doc(db, `groups/${activeGroupId}/matches`, m.id))));
+        } catch(e) { console.error("Erro ao apagar partida:", e); } 
         finally { setMatchToDelete(null); }
     };
 
     const confirmDeleteSession = async () => {
         if (!sessionToDelete || !isAdminOfActiveGroup) return;
-        try { await deleteDoc(doc(db, `groups/${activeGroupId}/sessions`, sessionToDelete.id)); } 
-        catch (e) { console.error("Erro ao apagar sessão:", e); } 
+        const list = Array.isArray(sessionToDelete) ? sessionToDelete : [sessionToDelete];
+        try {
+            await Promise.all(list.map(s => deleteDoc(doc(db, `groups/${activeGroupId}/sessions`, s.id))));
+        } catch (e) { console.error("Erro ao apagar sessão:", e); }
         finally { setSessionToDelete(null); }
     };
 
@@ -919,8 +942,30 @@ function App() {
                 {renderContent()}
                 <PlayerModal isOpen={isPlayerModalOpen} onClose={() => setIsPlayerModalOpen(false)} onSave={handleSavePlayerFixed} player={editingPlayer} isAdmin={isAdminOfActiveGroup} t={t} />
                 <ConfirmationModal isOpen={!!playerToDelete} title={t("Confirmar Exclusão")} message={`${t('Tem certeza que deseja apagar o jogador')} ${playerToDelete?.name}?`} onConfirm={confirmDeletePlayer} onClose={() => setPlayerToDelete(null)} t={t} />
-                <ConfirmationModal isOpen={!!matchToDelete} title={t("Confirmar Exclusão")} message={t("Tem certeza que deseja apagar esta partida?")} onConfirm={confirmDeleteMatch} onClose={() => setMatchToDelete(null)} t={t} />
-                <ConfirmationModal isOpen={!!sessionToDelete} title={t("Confirmar Exclusão")} message={t("Tem certeza que deseja apagar esta sessão?")} onConfirm={confirmDeleteSession} onClose={() => setSessionToDelete(null)} t={t} />
+                <ConfirmationModal
+                    isOpen={!!matchToDelete}
+                    title={t("Confirmar Exclusão")}
+                    message={
+                        Array.isArray(matchToDelete)
+                            ? t("Tem certeza que deseja apagar estas partidas selecionadas?")
+                            : t("Tem certeza que deseja apagar esta partida?")
+                    }
+                    onConfirm={confirmDeleteMatch}
+                    onClose={() => setMatchToDelete(null)}
+                    t={t}
+                />
+                <ConfirmationModal
+                    isOpen={!!sessionToDelete}
+                    title={t("Confirmar Exclusão")}
+                    message={
+                        Array.isArray(sessionToDelete)
+                            ? t("Tem certeza que deseja apagar estas sessões selecionadas?")
+                            : t("Tem certeza que deseja apagar esta sessão?")
+                    }
+                    onConfirm={confirmDeleteSession}
+                    onClose={() => setSessionToDelete(null)}
+                    t={t}
+                />
                 <ConfirmationModal isOpen={!!groupToLeave} title={t("Sair do Grupo")} message={`${t('Tem certeza que deseja sair do grupo')} "${groupToLeave?.name}"?`} onConfirm={handleLeaveGroup} onClose={() => setGroupToLeave(null)} t={t} />
                 <PeerReviewModal isOpen={!!peerReviewPlayer} player={peerReviewPlayer} onClose={() => setPeerReviewPlayer(null)} onSave={handleSavePeerReview} t={t} />
                 <EditMatchModal isOpen={!!editingMatch} match={editingMatch} players={players} onClose={() => setEditingMatch(null)} onSave={handleUpdateMatch} t={t} />
