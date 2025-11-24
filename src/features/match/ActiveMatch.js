@@ -177,6 +177,19 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
         };
     }, []); // Roda apenas uma vez para inicializar o worker
 
+    // Se o app perder foco/for minimizado, ao voltar garantimos que o worker retoma o cronômetro
+    useEffect(() => {
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible' && workerRef.current) {
+                workerRef.current.postMessage({ command: 'start', value: timeLeft });
+                if (isPaused) workerRef.current.postMessage({ command: 'pause' });
+                lastTickRef.current = Date.now();
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibility);
+        return () => document.removeEventListener('visibilitychange', handleVisibility);
+    }, [timeLeft, isPaused]);
+
     const workerStartedRef = useRef(false);
     useEffect(() => {
         if (!workerRef.current || workerStartedRef.current) return;
