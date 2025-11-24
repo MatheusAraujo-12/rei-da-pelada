@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { LucideX } from 'lucide-react';
 import { autoBuildTeams } from './Times';
 import ActiveMatch from './ActiveMatch';
@@ -27,6 +27,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, onCreatePlayer,
     const [isEditModeActive, setIsEditModeActive] = useState(false);
     const [showBenchPanel, setShowBenchPanel] = useState(false);
     const [isBenchConfigOpen, setIsBenchConfigOpen] = useState(false);
+    const endingMatchRef = useRef(false);
     const [streakLimit, setStreakLimit] = useState(2);
     const [tieBreakerRule, setTieBreakerRule] = useState('winnerStays');
     const [winnerStreak, setWinnerStreak] = useState({ teamId: null, count: 0 });
@@ -133,6 +134,11 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, onCreatePlayer,
             localStorage.setItem(localStorageKey, JSON.stringify(configToSave));
         }
     }, [step, allTeams, matchHistory, sessionPlayerStats, winnerStreak, selectedPlayerIds, benchPreferenceIds, numberOfTeams, drawType, streakLimit, tieBreakerRule, setupMode, matchDurationMin, playersPerTeam, localStorageKey, sessionStateKey]);
+
+    // Reseta guarda de encerramento ao iniciar uma nova partida
+    useEffect(() => {
+        if (step === 'in_game') endingMatchRef.current = false;
+    }, [step]);
 
     // Ao entrar no in_game, zera o estado ao vivo para iniciar partida nova
     useEffect(() => {
@@ -297,9 +303,12 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, onCreatePlayer,
     };
     
     const handleSingleMatchEnd = async (matchResult) => {
+        if (endingMatchRef.current || step !== 'in_game') return;
+        endingMatchRef.current = true;
         setIsEditModeActive(false);
         if (!matchResult || !matchResult.teams) {
             console.error("Resultado da partida inválido recebido:", matchResult);
+            endingMatchRef.current = false;
             return;
         }
         let savedMatch;
@@ -443,6 +452,7 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, onCreatePlayer,
             setWinnerStreak({ teamId: winnerId, count: currentStreak });
         }
         setStep('post_game');
+        endingMatchRef.current = false;
     };
 
     const handleForceEndSession = () => {

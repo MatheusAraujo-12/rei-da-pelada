@@ -77,6 +77,7 @@ const LiveMatchTracker = ({
     const [showConfirm, setShowConfirm] = useState(false);
     const [showFabMenu, setShowFabMenu] = useState(false);
     const [isPlayerPickerOpen, setIsPlayerPickerOpen] = useState(false);
+    const [isEnding, setIsEnding] = useState(false);
     const fieldStripes = React.useMemo(() => Array.from({ length: 6 }), []);
 
     const getEventVisual = (type) => {
@@ -202,9 +203,15 @@ const LiveMatchTracker = ({
         return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
     };
 
-    const handleEndMatchClick = () => {
-        const result = { teams, score, playerStats };
-        onEndMatch(result);
+    const handleEndMatchClick = async () => {
+        if (isEnding) return;
+        setIsEnding(true);
+        try {
+            const result = { teams, score, playerStats };
+            await Promise.resolve(onEndMatch(result));
+        } finally {
+            setIsEnding(false);
+        }
     };
 
     const handleOpenPlayerPicker = () => setIsPlayerPickerOpen(true);
@@ -349,8 +356,8 @@ const LiveMatchTracker = ({
                         </div>
                     </div>
                 <div className="mt-6 flex items-center justify-center gap-3">
-                    <button onClick={handleEndMatchClick} className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-8 rounded-lg text-lg">
-                        {t('Encerrar Partida')}
+                    <button onClick={handleEndMatchClick} disabled={isEnding} className="bg-red-600 hover:bg-red-700 disabled:bg-red-900 disabled:cursor-not-allowed text-white font-bold py-3 px-8 rounded-lg text-lg">
+                        {isEnding ? t('Encerrando...') : t('Encerrar Partida')}
                     </button>
                     {!disableFab && (
                     <div className="relative">
