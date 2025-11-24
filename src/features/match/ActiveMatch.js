@@ -78,6 +78,9 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
     const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
 
     const workerRef = useRef(null);
+    const fallbackIntervalRef = useRef(null);
+    const watchdogRef = useRef(null);
+    const lastTickRef = useRef(Date.now());
     const startedAtRef = useRef(Date.now());
     const participantsRef = useRef({ teamA: new Map(), teamB: new Map() });
     const liveStateKey = useMemo(() => `liveMatchState-${groupId || 'default'}`, [groupId]);
@@ -154,6 +157,7 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
 
         workerInstance.onmessage = (e) => {
             if (e.data?.type === 'tick') setTimeLeft(e.data.timeLeft);
+            if (e.data?.type === 'tick') lastTickRef.current = Date.now();
         };
 
         workerInstance.onerror = (errorEvent) => {
@@ -168,6 +172,8 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
                 }
                 workerRef.current = null;
             }
+            if (watchdogRef.current) clearInterval(watchdogRef.current);
+            if (fallbackIntervalRef.current) clearInterval(fallbackIntervalRef.current);
         };
     }, []); // Roda apenas uma vez para inicializar o worker
 
@@ -177,6 +183,7 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
         workerRef.current.postMessage({ command: 'start', value: timeLeft });
         if (isPaused) workerRef.current.postMessage({ command: 'pause' });
         workerStartedRef.current = true;
+        lastTickRef.current = Date.now();
     }, [timeLeft, isPaused]);
 
     useEffect(() => {
@@ -216,6 +223,44 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
         return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
     }, [timeLeft, isPaused, score, playerStats, history, eventTimeline, liveStateKey]);
 
+    // Fallback timer watchdog in caso de travamento do worker
+    const clearFallbackTimer = () => {
+        if (fallbackIntervalRef.current) {
+            clearInterval(fallbackIntervalRef.current);
+            fallbackIntervalRef.current = null;
+        }
+    };
+
+    useEffect(() => {
+        if (watchdogRef.current) {
+            clearInterval(watchdogRef.current);
+            watchdogRef.current = null;
+        }
+        if (isPaused) {
+            clearFallbackTimer();
+            return;
+        }
+        // Watchdog: se não houver tick do worker em 2s, liga fallback com setInterval
+        watchdogRef.current = setInterval(() => {
+            if (Date.now() - lastTickRef.current > 2000 && !fallbackIntervalRef.current) {
+                fallbackIntervalRef.current = setInterval(() => {
+                    setTimeLeft(prev => {
+                        if (prev <= 0) {
+                            clearFallbackTimer();
+                            return 0;
+                        }
+                        lastTickRef.current = Date.now();
+                        return prev - 1;
+                    });
+                }, 1000);
+            }
+        }, 1500);
+        return () => {
+            if (watchdogRef.current) clearInterval(watchdogRef.current);
+            clearFallbackTimer();
+        };
+    }, [isPaused]);
+
     const findPlayerById = (playerId) => {
         for (const team of allTeams) {
             if (!Array.isArray(team)) continue;
@@ -245,6 +290,7 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
             if (isPaused) workerRef.current.postMessage({ command: 'start', value: timeLeft });
             else workerRef.current.postMessage({ command: 'pause' });
             setIsPaused(!isPaused);
+            lastTickRef.current = Date.now();
         }
     };
     
