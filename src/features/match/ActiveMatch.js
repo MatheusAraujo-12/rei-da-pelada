@@ -532,6 +532,12 @@ const ActiveMatch = ({ teams: allTeams, numberOfTeams = 2, onMatchEnd, onTeamsCh
                     const finalStats = hasRecordedStats
                         ? deepClone(playerStats || {})
                         : deriveStatsFromTimeline(eventTimeline || []);
+                    // Garanta que cada jogador tenha o nome preenchido no mapa de stats
+                    [...(finalTeams.teamA || []), ...(finalTeams.teamB || [])].forEach(p => {
+                        if (!p?.id) return;
+                        if (!finalStats[p.id]) finalStats[p.id] = createEmptyPlayerStats();
+                        if (!finalStats[p.id].name) finalStats[p.id].name = p.name || t('Jogador');
+                    });
                     const finalEvents = deepClone(eventTimeline || []);
                     const resultsPerPlayer = (() => {
                         const map = {};

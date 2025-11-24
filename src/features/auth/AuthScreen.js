@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { doc, setDoc } from "firebase/firestore"; 
 import { auth, db } from '../../services/firebase';
 
@@ -8,6 +8,7 @@ const AuthScreen = ({ t }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [info, setInfo] = useState('');
     const [loading, setLoading] = useState(false);
 
     const handleAuthAction = async () => {
@@ -17,6 +18,7 @@ const AuthScreen = ({ t }) => {
         }
         setLoading(true);
         setError('');
+        setInfo('');
 
         if (isLogin) {
             // Lógica de Login
@@ -46,6 +48,22 @@ const AuthScreen = ({ t }) => {
         setLoading(false);
     };
 
+    const handleResetPassword = async () => {
+        if (!email) {
+            setError(t('Informe seu e-mail para recuperar a senha.'));
+            return;
+        }
+        setError('');
+        setInfo('');
+        try {
+            await sendPasswordResetEmail(auth, email);
+            setInfo(t('Enviamos um e-mail com instruções para redefinir sua senha.'));
+        } catch (err) {
+            console.error('Erro ao enviar reset de senha:', err);
+            setError(t('NA�o foi possA-vel enviar o e-mail de redefiniA�o. Verifique o e-mail informado.'));
+        }
+    };
+
     return (
         <div className="flex items-center justify-center min-h-screen">
             <div className="w-full max-w-md bg-gray-900/50 rounded-2xl p-8 border border-gray-700 text-white">
@@ -54,6 +72,7 @@ const AuthScreen = ({ t }) => {
                 </h2>
                 
                 {error && <p className="bg-red-800/50 text-red-300 p-3 rounded-lg text-center mb-4">{error}</p>}
+                {info && <p className="bg-green-800/40 text-green-200 p-3 rounded-lg text-center mb-4">{info}</p>}
 
                 <div className="space-y-4">
                     <input
@@ -81,6 +100,18 @@ const AuthScreen = ({ t }) => {
                         {loading ? t('A processar...') : (isLogin ? t('Entrar') : t('Registar'))}
                     </button>
                 </div>
+
+                {isLogin && (
+                    <div className="mt-4 text-center">
+                        <button
+                            onClick={handleResetPassword}
+                            className="text-sm text-gray-300 hover:text-indigo-300"
+                            disabled={loading}
+                        >
+                            {t('Esqueci minha senha')}
+                        </button>
+                    </div>
+                )}
 
                 <div className="mt-6 text-center">
                     <button

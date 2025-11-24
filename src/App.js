@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BrowserRouter, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collection, onSnapshot, doc, getDoc, getDocs, query, where, orderBy, updateDoc, deleteDoc, runTransaction, addDoc, arrayRemove, arrayUnion, writeBatch, serverTimestamp, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -24,6 +24,7 @@ import UserDashboard from './features/dashboard/UserDashboard';
 import { applyMatchProgressionToPlayers } from './utils/playerProgression';
 import { subscribeToGlobalPlayer, getCachedGlobalPlayer } from './utils/playerRealtimeStore';
 import { useTranslation } from './utils/useTranslation';
+import ResetPasswordScreen from './features/auth/ResetPasswordScreen';
 
 // Importações de Ícones
 import { LucideArrowLeft, LucideUserPlus, LucideUsers, LucideSwords, LucideHistory, LucideTrophy } from 'lucide-react';
@@ -45,7 +46,10 @@ export default function AppWrapper() {
                 .range-slider::-moz-range-thumb { background: #6366f1; }
             `}</style>
             <BrowserRouter>
-                <App />
+                <Routes>
+                    <Route path="/reset-password" element={<ResetPasswordScreen t={(s)=>s} />} />
+                    <Route path="/*" element={<App />} />
+                </Routes>
             </BrowserRouter>
         </div>
     );
