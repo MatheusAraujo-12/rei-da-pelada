@@ -213,20 +213,23 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, onCreatePlayer,
             alert(`Você precisa de pelo menos 2 jogadores selecionados.`);
             return;
         }
+        const totalTeams = Math.max(2, Number(numberOfTeams) || 2);
+        setNumberOfTeams(totalTeams);
         setBenchPreferenceIds(prev => new Set(Array.from(prev).filter(id => selectedPlayerIds.has(id))));
         if (setupMode === 'auto') {
-            handleAutoDrawTeams(available);
+            handleAutoDrawTeams(available, totalTeams);
         } else {
             setAvailablePlayersForSetup([...available].sort((a,b) => a.name.localeCompare(b.name)));
-            setAllTeams(Array.from({ length: numberOfTeams }, () => []));
+            setAllTeams(Array.from({ length: totalTeams }, () => []));
             setStep('manual_setup');
         }
     };
 
-    const handleAutoDrawTeams = (availablePlayers) => {
+    const handleAutoDrawTeams = (availablePlayers, totalTeams = numberOfTeams) => {
+        const targetTeams = Math.max(2, Number(totalTeams) || 2);
         const finalTeams = autoBuildTeams({
             players: availablePlayers,
-            numberOfTeams,
+            numberOfTeams: targetTeams,
             playersPerTeam,
             drawType
         });
@@ -402,6 +405,17 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, onCreatePlayer,
         const winnerTeam = matchResult.score.teamA >= matchResult.score.teamB ? teamA : teamB;
         const loserTeam = winnerTeam === teamA ? teamB : teamA;
         const getTeamId = (team) => team.map(p => p?.id).sort().join('-');
+        const sanitizeQueue = (list, playingA, playingB) => {
+            const playingKeys = new Set([getTeamId(playingA), getTeamId(playingB)]);
+            const seen = new Set();
+            return list.filter(team => {
+                if (!Array.isArray(team) || team.length === 0) return false;
+                const id = getTeamId(team);
+                if (!id || playingKeys.has(id) || seen.has(id)) return false;
+                seen.add(id);
+                return true;
+            });
+        };
         const winnerId = getTeamId(winnerTeam);
         let currentStreak = (winnerId === winnerStreak.teamId) ? winnerStreak.count + 1 : 1;
         const hasWaitingTeams = queue.length > 0;
@@ -425,30 +439,38 @@ const MatchFlow = ({ players, groupId, onMatchEnd, onSessionEnd, onCreatePlayer,
         if (matchResult.score.teamA === matchResult.score.teamB) {
             if (tieBreakerRule === 'bothExit') {
                 const nextTeams = queue.splice(0, 2);
-                const updatedQueue = [...queue, teamA, teamB];
-                const [nextA, nextB] = [nextTeams[0] || teamA, nextTeams[1] || teamB];
+                const nextA = nextTeams[0] || teamA;
+                const nextB = nextTeams[1] || teamB;
+                const updatedQueue = sanitizeQueue([...queue, teamA, teamB], nextA, nextB);
                 setAllTeams(rebuildWithQueue(nextA, nextB, updatedQueue));
                 setWinnerStreak({ teamId: null, count: 0 });
             } else if (tieBreakerRule === 'challengerStaysOnDraw') {
                 const nextChallenger = queue.shift();
-                const updatedQueue = [...queue, teamA];
-                setAllTeams(rebuildWithQueue(teamB, nextChallenger || teamA, updatedQueue));
+                const nextA = teamB;
+                const nextB = nextChallenger || teamA;
+                const updatedQueue = sanitizeQueue([...queue, teamA], nextA, nextB);
+                setAllTeams(rebuildWithQueue(nextA, nextB, updatedQueue));
                 setWinnerStreak({ teamId: getTeamId(teamB), count: 1 });
             } else {
                 const nextChallenger = queue.shift();
-                const updatedQueue = [...queue, teamB];
-                setAllTeams(rebuildWithQueue(teamA, nextChallenger || teamB, updatedQueue));
+                const nextA = teamA;
+                const nextB = nextChallenger || teamB;
+                const updatedQueue = sanitizeQueue([...queue, teamB], nextA, nextB);
+                setAllTeams(rebuildWithQueue(nextA, nextB, updatedQueue));
             }
         } else if (streakLimit > 0 && currentStreak >= streakLimit) {
             const nextTeams = queue.splice(0, 2);
-            const updatedQueue = [...queue, winnerTeam, loserTeam];
-            const [nextA, nextB] = [nextTeams[0] || winnerTeam, nextTeams[1] || loserTeam];
+            const nextA = nextTeams[0] || winnerTeam;
+            const nextB = nextTeams[1] || loserTeam;
+            const updatedQueue = sanitizeQueue([...queue, winnerTeam, loserTeam], nextA, nextB);
             setAllTeams(rebuildWithQueue(nextA, nextB, updatedQueue));
             setWinnerStreak({ teamId: null, count: 0 });
         } else {
             const nextChallenger = queue.length > 0 ? queue.shift() : null;
-            const updatedQueue = [...queue, loserTeam];
-            setAllTeams(rebuildWithQueue(winnerTeam, nextChallenger || loserTeam, updatedQueue));
+            const nextA = winnerTeam;
+            const nextB = nextChallenger || loserTeam;
+            const updatedQueue = sanitizeQueue([...queue, loserTeam], nextA, nextB);
+            setAllTeams(rebuildWithQueue(nextA, nextB, updatedQueue));
             setWinnerStreak({ teamId: winnerId, count: currentStreak });
         }
         setStep('post_game');

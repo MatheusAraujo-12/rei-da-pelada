@@ -47,6 +47,7 @@ const MatchConfigView = ({
                     </div>
                 </div>
             </fieldset>
+
             <fieldset className="border border-indigo-800 p-4 rounded-lg mb-6">
                 <legend className="px-2 text-indigo-300 font-semibold">Modo de Montagem</legend>
                 <div className="flex gap-4">
@@ -64,20 +65,23 @@ const MatchConfigView = ({
                     </button>
                 </div>
             </fieldset>
-            {setupMode === 'auto' && (
-                <fieldset className="border border-indigo-800 p-4 rounded-lg mb-6">
-                    <legend className="px-2 text-indigo-300 font-semibold">Configuração do Sorteio</legend>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <label className="block font-semibold mb-2 text-white">Nº de times para sortear:</label>
-                            <input
-                                type="number"
-                                min="2"
-                                value={numberOfTeams}
-                                onChange={e => onChangeNumberOfTeams(Number(e.target.value))}
-                                className="w-full bg-gray-800 p-2 rounded text-white"
-                            />
-                        </div>
+
+            <fieldset className="border border-indigo-800 p-4 rounded-lg mb-6">
+                <legend className="px-2 text-indigo-300 font-semibold">Configuração dos Times</legend>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label className="block font-semibold mb-2 text-white">
+                            {setupMode === 'auto' ? 'Nº de times para sortear:' : 'Nº de times para montar:'}
+                        </label>
+                        <input
+                            type="number"
+                            min="2"
+                            value={numberOfTeams}
+                            onChange={e => onChangeNumberOfTeams(Math.max(2, Number(e.target.value) || 2))}
+                            className="w-full bg-gray-800 p-2 rounded text-white"
+                        />
+                    </div>
+                    {setupMode === 'auto' && (
                         <div>
                             <label className="block font-semibold mb-2 text-white">Sorteio baseado em:</label>
                             <select
@@ -90,9 +94,15 @@ const MatchConfigView = ({
                                 <option value="admin">Overall do Admin</option>
                             </select>
                         </div>
-                    </div>
-                </fieldset>
-            )}
+                    )}
+                </div>
+                {setupMode !== 'auto' && (
+                    <p className="text-xs text-gray-400 mt-2">
+                        Defina quantos times quer montar manualmente (Time A, B, C, etc.).
+                    </p>
+                )}
+            </fieldset>
+
             <div className="mb-4">
                 <div className="flex justify-between items-center mb-3">
                     <h3 className="text-xl font-semibold text-indigo-300">Selecione os Jogadores</h3>
